@@ -5,7 +5,8 @@
 #include <cstring>
 
 static constexpr int WIFI_LIST_PAGE_SIZE = 4;
-static constexpr int WIFI_LINE_H = 14;
+static constexpr int WIFI_HINT_LINE_H = 10;
+static constexpr int WIFI_LIST_LINE_H = 18;
 static constexpr int WIFI_PASS_MAX = 64;
 
 enum class WifiAppPhase {
@@ -52,37 +53,94 @@ static int getWifiListPageCount() {
     return (wifiScanCount + WIFI_LIST_PAGE_SIZE - 1) / WIFI_LIST_PAGE_SIZE;
 }
 
-// 截断 SSID 以适应行宽
-static void truncateSsid(const char* src, char* out, const size_t out_size) {
+// 截断 SSID 以适应行宽（字符数上限，密码页等单行场景）
+static void truncateSsid(const char* src, char* out, const size_t out_size,
+                         const size_t max_visible = 14) {
     if (out_size == 0) {
         return;
     }
     strncpy(out, src, out_size - 1);
     out[out_size - 1] = '\0';
-    if (strlen(out) > 14) {
-        out[12] = '.';
-        out[13] = '.';
-        out[14] = '\0';
+    if (strlen(out) > max_visible) {
+        out[max_visible - 2] = '.';
+        out[max_visible - 1] = '.';
+        out[max_visible] = '\0';
+    }
+}
+
+// 按当前 textSize 的像素宽度截断文本
+static void truncateTextToWidth(const char* src, char* out, const size_t out_size,
+                                const int max_width_px) {
+    if (out_size == 0) {
+        return;
+    }
+    if (max_width_px <= 0) {
+        out[0] = '\0';
+        return;
+    }
+    strncpy(out, src, out_size - 1);
+    out[out_size - 1] = '\0';
+    if (M5Cardputer.Display.textWidth(out) <= max_width_px) {
+        return;
+    }
+
+    const char suffix[] = "..";
+    const int suffix_w = M5Cardputer.Display.textWidth(suffix);
+    size_t len = strlen(out);
+    while (len > 0 && M5Cardputer.Display.textWidth(out) + suffix_w > max_width_px) {
+        out[--len] = '\0';
+    }
+    if (len + 2 < out_size) {
+        out[len] = '.';
+        out[len + 1] = '.';
+        out[len + 2] = '\0';
+    }
+}
+
+// 绘制左/右翻页小箭头（说明里替代 , . 键位）
+static void drawNavArrowLeft(const int x, const int cy, const uint16_t color) {
+    M5Cardputer.Display.fillTriangle(x, cy - 3, x + 5, cy, x, cy + 3, color);
+}
+
+static void drawNavArrowRight(const int x, const int cy, const uint16_t color) {
+    M5Cardputer.Display.fillTriangle(x + 5, cy - 3, x, cy, x + 5, cy + 3, color);
+}
+
+// 绘制说明行：',' 左箭头，'.' 右箭头
+static void drawWifiHintText(const int x, const int y, const char* text) {
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(LIGHTGREY, BLACK);
+    int cx = x;
+    const int arrow_cy = y + 4;
+    for (const char* p = text; *p != '\0'; ++p) {
+        if (*p == ',') {
+            drawNavArrowLeft(cx, arrow_cy, LIGHTGREY);
+            cx += 8;
+        } else if (*p == '.') {
+            drawNavArrowRight(cx, arrow_cy, LIGHTGREY);
+            cx += 8;
+        } else {
+            M5Cardputer.Display.setCursor(cx, y);
+            const char ch[2] = {*p, '\0'};
+            M5Cardputer.Display.print(ch);
+            cx += M5Cardputer.Display.textWidth(ch);
+        }
     }
 }
 
 static void drawWifiHints(const int y) {
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(LIGHTGREY, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
-
     switch (wifiPhase) {
         case WifiAppPhase::STATUS:
-            M5Cardputer.Display.println("s scan");
+            drawWifiHintText(APP_CONTENT_X, y, "s scan");
             break;
         case WifiAppPhase::LIST:
-            M5Cardputer.Display.println("1-4 pick , . page");
+            drawWifiHintText(APP_CONTENT_X, y, "1-4 pick , . page");
             break;
         case WifiAppPhase::PASSWORD:
-            M5Cardputer.Display.println("ent connect del bk");
+            drawWifiHintText(APP_CONTENT_X, y, "ent connect del bk");
             break;
         case WifiAppPhase::CONNECTING:
-            M5Cardputer.Display.println("connecting...");
+            drawWifiHintText(APP_CONTENT_X, y, "connecting");
             break;
         default:
             break;
@@ -91,7 +149,7 @@ static void drawWifiHints(const int y) {
 
 static void drawWifiStatusScreen() {
     beginAppScreen("WiFi");
-    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextSize(2);
 
     int y = APP_CONTENT_Y;
     if (WiFi.status() == WL_CONNECTED) {
@@ -101,14 +159,14 @@ static void drawWifiStatusScreen() {
         M5Cardputer.Display.print("ssid: ");
         M5Cardputer.Display.setTextColor(WHITE, BLACK);
         M5Cardputer.Display.println(WiFi.SSID().c_str());
-        y += WIFI_LINE_H;
+        y += WIFI_LIST_LINE_H;
 
         M5Cardputer.Display.setTextColor(CYAN, BLACK);
         M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
         M5Cardputer.Display.print("ip: ");
         M5Cardputer.Display.setTextColor(WHITE, BLACK);
         M5Cardputer.Display.println(WiFi.localIP().toString().c_str());
-        y += WIFI_LINE_H;
+        y += WIFI_LIST_LINE_H;
 
         const int rssi = WiFi.RSSI();
         snprintf(buf, sizeof(buf), "%d dBm", rssi);
@@ -118,17 +176,17 @@ static void drawWifiStatusScreen() {
         M5Cardputer.Display.setTextColor(WHITE, BLACK);
         M5Cardputer.Display.print(buf);
         drawSignalBars(APP_CONTENT_X + 72, y - 1, rssi, WHITE);
-        y += WIFI_LINE_H + 4;
+        y += WIFI_LIST_LINE_H + 4;
     } else {
         M5Cardputer.Display.setTextColor(WHITE, BLACK);
         M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
         M5Cardputer.Display.println("not connected");
-        y += WIFI_LINE_H;
+        y += WIFI_LIST_LINE_H;
         if (wifiStatus[0] != '\0') {
             M5Cardputer.Display.setTextColor(ORANGE, BLACK);
             M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
             M5Cardputer.Display.println(wifiStatus);
-            y += WIFI_LINE_H;
+            y += WIFI_LIST_LINE_H;
         }
     }
 
@@ -146,39 +204,61 @@ static void drawWifiListScreen() {
     M5Cardputer.Display.setTextColor(CYAN, BLACK);
     M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
     M5Cardputer.Display.println(buf);
-    y += WIFI_LINE_H + 2;
+    y += WIFI_HINT_LINE_H + 2;
 
     const int start = wifiListPage * WIFI_LIST_PAGE_SIZE;
     const int end = start + WIFI_LIST_PAGE_SIZE < wifiScanCount ? start + WIFI_LIST_PAGE_SIZE
                                                                 : wifiScanCount;
 
+    const int content_right = M5Cardputer.Display.width() - APP_CONTENT_X;
+    constexpr int ROW_RIGHT_GAP = 2;
+    constexpr int RSSI_SIGNAL_GAP = 4;
+
     for (int i = start; i < end; i++) {
         const int row = i - start;
-        const int row_y = y + row * WIFI_LINE_H;
-        char ssid[20];
-
-        truncateSsid(WiFi.SSID(i).c_str(), ssid, sizeof(ssid));
+        const int row_y = y + row * WIFI_LIST_LINE_H;
         const int rssi = WiFi.RSSI(i);
         const bool locked = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
 
+        // 右侧：信号图标贴边，RSSI 数值在其左侧
+        const int signal_x = content_right - SIGNAL_BAR_ICON_W;
+        drawSignalBars(signal_x, row_y + 4, rssi, WHITE);
+
+        char rssi_buf[8];
+        snprintf(rssi_buf, sizeof(rssi_buf), "%d", rssi);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(DARKGREY, BLACK);
+        const int rssi_w = M5Cardputer.Display.textWidth(rssi_buf);
+        const int rssi_x = signal_x - RSSI_SIGNAL_GAP - rssi_w;
+        M5Cardputer.Display.setCursor(rssi_x, row_y + 5);
+        M5Cardputer.Display.print(rssi_buf);
+
+        // 左侧序号
+        M5Cardputer.Display.setTextSize(2);
         M5Cardputer.Display.setTextColor(YELLOW, BLACK);
         M5Cardputer.Display.setCursor(APP_CONTENT_X, row_y);
-        M5Cardputer.Display.printf("%d.", row + 1);
+        char num_buf[4];
+        snprintf(num_buf, sizeof(num_buf), "%d.", row + 1);
+        M5Cardputer.Display.print(num_buf);
+        const int num_w = M5Cardputer.Display.textWidth(num_buf);
 
+        // SSID 占用序号与 RSSI 之间的剩余宽度
+        const int name_x = APP_CONTENT_X + num_w + ROW_RIGHT_GAP;
+        const int lock_w = locked ? M5Cardputer.Display.textWidth("*") : 0;
+        const int name_max_w = rssi_x - ROW_RIGHT_GAP - name_x - lock_w;
+
+        char ssid[33];
+        truncateTextToWidth(WiFi.SSID(i).c_str(), ssid, sizeof(ssid), name_max_w);
         M5Cardputer.Display.setTextColor(WHITE, BLACK);
+        M5Cardputer.Display.setCursor(name_x, row_y);
         M5Cardputer.Display.print(ssid);
         if (locked) {
             M5Cardputer.Display.print("*");
         }
-
-        drawSignalBars(APP_CONTENT_X + 92, row_y - 1, rssi, WHITE);
-
-        M5Cardputer.Display.setTextColor(DARKGREY, BLACK);
-        M5Cardputer.Display.setCursor(APP_CONTENT_X + 112, row_y);
-        M5Cardputer.Display.printf("%d", rssi);
     }
 
     if (wifiScanCount == 0) {
+        M5Cardputer.Display.setTextSize(1);
         M5Cardputer.Display.setTextColor(ORANGE, BLACK);
         M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
         M5Cardputer.Display.println("no network");
@@ -189,35 +269,41 @@ static void drawWifiListScreen() {
 
 static void drawWifiPasswordScreen() {
     beginAppScreen("WiFi Pass");
-    M5Cardputer.Display.setTextSize(1);
 
     int y = APP_CONTENT_Y;
-    char ssid[20];
-    if (wifiSelectedIdx >= 0 && wifiSelectedIdx < wifiScanCount) {
-        truncateSsid(WiFi.SSID(wifiSelectedIdx).c_str(), ssid, sizeof(ssid));
-    } else {
-        strncpy(ssid, "?", sizeof(ssid));
-    }
+    const int content_right = M5Cardputer.Display.width() - APP_CONTENT_X;
+    M5Cardputer.Display.setTextSize(2);
 
-    M5Cardputer.Display.setTextColor(CYAN, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
-    M5Cardputer.Display.print("ssid: ");
-    M5Cardputer.Display.setTextColor(WHITE, BLACK);
-    M5Cardputer.Display.println(ssid);
-    y += WIFI_LINE_H + 4;
+    if (wifiSelectedIdx >= 0 && wifiSelectedIdx < wifiScanCount) {
+        char ssid[33];
+        M5Cardputer.Display.setTextColor(CYAN, BLACK);
+        M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
+        M5Cardputer.Display.print("ssid: ");
+        const int label_w = M5Cardputer.Display.textWidth("ssid: ");
+        truncateTextToWidth(WiFi.SSID(wifiSelectedIdx).c_str(), ssid, sizeof(ssid),
+                            content_right - APP_CONTENT_X - label_w);
+        M5Cardputer.Display.setTextColor(WHITE, BLACK);
+        M5Cardputer.Display.println(ssid);
+    } else {
+        M5Cardputer.Display.setTextColor(WHITE, BLACK);
+        M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
+        M5Cardputer.Display.println("ssid: ?");
+    }
+    y += WIFI_LIST_LINE_H;
 
     M5Cardputer.Display.setTextColor(CYAN, BLACK);
     M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
     M5Cardputer.Display.print("pass: ");
     M5Cardputer.Display.setTextColor(WHITE, BLACK);
     M5Cardputer.Display.println(wifiPassword);
-    y += WIFI_LINE_H + 4;
+    y += WIFI_LIST_LINE_H;
 
     if (wifiStatus[0] != '\0') {
+        M5Cardputer.Display.setTextSize(1);
         M5Cardputer.Display.setTextColor(ORANGE, BLACK);
         M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
         M5Cardputer.Display.println(wifiStatus);
-        y += WIFI_LINE_H;
+        y += WIFI_HINT_LINE_H;
     }
 
     drawWifiHints(y);

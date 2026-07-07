@@ -2,6 +2,9 @@
 
 #include <cstdint>
 
+static constexpr int SIGNAL_BAR_ICON_W = 11;  // 4 格信号条总宽
+static constexpr int SIGNAL_BAR_ICON_H = 8;
+
 // RSSI(dBm) → 信号格数 0-4
 int signalLevelFromRssi(int rssi);
 

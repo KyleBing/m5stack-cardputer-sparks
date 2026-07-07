@@ -15,3 +15,6 @@ const char* getConfigWebApSsid();
 const char* getConfigWebApPass();
 const char* getConfigWebUrl();
 const char* getConfigWebStatus();
+
+void drawWebApp();
+void enterWebApp();

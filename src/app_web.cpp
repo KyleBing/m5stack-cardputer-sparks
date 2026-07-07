@@ -1,5 +1,7 @@
 #include "app_web.h"
+#include "app_common.h"
 #include "app_config.h"
+#include "app_header.h"
 #include <WebServer.h>
 #include <WiFi.h>
 
@@ -169,4 +171,49 @@ const char* getConfigWebUrl() {
 
 const char* getConfigWebStatus() {
     return g_web_status;
+}
+
+void drawWebApp() {
+    beginAppScreen("Web");
+    M5Cardputer.Display.setTextSize(1);
+
+    int y = APP_CONTENT_Y;
+    if (!isConfigWebServerRunning()) {
+        drawInfoLine(APP_CONTENT_X, y, "status", "offline");
+        drawInfoLine(APP_CONTENT_X, y, "hint", "re-enter u");
+        return;
+    }
+
+    drawInfoLine(APP_CONTENT_X, y, "ap", getConfigWebApSsid());
+    drawInfoLine(APP_CONTENT_X, y, "pass", getConfigWebApPass());
+    drawInfoLine(APP_CONTENT_X, y, "url", getConfigWebUrl());
+    drawInfoLine(APP_CONTENT_X, y, "state", getConfigWebStatus());
+
+    const AppConfig& cfg = getAppConfig();
+    if (cfg.loaded) {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%d", cfg.device_count);
+        drawInfoLine(APP_CONTENT_X, y, "cfg", buf);
+    } else {
+        drawInfoLine(APP_CONTENT_X, y, "cfg", "none");
+    }
+
+    M5Cardputer.Display.setTextColor(LIGHTGREY, BLACK);
+    M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
+    M5Cardputer.Display.println("phone connect AP");
+    y += INFO_LINE_H;
+    M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
+    M5Cardputer.Display.println("open url in browser");
+}
+
+void enterWebApp() {
+    if (startConfigWebServer()) {
+        drawWebApp();
+    } else {
+        beginAppScreen("Web");
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_Y);
+        M5Cardputer.Display.setTextColor(RED, BLACK);
+        M5Cardputer.Display.println("AP start failed");
+    }
 }
