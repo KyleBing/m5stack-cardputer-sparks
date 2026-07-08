@@ -1470,6 +1470,22 @@ static void drawDemoPngPlug(const int x, const int y) {
 static void drawDemoPngDefault(const int x, const int y) {
     drawDevicePngFile("/img/default@2x.png", x, y, ICON_DEMO_SIZE);
 }
+// 米家设备原生 PNG（52×52，不缩放，居中展示）
+static void drawDemoNativeLamp(const int x, const int y) {
+    drawDemoInBox(x, y, DEVICE_ICON_NATIVE_PX, DEVICE_ICON_NATIVE_PX, [](const int bx, const int by) {
+        drawDevicePngNative("/icon/device/lamp.png", bx, by);
+    });
+}
+static void drawDemoNativeBedlight(const int x, const int y) {
+    drawDemoInBox(x, y, DEVICE_ICON_NATIVE_PX, DEVICE_ICON_NATIVE_PX, [](const int bx, const int by) {
+        drawDevicePngNative("/icon/device/bedlight.png", bx, by);
+    });
+}
+static void drawDemoNativeBlumb(const int x, const int y) {
+    drawDemoInBox(x, y, DEVICE_ICON_NATIVE_PX, DEVICE_ICON_NATIVE_PX, [](const int bx, const int by) {
+        drawDevicePngNative("/icon/device/blumb.png", bx, by);
+    });
+}
 static void drawDemoPowerOn(const int x, const int y) {
     drawIconPower(x, y, APP_COLOR_OK, ICON_DEMO_SIZE);
 }
@@ -1497,6 +1513,9 @@ static const IconDemoItem ICON_DEMO_ITEMS[] = {
     {"mijia light", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoMijiaLight},
     {"mijia fan", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoMijiaFan},
     {"mijia fryer", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoMijiaAirFryer},
+    {"device lamp", DEVICE_ICON_NATIVE_PX, DEVICE_ICON_NATIVE_PX, drawDemoNativeLamp},
+    {"device bedlight", DEVICE_ICON_NATIVE_PX, DEVICE_ICON_NATIVE_PX, drawDemoNativeBedlight},
+    {"device blumb", DEVICE_ICON_NATIVE_PX, DEVICE_ICON_NATIVE_PX, drawDemoNativeBlumb},
     {"png fan", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoPngFan},
     {"png purifier", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoPngPurifier},
     {"png plug", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoPngPlug},

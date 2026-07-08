@@ -5,6 +5,7 @@
 #include "app_colors.h"
 #include "app_icons.h"
 #include "app_mijia_ui.h"
+#include "app_device_icons.h"
 #include "mijia_control.h"
 #include <cctype>
 #include <cstring>
@@ -225,10 +226,10 @@ static void drawMijiaOverviewItem(const MijiaDevice& entry, const int x, const i
                                   const bool selected) {
     const MijiaDevKind kind = mijiaClassifyModel(entry.model);
     const uint16_t name_color = selected ? APP_COLOR_OK : APP_COLOR_VALUE;
-    const int icon_px = mijiaIconPx(MIJIA_ICON_SCALE_LIST);
+    const int icon_px = deviceIconDrawPx(&entry, kind, MIJIA_ICON_SCALE_LIST);
     const int icon_y = y + (MIJIA_LIST_ITEM_H - icon_px) / 2;
-    drawMijiaDeviceIcon(kind, x, icon_y, selected ? APP_COLOR_OK : APP_COLOR_HINT,
-                        MIJIA_ICON_SCALE_LIST);
+    drawMijiaDeviceIconFor(&entry, kind, x, icon_y, selected ? APP_COLOR_OK : APP_COLOR_HINT,
+                           MIJIA_ICON_SCALE_LIST);
 
     const int text_x = x + icon_px + 6;
 

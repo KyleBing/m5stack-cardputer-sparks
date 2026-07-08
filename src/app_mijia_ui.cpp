@@ -105,13 +105,9 @@ static void drawMijiaIconGeneric(const int x, const int y, const int scale, cons
                                    mijiaIconS(2, scale), color);
 }
 
-void drawMijiaDeviceIcon(const MijiaDevKind kind, const int x, const int y, const uint16_t color,
-                         const int scale) {
-    const int px = mijiaIconPx(scale);
-    // 优先使用 LittleFS 中的 PNG 图标
-    if (drawDevicePngIcon(kind, x, y, px)) {
-        return;
-    }
+// 矢量简笔图标（PNG 不可用时的兜底）
+static void drawMijiaDeviceIconVector(const MijiaDevKind kind, const int x, const int y,
+                                      const uint16_t color, const int scale) {
     switch (kind) {
         case MijiaDevKind::LIGHT:
             drawMijiaIconLight(x, y, scale, color);
@@ -133,6 +129,24 @@ void drawMijiaDeviceIcon(const MijiaDevKind kind, const int x, const int y, cons
             drawMijiaIconGeneric(x, y, scale, color);
             break;
     }
+}
+
+void drawMijiaDeviceIcon(const MijiaDevKind kind, const int x, const int y, const uint16_t color,
+                         const int scale) {
+    const int px = mijiaIconPx(scale);
+    // 优先使用 LittleFS 中的 PNG 图标
+    if (drawDevicePngIcon(kind, x, y, px)) {
+        return;
+    }
+    drawMijiaDeviceIconVector(kind, x, y, color, scale);
+}
+
+void drawMijiaDeviceIconFor(const MijiaDevice* dev, const MijiaDevKind kind, const int x,
+                            const int y, const uint16_t color, const int scale) {
+    if (drawDeviceIconFor(dev, kind, x, y, scale)) {
+        return;
+    }
+    drawMijiaDeviceIconVector(kind, x, y, color, scale);
 }
 
 int drawMijiaStatusTag(const int x, const int y, const char* text, const bool active,
@@ -212,36 +226,45 @@ static bool mijiaShouldShowInlineStatus(const char* status, const bool power_kno
 }
 
 // 控制页左栏尺寸：大图标 + 底部电源符号
-static void mijiaCalcPanelLayout(const int content_y, int& icon_scale, int& left_w, int& power_h) {
-    const int content_h = M5Cardputer.Display.height() - content_y;
+static void mijiaCalcPanelLayout(const int content_y, const MijiaDevice* dev, const MijiaDevKind kind,
+                                 int& icon_px, int& left_w, int& power_h) {
     power_h = MIJIA_PANEL_POWER_SIZE;
+    const int native_px = deviceIconDrawPx(dev, kind, MIJIA_PANEL_ICON_SCALE_MIN);
+    if (native_px == DEVICE_ICON_NATIVE_PX) {
+        icon_px = native_px;
+        left_w = icon_px + 8;
+        return;
+    }
+
+    int icon_scale = 0;
     constexpr int icon_gap = 4;
-    const int avail = content_h - power_h - icon_gap -
+    const int avail = M5Cardputer.Display.height() - content_y - power_h - icon_gap -
                       MIJIA_PANEL_ICON_SCALE_SHRINK * MIJIA_ICON_BASE;
     icon_scale = avail / MIJIA_ICON_BASE;
     if (icon_scale < MIJIA_PANEL_ICON_SCALE_MIN) {
         icon_scale = MIJIA_PANEL_ICON_SCALE_MIN;
     }
-    left_w = mijiaIconPx(icon_scale) + 8;
+    icon_px = mijiaIconPx(icon_scale);
+    left_w = icon_px + 8;
 }
 
 int drawMijiaDevicePanel(const MijiaDevice* dev, const MijiaDevKind kind, const int device_idx,
                          const int device_count, const MijiaUiState& ui, const int x,
                          const int y) {
-    int icon_scale = 0;
+    int icon_px = 0;
     int left_w = 0;
     int power_h = 0;
-    mijiaCalcPanelLayout(y, icon_scale, left_w, power_h);
+    mijiaCalcPanelLayout(y, dev, kind, icon_px, left_w, power_h);
 
     const int info_x = x + left_w + 6;
     const int screen_w = M5Cardputer.Display.width();
     const int info_w = screen_w - info_x - APP_CONTENT_X;
     constexpr int text_size = MIJIA_PANEL_TEXT_SIZE;
-    const int icon_px = mijiaIconPx(icon_scale);
+    const int icon_scale = icon_px / MIJIA_ICON_BASE;
 
     // 左栏：大图标（除底部电源符号外占满内容区）
     const int icon_x = x + (left_w - icon_px) / 2;
-    drawMijiaDeviceIcon(kind, icon_x, y, APP_COLOR_VALUE, icon_scale);
+    drawMijiaDeviceIconFor(dev, kind, icon_x, y, APP_COLOR_VALUE, icon_scale);
 
     // 左栏：图标下方电源符号（开=绿，关=普通色，未知=灰）
     const int power_y = y + icon_px + 4;
