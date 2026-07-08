@@ -4,21 +4,26 @@
 #include "mijia_control.h"
 #include <cstdint>
 
-static constexpr int MIJIA_ICON_W = 16;
-static constexpr int MIJIA_ICON_H = 16;
-static constexpr int MIJIA_HEADER_ICON_H = 32; // 控制页设备名 2x 时配套图标边长
+static constexpr int MIJIA_ICON_BASE = 16; // 16x16 设计基准
+static constexpr int MIJIA_ICON_SCALE_DEFAULT = 1;
+static constexpr int MIJIA_ICON_SCALE_LIST = 2;        // 概览列表 2x
+static constexpr int MIJIA_PANEL_ICON_SCALE_MIN = 2;   // 控制页最小 2x
+static constexpr int MIJIA_PANEL_ICON_SCALE_SHRINK = 1; // 控制页额外缩减 1 个基准单位
 static constexpr int MIJIA_TAG_H = 12;
-static constexpr int MIJIA_TAG_H_2X = 20;      // 2x 字号 tag 高度
+static constexpr int MIJIA_TAG_H_2X = 20;              // 2x 字号 tag 高度
 static constexpr int MIJIA_PANEL_TEXT_SIZE = 1;        // 控制页右栏控制项字号
 static constexpr int MIJIA_PANEL_NAME_TEXT_SIZE = 2;   // 控制页设备名字号
-static constexpr int MIJIA_PANEL_POWER_SIZE = 22; // 控制页电源符号边长
-static constexpr int MIJIA_PANEL_ICON_SHRINK = 8; // 控制页设备图标额外缩减边长
+static constexpr int MIJIA_PANEL_POWER_SIZE = 22;      // 控制页电源符号边长
 // 列表项高度：名称 2x + IP 1x + 型号 1x（与 app_common INFO_LINE_H 对齐）
 static constexpr int MIJIA_LIST_ITEM_H = 38;
 static constexpr int MIJIA_LIST_ITEM_GAP = 6;
 
-// 按设备类型绘制简笔图标（size 为边长，默认 16）
-void drawMijiaDeviceIcon(MijiaDevKind kind, int x, int y, uint16_t color, int size = MIJIA_ICON_H);
+// 倍数换算为像素边长
+inline int mijiaIconPx(const int scale) { return MIJIA_ICON_BASE * scale; }
+
+// 按设备类型绘制简笔图标（scale 为相对 16x16 的倍数）
+void drawMijiaDeviceIcon(MijiaDevKind kind, int x, int y, uint16_t color,
+                         int scale = MIJIA_ICON_SCALE_DEFAULT);
 
 // 圆角 tag，active 时高亮；返回占用宽度（含间距）
 int drawMijiaStatusTag(int x, int y, const char* text, bool active, uint16_t active_bg,

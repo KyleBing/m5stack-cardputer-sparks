@@ -17,12 +17,17 @@ static bool mijiaHelpVisible = false;
 static int mijiaOverviewScrollIdx = 0;
 static MijiaUiState mijiaUi{};
 static int mijiaRefreshGen = 0;
-static volatile bool mijiaRefreshBusy = false;
+static volatile bool mijiaRefreshTaskRunning = false;
+static volatile bool mijiaRefreshTimedOut = false;
 static volatile bool mijiaNeedRedraw = false;
+static uint32_t mijiaRefreshDeadlineMs = 0;
+
+static constexpr uint32_t MIJIA_REFRESH_TIMEOUT_MS = 1000;
 
 struct MijiaRefreshJob {
     int gen;
     int device_idx;
+    uint32_t deadline_ms;
     MijiaDevice device;
 };
 
@@ -52,34 +57,77 @@ static const MijiaDevice* getCurrentMijiaDevice() {
     return &cfg.devices[mijiaDeviceIdx];
 }
 
+// 后台任务结束后按需继续拉取最新设备
+static void finishMijiaRefreshTask(const int job_gen) {
+    mijiaRefreshTaskRunning = false;
+    if (job_gen != mijiaRefreshGen && !mijiaRefreshTimedOut) {
+        scheduleMijiaRefresh();
+    }
+}
+
 // 后台任务：查询设备状态，结果仅在与当前 gen/索引一致时写回
 static void mijiaRefreshTaskFn(void* arg) {
     MijiaRefreshJob* job = static_cast<MijiaRefreshJob*>(arg);
     const int job_gen = job->gen;
     const int job_idx = job->device_idx;
+    const uint32_t job_deadline_ms = job->deadline_ms;
     const MijiaDevice device = job->device;
     delete job;
+
+    if (job_gen != mijiaRefreshGen || mijiaRefreshTimedOut) {
+        finishMijiaRefreshTask(job_gen);
+        vTaskDelete(nullptr);
+        return;
+    }
+
+    if (!ensureConfigWifi()) {
+        if (job_gen == mijiaRefreshGen && job_idx == mijiaDeviceIdx) {
+            strncpy(mijiaUi.status, "wifi fail", sizeof(mijiaUi.status));
+            mijiaUi.power_known = false;
+            mijiaUi.extra_known = false;
+            mijiaRefreshDeadlineMs = 0;
+            mijiaNeedRedraw = true;
+        }
+        finishMijiaRefreshTask(job_gen);
+        vTaskDelete(nullptr);
+        return;
+    }
+
+    if (job_gen != mijiaRefreshGen || mijiaRefreshTimedOut) {
+        finishMijiaRefreshTask(job_gen);
+        vTaskDelete(nullptr);
+        return;
+    }
 
     MijiaUiState temp{};
     mijiaResetUiState(temp);
     mijiaRefreshDevice(&device, temp);
 
-    if (job_gen == mijiaRefreshGen && job_idx == mijiaDeviceIdx) {
+    const bool job_timed_out =
+        job_deadline_ms != 0 && static_cast<int32_t>(millis() - job_deadline_ms) >= 0;
+    if (mijiaRefreshTimedOut) {
+        // UI 层已先判定超时，丢弃晚到结果
+    } else if (job_timed_out && job_gen == mijiaRefreshGen && job_idx == mijiaDeviceIdx) {
+        mijiaRefreshTimedOut = true;
+        mijiaRefreshGen++;
+        mijiaRefreshDeadlineMs = 0;
+        strncpy(mijiaUi.status, "timeout", sizeof(mijiaUi.status));
+        mijiaUi.power_known = false;
+        mijiaUi.extra_known = false;
+        mijiaNeedRedraw = true;
+    } else if (!job_timed_out && job_gen == mijiaRefreshGen && job_idx == mijiaDeviceIdx) {
         mijiaUi = temp;
+        mijiaRefreshDeadlineMs = 0;
         mijiaNeedRedraw = true;
     }
 
-    mijiaRefreshBusy = false;
-    if (job_gen != mijiaRefreshGen) {
-        // 查询期间又切换了设备，继续拉最新一台
-        scheduleMijiaRefresh();
-    }
+    finishMijiaRefreshTask(job_gen);
     vTaskDelete(nullptr);
 }
 
 // 启动一次异步状态查询（若已有任务在跑则等其结束后链式触发）
 static void scheduleMijiaRefresh() {
-    if (mijiaRefreshBusy) {
+    if (mijiaRefreshTaskRunning) {
         return;
     }
 
@@ -87,13 +135,7 @@ static void scheduleMijiaRefresh() {
     if (dev == nullptr) {
         strncpy(mijiaUi.status, "no device", sizeof(mijiaUi.status));
         mijiaUi.power_known = false;
-        mijiaNeedRedraw = true;
-        return;
-    }
-
-    if (!ensureConfigWifi()) {
-        strncpy(mijiaUi.status, "wifi fail", sizeof(mijiaUi.status));
-        mijiaUi.power_known = false;
+        mijiaRefreshDeadlineMs = 0;
         mijiaNeedRedraw = true;
         return;
     }
@@ -102,18 +144,47 @@ static void scheduleMijiaRefresh() {
     job->gen = mijiaRefreshGen;
     job->device_idx = mijiaDeviceIdx;
     job->device = *dev;
+    job->deadline_ms = mijiaRefreshDeadlineMs;
 
-    mijiaRefreshBusy = true;
-    xTaskCreate(mijiaRefreshTaskFn, "mijia_ref", 8192, job, 1, nullptr);
+    mijiaRefreshTaskRunning = true;
+    if (xTaskCreate(mijiaRefreshTaskFn, "mijia_ref", 8192, job, 1, nullptr) != pdPASS) {
+        delete job;
+        mijiaRefreshTaskRunning = false;
+        mijiaRefreshDeadlineMs = 0;
+        strncpy(mijiaUi.status, "task fail", sizeof(mijiaUi.status));
+        mijiaUi.power_known = false;
+        mijiaNeedRedraw = true;
+    }
 }
 
 // 请求刷新当前设备（不阻塞按键处理）
 static void requestMijiaRefresh() {
+    mijiaRefreshTimedOut = false;
     mijiaRefreshGen++;
+    mijiaRefreshDeadlineMs = millis() + MIJIA_REFRESH_TIMEOUT_MS;
     strncpy(mijiaUi.status, "query...", sizeof(mijiaUi.status));
     mijiaUi.power_known = false;
     mijiaUi.extra_known = false;
+    mijiaNeedRedraw = true;
     scheduleMijiaRefresh();
+}
+
+// 状态查询超过 1s 就判定超时，晚到结果会被 gen 丢弃
+static void updateMijiaRefreshTimeout() {
+    if (mijiaRefreshTimedOut || mijiaRefreshDeadlineMs == 0) {
+        return;
+    }
+    if (static_cast<int32_t>(millis() - mijiaRefreshDeadlineMs) < 0) {
+        return;
+    }
+
+    mijiaRefreshTimedOut = true;
+    mijiaRefreshGen++;
+    mijiaRefreshDeadlineMs = 0;
+    strncpy(mijiaUi.status, "timeout", sizeof(mijiaUi.status));
+    mijiaUi.power_known = false;
+    mijiaUi.extra_known = false;
+    mijiaNeedRedraw = true;
 }
 
 // 立即切换设备并异步拉状态
@@ -154,9 +225,12 @@ static void drawMijiaOverviewItem(const MijiaDevice& entry, const int x, const i
                                   const bool selected) {
     const MijiaDevKind kind = mijiaClassifyModel(entry.model);
     const uint16_t name_color = selected ? APP_COLOR_OK : APP_COLOR_VALUE;
-    drawMijiaDeviceIcon(kind, x, y, selected ? APP_COLOR_OK : APP_COLOR_HINT, MIJIA_LIST_ITEM_H);
+    const int icon_px = mijiaIconPx(MIJIA_ICON_SCALE_LIST);
+    const int icon_y = y + (MIJIA_LIST_ITEM_H - icon_px) / 2;
+    drawMijiaDeviceIcon(kind, x, icon_y, selected ? APP_COLOR_OK : APP_COLOR_HINT,
+                        MIJIA_ICON_SCALE_LIST);
 
-    const int text_x = x + MIJIA_LIST_ITEM_H + 6;
+    const int text_x = x + icon_px + 6;
 
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(name_color, BLACK);
@@ -577,6 +651,7 @@ void enterMijiaApp() {
 }
 
 void updateMijiaApp() {
+    updateMijiaRefreshTimeout();
     if (mijiaNeedRedraw) {
         mijiaNeedRedraw = false;
         redrawMijiaScreen();

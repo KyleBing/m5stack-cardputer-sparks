@@ -59,6 +59,15 @@ static void applyResult(MijiaUiState& state, const MiioResult& result) {
     state.status[sizeof(state.status) - 1] = '\0';
 }
 
+// 状态查询失败时统一显示 timeout
+static void applyRefreshResult(MijiaUiState& state, const MiioResult& result) {
+    if (!result.ok) {
+        strncpy(state.status, "timeout", sizeof(state.status));
+        return;
+    }
+    applyResult(state, result);
+}
+
 void mijiaRefreshDevice(const MijiaDevice* dev, MijiaUiState& state) {
     if (dev == nullptr) {
         strncpy(state.status, "no device", sizeof(state.status));
@@ -119,7 +128,7 @@ void mijiaRefreshDevice(const MijiaDevice* dev, MijiaUiState& state) {
         }
     }
 
-    applyResult(state, result);
+    applyRefreshResult(state, result);
 }
 
 void mijiaSetDevicePower(const MijiaDevice* dev, MijiaUiState& state, const bool on) {

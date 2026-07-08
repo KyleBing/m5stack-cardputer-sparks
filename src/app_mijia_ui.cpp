@@ -6,116 +6,125 @@
 #include "M5Cardputer.h"
 #include <cstring>
 
-// 16x16 基准坐标缩放到任意边长
-static int mijiaIconS(const int v, const int size) {
-    return (v * size + 8) / 16;
+// 16x16 基准坐标按倍数缩放
+static int mijiaIconS(const int v, const int scale) {
+    return (v * MIJIA_ICON_BASE * scale + MIJIA_ICON_BASE / 2) / MIJIA_ICON_BASE;
 }
 
 // 绘制灯泡图标
-static void drawMijiaIconLight(const int x, const int y, const int size, const uint16_t color) {
-    const int cx = x + mijiaIconS(8, size);
-    M5Cardputer.Display.drawCircle(cx, y + mijiaIconS(6, size), mijiaIconS(5, size), color);
-    M5Cardputer.Display.drawFastHLine(x + mijiaIconS(6, size), y + mijiaIconS(11, size),
-                                      mijiaIconS(5, size), color);
-    M5Cardputer.Display.fillRect(x + mijiaIconS(5, size), y + mijiaIconS(12, size),
-                                 mijiaIconS(7, size), mijiaIconS(2, size), color);
-    M5Cardputer.Display.drawFastHLine(x + mijiaIconS(6, size), y + mijiaIconS(15, size),
-                                      mijiaIconS(5, size), color);
-    M5Cardputer.Display.drawPixel(cx, y + mijiaIconS(4, size), color);
+static void drawMijiaIconLight(const int x, const int y, const int scale, const uint16_t color) {
+    const int cx = x + mijiaIconS(8, scale);
+    const int cy = y + mijiaIconS(6, scale);
+    const int r = mijiaIconS(5, scale);
+    M5Cardputer.Display.drawCircle(cx, cy, r, color);
+    M5Cardputer.Display.drawFastHLine(x + mijiaIconS(6, scale), y + mijiaIconS(11, scale),
+                                      mijiaIconS(5, scale), color);
+    M5Cardputer.Display.fillRect(x + mijiaIconS(5, scale), y + mijiaIconS(12, scale),
+                                 mijiaIconS(7, scale), mijiaIconS(2, scale), color);
+    M5Cardputer.Display.drawFastHLine(x + mijiaIconS(6, scale), y + mijiaIconS(15, scale),
+                                      mijiaIconS(5, scale), color);
+
+    // 与灯泡圆同心的左侧 1/6 圆弧（半径为原圆 2/3）
+    const int arc_r = r * 2 / 3;
+    if (arc_r > 0) {
+        constexpr float k_left_arc_span = 360.0f / 6.0f;
+        M5Cardputer.Display.drawArc(cx, cy, arc_r - 1, arc_r, 180.0f - k_left_arc_span / 2.0f,
+                                    180.0f + k_left_arc_span / 2.0f, color);
+    }
 }
 
 // 绘制风扇图标
-static void drawMijiaIconFan(const int x, const int y, const int size, const uint16_t color) {
-    const int cx = x + mijiaIconS(8, size);
-    const int cy = y + mijiaIconS(8, size);
-    const int r = mijiaIconS(7, size);
+static void drawMijiaIconFan(const int x, const int y, const int scale, const uint16_t color) {
+    const int cx = x + mijiaIconS(8, scale);
+    const int cy = y + mijiaIconS(8, scale);
+    const int r = mijiaIconS(7, scale);
     M5Cardputer.Display.drawCircle(cx, cy, r, color);
-    M5Cardputer.Display.fillTriangle(cx, cy - mijiaIconS(1, size), cx - mijiaIconS(2, size),
-                                     y + mijiaIconS(2, size), cx + mijiaIconS(2, size),
-                                     y + mijiaIconS(3, size), color);
-    M5Cardputer.Display.fillTriangle(cx + mijiaIconS(1, size), cy, x + mijiaIconS(13, size),
-                                     cy - mijiaIconS(2, size), x + mijiaIconS(14, size),
-                                     cy + mijiaIconS(2, size), color);
-    M5Cardputer.Display.fillTriangle(cx, cy + mijiaIconS(1, size), cx + mijiaIconS(2, size),
-                                     y + mijiaIconS(14, size), cx - mijiaIconS(2, size),
-                                     y + mijiaIconS(13, size), color);
-    M5Cardputer.Display.fillTriangle(cx - mijiaIconS(1, size), cy, x + mijiaIconS(2, size),
-                                     cy + mijiaIconS(2, size), x + mijiaIconS(3, size),
-                                     cy - mijiaIconS(2, size), color);
-    const int hub = mijiaIconS(2, size);
+    M5Cardputer.Display.fillTriangle(cx, cy - mijiaIconS(1, scale), cx - mijiaIconS(2, scale),
+                                     y + mijiaIconS(2, scale), cx + mijiaIconS(2, scale),
+                                     y + mijiaIconS(3, scale), color);
+    M5Cardputer.Display.fillTriangle(cx + mijiaIconS(1, scale), cy, x + mijiaIconS(13, scale),
+                                     cy - mijiaIconS(2, scale), x + mijiaIconS(14, scale),
+                                     cy + mijiaIconS(2, scale), color);
+    M5Cardputer.Display.fillTriangle(cx, cy + mijiaIconS(1, scale), cx + mijiaIconS(2, scale),
+                                     y + mijiaIconS(14, scale), cx - mijiaIconS(2, scale),
+                                     y + mijiaIconS(13, scale), color);
+    M5Cardputer.Display.fillTriangle(cx - mijiaIconS(1, scale), cy, x + mijiaIconS(2, scale),
+                                     cy + mijiaIconS(2, scale), x + mijiaIconS(3, scale),
+                                     cy - mijiaIconS(2, scale), color);
+    const int hub = mijiaIconS(2, scale);
     M5Cardputer.Display.fillCircle(cx, cy, hub, BLACK);
     M5Cardputer.Display.drawCircle(cx, cy, hub, color);
 }
 
 // 绘制净化器图标
-static void drawMijiaIconPurifier(const int x, const int y, const int size, const uint16_t color) {
-    M5Cardputer.Display.drawRoundRect(x + mijiaIconS(3, size), y + mijiaIconS(1, size),
-                                      mijiaIconS(10, size), mijiaIconS(14, size), mijiaIconS(2, size),
+static void drawMijiaIconPurifier(const int x, const int y, const int scale, const uint16_t color) {
+    M5Cardputer.Display.drawRoundRect(x + mijiaIconS(3, scale), y + mijiaIconS(1, scale),
+                                      mijiaIconS(10, scale), mijiaIconS(14, scale), mijiaIconS(2, scale),
                                       color);
     for (int i = 0; i < 3; i++) {
-        const int ly = y + mijiaIconS(4, size) + i * mijiaIconS(4, size);
-        M5Cardputer.Display.drawFastHLine(x + mijiaIconS(5, size), ly, mijiaIconS(6, size), color);
+        const int ly = y + mijiaIconS(4, scale) + i * mijiaIconS(4, scale);
+        M5Cardputer.Display.drawFastHLine(x + mijiaIconS(5, scale), ly, mijiaIconS(6, scale), color);
     }
-    M5Cardputer.Display.fillRect(x + mijiaIconS(6, size), y + mijiaIconS(13, size),
-                                 mijiaIconS(4, size), mijiaIconS(2, size), color);
+    M5Cardputer.Display.fillRect(x + mijiaIconS(6, scale), y + mijiaIconS(13, scale),
+                                 mijiaIconS(4, scale), mijiaIconS(2, scale), color);
 }
 
 // 绘制空气炸锅图标
-static void drawMijiaIconAirFryer(const int x, const int y, const int size, const uint16_t color) {
-    M5Cardputer.Display.drawRoundRect(x + mijiaIconS(3, size), y + mijiaIconS(4, size),
-                                      mijiaIconS(10, size), mijiaIconS(10, size),
-                                      mijiaIconS(2, size), color);
-    M5Cardputer.Display.fillRect(x + mijiaIconS(5, size), y + mijiaIconS(2, size),
-                                 mijiaIconS(6, size), mijiaIconS(3, size), color);
-    M5Cardputer.Display.drawFastHLine(x + mijiaIconS(5, size), y + mijiaIconS(7, size),
-                                      mijiaIconS(6, size), color);
-    M5Cardputer.Display.fillRect(x + mijiaIconS(6, size), y + mijiaIconS(10, size),
-                                 mijiaIconS(4, size), mijiaIconS(2, size), color);
-    M5Cardputer.Display.fillRect(x + mijiaIconS(13, size), y + mijiaIconS(7, size),
-                                 mijiaIconS(2, size), mijiaIconS(4, size), color);
+static void drawMijiaIconAirFryer(const int x, const int y, const int scale, const uint16_t color) {
+    M5Cardputer.Display.drawRoundRect(x + mijiaIconS(3, scale), y + mijiaIconS(4, scale),
+                                      mijiaIconS(10, scale), mijiaIconS(10, scale),
+                                      mijiaIconS(2, scale), color);
+    M5Cardputer.Display.fillRect(x + mijiaIconS(5, scale), y + mijiaIconS(2, scale),
+                                 mijiaIconS(6, scale), mijiaIconS(3, scale), color);
+    M5Cardputer.Display.drawFastHLine(x + mijiaIconS(5, scale), y + mijiaIconS(7, scale),
+                                      mijiaIconS(6, scale), color);
+    M5Cardputer.Display.fillRect(x + mijiaIconS(6, scale), y + mijiaIconS(10, scale),
+                                 mijiaIconS(4, scale), mijiaIconS(2, scale), color);
+    M5Cardputer.Display.fillRect(x + mijiaIconS(13, scale), y + mijiaIconS(7, scale),
+                                 mijiaIconS(2, scale), mijiaIconS(4, scale), color);
 }
 
 // 绘制插座图标
-static void drawMijiaIconPlug(const int x, const int y, const int size, const uint16_t color) {
-    M5Cardputer.Display.fillRoundRect(x + mijiaIconS(2, size), y + mijiaIconS(6, size),
-                                      mijiaIconS(12, size), mijiaIconS(9, size),
-                                      mijiaIconS(2, size), color);
-    M5Cardputer.Display.fillRect(x + mijiaIconS(5, size), y + mijiaIconS(2, size),
-                                 mijiaIconS(2, size), mijiaIconS(5, size), color);
-    M5Cardputer.Display.fillRect(x + mijiaIconS(9, size), y + mijiaIconS(2, size),
-                                 mijiaIconS(2, size), mijiaIconS(5, size), color);
+static void drawMijiaIconPlug(const int x, const int y, const int scale, const uint16_t color) {
+    M5Cardputer.Display.fillRoundRect(x + mijiaIconS(2, scale), y + mijiaIconS(6, scale),
+                                      mijiaIconS(12, scale), mijiaIconS(9, scale),
+                                      mijiaIconS(2, scale), color);
+    M5Cardputer.Display.fillRect(x + mijiaIconS(5, scale), y + mijiaIconS(2, scale),
+                                 mijiaIconS(2, scale), mijiaIconS(5, scale), color);
+    M5Cardputer.Display.fillRect(x + mijiaIconS(9, scale), y + mijiaIconS(2, scale),
+                                 mijiaIconS(2, scale), mijiaIconS(5, scale), color);
 }
 
 // 绘制通用设备图标
-static void drawMijiaIconGeneric(const int x, const int y, const int size, const uint16_t color) {
-    M5Cardputer.Display.drawRoundRect(x + mijiaIconS(2, size), y + mijiaIconS(2, size),
-                                      mijiaIconS(12, size), mijiaIconS(12, size),
-                                      mijiaIconS(2, size), color);
-    M5Cardputer.Display.fillCircle(x + mijiaIconS(8, size), y + mijiaIconS(8, size),
-                                   mijiaIconS(2, size), color);
+static void drawMijiaIconGeneric(const int x, const int y, const int scale, const uint16_t color) {
+    M5Cardputer.Display.drawRoundRect(x + mijiaIconS(2, scale), y + mijiaIconS(2, scale),
+                                      mijiaIconS(12, scale), mijiaIconS(12, scale),
+                                      mijiaIconS(2, scale), color);
+    M5Cardputer.Display.fillCircle(x + mijiaIconS(8, scale), y + mijiaIconS(8, scale),
+                                   mijiaIconS(2, scale), color);
 }
 
 void drawMijiaDeviceIcon(const MijiaDevKind kind, const int x, const int y, const uint16_t color,
-                         const int size) {
+                         const int scale) {
     switch (kind) {
         case MijiaDevKind::LIGHT:
-            drawMijiaIconLight(x, y, size, color);
+            drawMijiaIconLight(x, y, scale, color);
             break;
         case MijiaDevKind::FAN_P5:
         case MijiaDevKind::FAN_GENERIC:
-            drawMijiaIconFan(x, y, size, color);
+            drawMijiaIconFan(x, y, scale, color);
             break;
         case MijiaDevKind::AIR_PURIFIER_F20:
-            drawMijiaIconPurifier(x, y, size, color);
+            drawMijiaIconPurifier(x, y, scale, color);
             break;
         case MijiaDevKind::AIR_FRYER:
-            drawMijiaIconAirFryer(x, y, size, color);
+            drawMijiaIconAirFryer(x, y, scale, color);
             break;
         case MijiaDevKind::PLUG:
-            drawMijiaIconPlug(x, y, size, color);
+            drawMijiaIconPlug(x, y, scale, color);
             break;
         default:
-            drawMijiaIconGeneric(x, y, size, color);
+            drawMijiaIconGeneric(x, y, scale, color);
             break;
     }
 }
@@ -197,36 +206,39 @@ static bool mijiaShouldShowInlineStatus(const char* status, const bool power_kno
 }
 
 // 控制页左栏尺寸：大图标 + 底部电源符号
-static void mijiaCalcPanelLayout(const int content_y, int& icon_h, int& left_w, int& power_h) {
+static void mijiaCalcPanelLayout(const int content_y, int& icon_scale, int& left_w, int& power_h) {
     const int content_h = M5Cardputer.Display.height() - content_y;
     power_h = MIJIA_PANEL_POWER_SIZE;
     constexpr int icon_gap = 4;
-    icon_h = content_h - power_h - icon_gap - MIJIA_PANEL_ICON_SHRINK;
-    if (icon_h < MIJIA_HEADER_ICON_H) {
-        icon_h = MIJIA_HEADER_ICON_H;
+    const int avail = content_h - power_h - icon_gap -
+                      MIJIA_PANEL_ICON_SCALE_SHRINK * MIJIA_ICON_BASE;
+    icon_scale = avail / MIJIA_ICON_BASE;
+    if (icon_scale < MIJIA_PANEL_ICON_SCALE_MIN) {
+        icon_scale = MIJIA_PANEL_ICON_SCALE_MIN;
     }
-    left_w = icon_h + 8;
+    left_w = mijiaIconPx(icon_scale) + 8;
 }
 
 int drawMijiaDevicePanel(const MijiaDevice* dev, const MijiaDevKind kind, const int device_idx,
                          const int device_count, const MijiaUiState& ui, const int x,
                          const int y) {
-    int icon_h = 0;
+    int icon_scale = 0;
     int left_w = 0;
     int power_h = 0;
-    mijiaCalcPanelLayout(y, icon_h, left_w, power_h);
+    mijiaCalcPanelLayout(y, icon_scale, left_w, power_h);
 
     const int info_x = x + left_w + 6;
     const int screen_w = M5Cardputer.Display.width();
     const int info_w = screen_w - info_x - APP_CONTENT_X;
     constexpr int text_size = MIJIA_PANEL_TEXT_SIZE;
+    const int icon_px = mijiaIconPx(icon_scale);
 
-    // 左栏：大图标（除底部电源符号外占满内容区，并额外缩小 8px）
-    const int icon_x = x + (left_w - icon_h) / 2;
-    drawMijiaDeviceIcon(kind, icon_x, y, APP_COLOR_VALUE, icon_h);
+    // 左栏：大图标（除底部电源符号外占满内容区）
+    const int icon_x = x + (left_w - icon_px) / 2;
+    drawMijiaDeviceIcon(kind, icon_x, y, APP_COLOR_VALUE, icon_scale);
 
     // 左栏：图标下方电源符号（开=绿，关=普通色，未知=灰）
-    const int power_y = y + icon_h + 4;
+    const int power_y = y + icon_px + 4;
     const int power_x = x + (left_w - MIJIA_PANEL_POWER_SIZE) / 2;
     uint16_t power_color = APP_COLOR_MUTED;
     if (ui.power_known) {

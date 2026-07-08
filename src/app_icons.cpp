@@ -369,9 +369,9 @@ static void drawIconPowerStemFlat(const int cx, const int y0, const int y1, cons
                                   const uint16_t color) {
     const int top = min(y0, y1);
     const int bottom = max(y0, y1);
-    const int half = stroke / 2;
-    for (int dx = -half; dx <= half; dx++) {
-        M5Cardputer.Display.drawFastVLine(cx + dx, top, bottom - top + 1, color);
+    const int left = cx - stroke / 2;
+    for (int dx = 0; dx < stroke; dx++) {
+        M5Cardputer.Display.drawFastVLine(left + dx, top, bottom - top + 1, color);
     }
 }
 
@@ -381,14 +381,18 @@ void drawIconPower(const int x, const int y, const uint16_t color, const int siz
     const auto s = [size](const int v) { return (v * size + 12) / 24; };
     const int cx = x + s(12);
     const int cy = y + s(13);
-    const int r = s(7);
-    const int stroke = max(2, s(2));
-    const int half = stroke / 2;
+    const int stroke = size <= 18 ? 1 : 2;
+    // 外圈以竖线为中心等量外扩；2px 竖线时再加宽 2px，避免小图标发瘦。
+    const int ring_outer_w = stroke + s(stroke == 2 ? 16 : 14);
+    const int r = max(1, ring_outer_w / 2);
+    const int stroke_start = -(stroke / 2);
+    const int stroke_end = stroke_start + stroke - 1;
 
-    // 竖线：从环上方伸入，末端深入环内（中点再下移 5px）
+    // 竖线：从环上方伸入，末端深入环内（中点再下移 5px），相对外圈右移 1px
+    const int stem_cx = cx + 1;
     const int stem_top = y + s(1);
-    const int stem_bottom = cy - r / 2 + 5;
-    drawIconPowerStemFlat(cx, stem_top, stem_bottom, stroke, color);
+    const int stem_bottom = cy - r / 2 + s(5);
+    drawIconPowerStemFlat(stem_cx, stem_top, stem_bottom, stroke, color);
 
     // 顶部留开口的圆环弧（约 48° 缺口），平直描边
     constexpr int gap_deg = 48;
@@ -397,7 +401,7 @@ void drawIconPower(const int x, const int y, const uint16_t color, const int siz
     for (int deg = start_deg; deg < end_deg; deg++) {
         const float rad0 = deg * 3.14159265f / 180.0f;
         const float rad1 = (deg + 1) * 3.14159265f / 180.0f;
-        for (int dr = -half; dr <= half; dr++) {
+        for (int dr = stroke_start; dr <= stroke_end; dr++) {
             const int rr = r + dr;
             const int x0 = cx + static_cast<int>(rr * cosf(rad0) + 0.5f);
             const int y0 = cy - static_cast<int>(rr * sinf(rad0) + 0.5f);

@@ -1019,6 +1019,7 @@ void handleSpeakerApp(const String& key) {
 // ===== RTC =====
 
 static bool rtcScreenReady = false;
+static bool rtcSyncTimedOut = false;
 static char rtcLastTime[16] = "";
 static char rtcLastDate[20] = "";
 static char rtcLastSrc[8] = "";
@@ -1029,6 +1030,8 @@ static constexpr int RTC_DATE_LINE_H = 8 * RTC_DATE_TEXT_SIZE;
 static constexpr int RTC_TIME_DATE_GAP = 6;
 static constexpr int RTC_SRC_TEXT_SIZE = 1;
 static constexpr int RTC_SRC_LINE_H = INFO_LINE_H;
+static constexpr int RTC_FAIL_TEXT_SIZE = 2;
+static constexpr uint32_t RTC_SYNC_TIMEOUT_MS = 5000;
 static constexpr uint16_t RTC_SRC_COLOR = APP_COLOR_LABEL; // 来源标识专用色
 
 // 内容区高度（不含顶栏）
@@ -1120,8 +1123,8 @@ static void drawRtcBusyScreen(const char* msg) {
     M5Cardputer.Display.println(msg);
 }
 
-// 通过 NTP 同步系统时间，并写回硬件 RTC（调用前须已连 WiFi）
-static bool trySyncNtpTime() {
+// 通过 NTP 同步系统时间，并写回硬件 RTC（调用前须已连 WiFi，deadline_ms 为总截止时间）
+static bool trySyncNtpTime(const uint32_t deadline_ms) {
     if (WiFi.status() != WL_CONNECTED) {
         return false;
     }
@@ -1129,7 +1132,7 @@ static bool trySyncNtpTime() {
     configTzTime("CST-8", "ntp.aliyun.com", "pool.ntp.org", "time.windows.com");
 
     struct tm timeinfo{};
-    for (int i = 0; i < 10; i++) {
+    while (static_cast<int32_t>(millis() - deadline_ms) < 0) {
         if (getLocalTime(&timeinfo, 200)) {
             if (M5.Rtc.isEnabled()) {
                 M5.Rtc.setDateTime(&timeinfo);
@@ -1184,12 +1187,15 @@ void drawRtcApp(const bool full_init) {
         rtcLastDate[0] = '\0';
         rtcLastSrc[0] = '\0';
         int y = APP_CONTENT_Y;
-        drawInfoLine(APP_CONTENT_X, y, "time", "not set");
+        drawInfoLineAt(APP_CONTENT_X, y, "time", "not set", RTC_FAIL_TEXT_SIZE);
+        y += INFO_LINE_H_2X;
         const AppConfig& cfg = getAppConfig();
         if (!cfg.loaded || cfg.wifi_ssid[0] == '\0') {
-            drawInfoLine(APP_CONTENT_X, y, "hint", "set WiFi cfg");
+            drawInfoLineAt(APP_CONTENT_X, y, "hint", "set WiFi cfg", RTC_FAIL_TEXT_SIZE);
+        } else if (rtcSyncTimedOut) {
+            drawInfoLineAt(APP_CONTENT_X, y, "hint", "timeout", RTC_FAIL_TEXT_SIZE);
         } else {
-            drawInfoLine(APP_CONTENT_X, y, "hint", "wifi/ntp fail");
+            drawInfoLineAt(APP_CONTENT_X, y, "hint", "wifi/ntp fail", RTC_FAIL_TEXT_SIZE);
         }
         return;
     }
@@ -1215,16 +1221,27 @@ void drawRtcApp(const bool full_init) {
 
 void enterRtcApp() {
     rtcScreenReady = false;
+    rtcSyncTimedOut = false;
     rtcLastTime[0] = '\0';
     rtcLastDate[0] = '\0';
     rtcLastSrc[0] = '\0';
 
     const AppConfig& cfg = getAppConfig();
     if (cfg.loaded && cfg.wifi_ssid[0] != '\0') {
+        const uint32_t deadline = millis() + RTC_SYNC_TIMEOUT_MS;
         drawRtcBusyScreen("wifi connecting...");
-        if (ensureConfigWifi()) {
+
+        uint32_t remain = deadline - millis();
+        const bool wifi_ok = remain > 0 && ensureConfigWifi(remain);
+        if (!wifi_ok) {
+            rtcSyncTimedOut = static_cast<int32_t>(millis() - deadline) >= 0;
+        } else if (static_cast<int32_t>(millis() - deadline) < 0) {
             drawRtcBusyScreen("ntp syncing...");
-            trySyncNtpTime();
+            if (!trySyncNtpTime(deadline)) {
+                rtcSyncTimedOut = static_cast<int32_t>(millis() - deadline) >= 0;
+            }
+        } else {
+            rtcSyncTimedOut = true;
         }
         releaseConfigWifi();
     }
@@ -1430,13 +1447,13 @@ static void drawDemoInfoBattery(const int x, const int y) {
     drawIconInfoBatterySized(x, y, WHITE, ICON_DEMO_SIZE);
 }
 static void drawDemoMijiaLight(const int x, const int y) {
-    drawMijiaDeviceIcon(MijiaDevKind::LIGHT, x, y, WHITE, ICON_DEMO_SIZE);
+    drawMijiaDeviceIcon(MijiaDevKind::LIGHT, x, y, WHITE, ICON_DEMO_SIZE / MIJIA_ICON_BASE);
 }
 static void drawDemoMijiaFan(const int x, const int y) {
-    drawMijiaDeviceIcon(MijiaDevKind::FAN_GENERIC, x, y, WHITE, ICON_DEMO_SIZE);
+    drawMijiaDeviceIcon(MijiaDevKind::FAN_GENERIC, x, y, WHITE, ICON_DEMO_SIZE / MIJIA_ICON_BASE);
 }
 static void drawDemoMijiaAirFryer(const int x, const int y) {
-    drawMijiaDeviceIcon(MijiaDevKind::AIR_FRYER, x, y, WHITE, ICON_DEMO_SIZE);
+    drawMijiaDeviceIcon(MijiaDevKind::AIR_FRYER, x, y, WHITE, ICON_DEMO_SIZE / MIJIA_ICON_BASE);
 }
 static void drawDemoPowerOn(const int x, const int y) {
     drawIconPower(x, y, APP_COLOR_OK, ICON_DEMO_SIZE);
@@ -1566,7 +1583,7 @@ static void drawSleepPrompt(const int seconds_left) {
     beginAppScreen("Sleep");
 
     int y = APP_CONTENT_Y + 8;
-    drawInfoLineAt(APP_CONTENT_X, y, "SCREEN", "WILL OFF IN", 2);
+    drawInfoLineAt(APP_CONTENT_X, y, "SLEEP", "IN", 2);
     y += INFO_LINE_H_2X + 4;
 
     char buf[8];

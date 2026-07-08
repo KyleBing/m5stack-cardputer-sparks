@@ -37,8 +37,8 @@ void drawKeyHintsRow(int x, int y, const KeyHintItem* items, int item_count, int
 // 提示小字：',' 左箭头，'.' 右箭头
 void drawHintText(int x, int y, const char* text, int text_size = 1);
 
-// 使用 config 连接 WiFi（Mijia / Time 等按需调用）
-bool ensureConfigWifi();
+// 使用 config 连接 WiFi（Mijia / Time 等按需调用，timeout_ms 为最长等待毫秒）
+bool ensureConfigWifi(uint32_t timeout_ms = 12000);
 
 // 断开 WiFi 并关闭射频（离开应用或用完网络后调用）
 void releaseConfigWifi();

@@ -113,7 +113,7 @@ void drawInfoLineInt(const int x, int& y, const char* label, const int value) {
     drawInfoLine(x, y, label, buf);
 }
 
-bool ensureConfigWifi() {
+bool ensureConfigWifi(const uint32_t timeout_ms) {
     const AppConfig& cfg = getAppConfig();
     if (!cfg.loaded || cfg.wifi_ssid[0] == '\0') {
         return false;
@@ -127,7 +127,7 @@ bool ensureConfigWifi() {
     WiFi.setSleep(false);
     WiFi.begin(cfg.wifi_ssid, cfg.wifi_password);
 
-    const uint32_t deadline = millis() + 12000;
+    const uint32_t deadline = millis() + timeout_ms;
     while (WiFi.status() != WL_CONNECTED && static_cast<int32_t>(millis() - deadline) < 0) {
         delay(200);
     }
