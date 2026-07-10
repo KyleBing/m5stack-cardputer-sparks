@@ -12,6 +12,7 @@ static constexpr int WIFI_LIST_PAGE_SIZE = 4;
 static constexpr int WIFI_HINT_LINE_H = 10;
 static constexpr int WIFI_LIST_LINE_H = 18;
 static constexpr int WIFI_PASS_MAX = 64;
+static constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 5000;
 
 enum class WifiAppPhase {
     STATUS,
@@ -118,8 +119,13 @@ static void drawWifiHints(const int y) {
             drawWifiHintText(APP_CONTENT_X, y, "ent connect del bk", 2);
             break;
         case WifiAppPhase::CONNECTING: {
-            KeyHintItem items[] = {{'r', "retry"}};
-            drawKeyHintsRow(APP_CONTENT_X, y, items, 1, 2, APP_COLOR_HINT);
+            if (wifiConnectFromConfig) {
+                KeyHintItem items[] = {{'r', "retry"}, {'c', "change"}};
+                drawKeyHintsRow(APP_CONTENT_X, y, items, 2, 2, APP_COLOR_HINT);
+            } else {
+                KeyHintItem items[] = {{'r', "retry"}};
+                drawKeyHintsRow(APP_CONTENT_X, y, items, 1, 2, APP_COLOR_HINT);
+            }
             break;
         }
         default:
@@ -342,7 +348,7 @@ static void startWifiConfigConnect() {
     wifiSelectedIdx = -1;
     wifiConnectFromConfig = true;
     wifiPhase = WifiAppPhase::CONNECTING;
-    wifiConnectDeadline = millis() + 12000;
+    wifiConnectDeadline = millis() + WIFI_CONNECT_TIMEOUT_MS;
     wifiStatus[0] = '\0';
     drawWifiConnectingScreen();
 }
@@ -382,7 +388,7 @@ static void startWifiConnect(const char* password) {
 
     wifiConnectFromConfig = false;
     wifiPhase = WifiAppPhase::CONNECTING;
-    wifiConnectDeadline = millis() + 15000;
+    wifiConnectDeadline = millis() + WIFI_CONNECT_TIMEOUT_MS;
     strncpy(wifiStatus, "wait...", sizeof(wifiStatus));
     drawWifiConnectingScreen();
 }
@@ -501,6 +507,13 @@ void updateWifiApp() {
 void handleWifiApp(const Keyboard_Class::KeysState& status) {
     if (wifiPhase == WifiAppPhase::CONNECTING) {
         for (const char c : status.word) {
+            if (c == 'c' || c == 'C') {
+                WiFi.disconnect();
+                wifiConnectFromConfig = false;
+                wifiStatus[0] = '\0';
+                startWifiScan();
+                return;
+            }
             if (c == 'r' || c == 'R') {
                 if (wifiConnectFromConfig) {
                     startWifiConfigConnect();

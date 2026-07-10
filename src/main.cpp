@@ -831,10 +831,12 @@ void drawMicApp() {
 
 static constexpr int BRIGHTNESS_BAR_MARGIN_X = 8;
 
-// 亮度加减并限制在 0-255
+// 亮度加减并限制在 0-255，同时写入 config.json
 void adjustBrightness(const int delta) {
     const int next = constrain(static_cast<int>(M5Cardputer.Display.getBrightness()) + delta, 0, 255);
-    M5Cardputer.Display.setBrightness(static_cast<uint8_t>(next));
+    const uint8_t value = static_cast<uint8_t>(next);
+    M5Cardputer.Display.setBrightness(value);
+    saveAppConfigBrightness(value);
 }
 
 // 方向键步进：左右 ±1，上下 ±10（Cardputer 方向键为 ; , . /）
@@ -967,7 +969,9 @@ void handleSettingsApp(const Keyboard_Class::KeysState& status) {
 
     if (key.length() == 1 && key[0] >= '0' && key[0] <= '9') {
         const int level = key[0] - '0';
-        M5Cardputer.Display.setBrightness(static_cast<uint8_t>(level * 255 / 9));
+        const uint8_t value = static_cast<uint8_t>(level * 255 / 9);
+        M5Cardputer.Display.setBrightness(value);
+        saveAppConfigBrightness(value);
     } else if (key == "-" || key == "_") {
         adjustBrightness(-16);
     } else if (key == "+" || key == "=") {
@@ -1564,7 +1568,11 @@ void setup() {
     }
     WiFi.mode(WIFI_OFF);
     M5Cardputer.Display.setRotation(1);
-    M5Cardputer.Display.setBrightness(30);
+    uint8_t brightness = 30;
+    if (getAppConfig().loaded) {
+        brightness = getAppConfig().brightness;
+    }
+    M5Cardputer.Display.setBrightness(brightness);
     flushCardputerInput();
     showMenu();
 }

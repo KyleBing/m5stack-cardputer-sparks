@@ -52,6 +52,8 @@ bool loadAppConfig() {
         copyField(g_config.cursor_api_key, sizeof(g_config.cursor_api_key), cursor["api_key"]);
     }
 
+    g_config.brightness = static_cast<uint8_t>(doc["brightness"] | 30);
+
     JsonArray devices = doc["devices"].as<JsonArray>();
     if (!devices.isNull()) {
         for (JsonObject device : devices) {
@@ -117,6 +119,34 @@ bool saveAppConfigWifi(const char* ssid, const char* password) {
     JsonObject wifi = doc["wifi"].to<JsonObject>();
     wifi["ssid"] = ssid;
     wifi["password"] = password == nullptr ? "" : password;
+
+    if (doc["devices"].isNull()) {
+        doc["devices"].to<JsonArray>();
+    }
+
+    File out = LittleFS.open(CONFIG_PATH, "w");
+    if (!out) {
+        return false;
+    }
+    serializeJsonPretty(doc, out);
+    out.close();
+    return loadAppConfig();
+}
+
+bool saveAppConfigBrightness(const uint8_t brightness) {
+    JsonDocument doc;
+    if (LittleFS.exists(CONFIG_PATH)) {
+        File in = LittleFS.open(CONFIG_PATH, "r");
+        if (in) {
+            const DeserializationError err = deserializeJson(doc, in);
+            in.close();
+            if (err) {
+                doc.clear();
+            }
+        }
+    }
+
+    doc["brightness"] = brightness;
 
     if (doc["devices"].isNull()) {
         doc["devices"].to<JsonArray>();

@@ -15,9 +15,9 @@
 
 static constexpr const char* CURSOR_HOST = "https://cursor.com";
 static constexpr int CURSOR_DAYS_MAX = 31;
-static constexpr uint32_t CURSOR_PERIOD_REFRESH_MS = 60000;
-static constexpr uint32_t CURSOR_CHART_REFRESH_MS = 600000;
-static constexpr uint32_t CURSOR_WIFI_TIMEOUT_MS = 12000;
+static constexpr uint32_t CURSOR_IDLE_TRIGGER_MS = 60000;
+static constexpr uint32_t CURSOR_REFRESH_INTERVAL_MS = 300000;
+static constexpr uint32_t CURSOR_WIFI_TIMEOUT_MS = 5000;
 static constexpr int CURSOR_BAR_MARGIN_X = 5;
 
 enum class CursorPhase {
@@ -72,6 +72,53 @@ static float g_chart_30_cents[30]{};
 static bool g_chart_7_ready = false;
 static bool g_chart_30_ready = false;
 static int g_chart_fetch_days = 7;
+static uint32_t g_last_activity_ms = 0;
+static uint32_t g_last_scheduled_refresh_ms = 0;
+static bool g_periodic_refresh_active = false;
+
+static void beginCursorFetch(const CursorFetchMode mode);
+static void beginCursorChartFetch(const int days, const bool silent);
+
+// 记录用户操作，重置空闲刷新计时
+static void noteCursorActivity() {
+  g_last_activity_ms = millis();
+  g_periodic_refresh_active = false;
+}
+
+// 拉取结束后断开 WiFi
+static void finishCursorWifi() {
+  releaseConfigWifi();
+}
+
+// 是否到达空闲首次刷新或周期刷新时间点
+static bool shouldScheduleCursorRefresh() {
+  if (g_phase != CursorPhase::READY || !g_usage.valid) {
+    return false;
+  }
+  const uint32_t now = millis();
+  const uint32_t idle_ms = now - g_last_activity_ms;
+  if (!g_periodic_refresh_active) {
+    return idle_ms >= CURSOR_IDLE_TRIGGER_MS;
+  }
+  return now - g_last_scheduled_refresh_ms >= CURSOR_REFRESH_INTERVAL_MS;
+}
+
+// 触发后台静默刷新（按需连 WiFi）
+static void triggerCursorIdleRefresh() {
+  const uint32_t now = millis();
+  if (!g_periodic_refresh_active) {
+    g_periodic_refresh_active = true;
+  }
+  g_last_scheduled_refresh_ms = now;
+
+  if (g_page == CursorPage::SUMMARY) {
+    beginCursorFetch(CursorFetchMode::PERIOD);
+  } else if (g_page == CursorPage::CHART_7 && g_chart_7_ready) {
+    beginCursorChartFetch(7, true);
+  } else if (g_page == CursorPage::CHART_30 && g_chart_30_ready) {
+    beginCursorChartFetch(30, true);
+  }
+}
 
 // 仅刷新内容区
 static void redrawCursorContent() {
@@ -598,8 +645,8 @@ static void drawCursorSummaryPage(const int y) {
     M5Cardputer.Display.print(buf);
   };
 
-  drawBarRow(0, "Auto", g_usage.auto_pct, APP_COLOR_OK);
-  drawBarRow(1, "API", g_usage.api_pct, ORANGE);
+  drawBarRow(0, "Auto", 100.0f - g_usage.auto_pct, APP_COLOR_OK);
+  drawBarRow(1, "API", 100.0f - g_usage.api_pct, ORANGE);
 
   if (g_usage.limit_cents > 0) {
     char used_s[16];
@@ -627,8 +674,8 @@ static void drawCursorSummaryPage(const int y) {
     }
   } else {
     const int text_y = y + row_h * 2 + (row_h - INFO_LINE_H_2X) / 2;
-    snprintf(buf, sizeof(buf), "%.0f%%/%.0f%%", g_usage.api_pct, 100.0f - g_usage.api_pct);
-    drawInfoLineAt(APP_CONTENT_X, text_y, "api", buf, text_sz);
+    snprintf(buf, sizeof(buf), "%.0f%%", 100.0f - g_usage.api_pct);
+    drawInfoLineAt(APP_CONTENT_X, text_y, "api left", buf, text_sz);
   }
 }
 
@@ -728,12 +775,12 @@ static void beginCursorFetch(const CursorFetchMode mode) {
   }
 
   if (mode == CursorFetchMode::PERIOD) {
-    g_fetch_step = 0;
     return;
   }
 
-  g_chart_fetch_days = (g_page == CursorPage::CHART_30) ? 30 : 7;
-  g_fetch_step = 2;
+  if (mode == CursorFetchMode::CHART) {
+    g_chart_fetch_days = (g_page == CursorPage::CHART_30) ? 30 : 7;
+  }
 }
 
 static void beginCursorChartFetch(const int days, const bool silent) {
@@ -747,7 +794,7 @@ static void beginCursorChartFetch(const int days, const bool silent) {
     g_fetch_mode = CursorFetchMode::CHART;
     g_silent_fetch = false;
     g_fetch_pending = true;
-    g_fetch_step = 2;
+    g_fetch_step = 0;
     strncpy(g_status_msg, "chart...", sizeof(g_status_msg));
     drawCursorApp();
     return;
@@ -781,22 +828,15 @@ static void cursorPageNav(const int delta) {
 void enterCursorApp() {
   g_screen_ready = false;
   g_page = CursorPage::SUMMARY;
+  g_periodic_refresh_active = false;
+  g_last_activity_ms = millis();
   beginCursorFetch(CursorFetchMode::FULL);
 }
 
 void updateCursorApp() {
   if (!g_fetch_pending) {
-    if (g_phase == CursorPhase::READY && g_usage.valid) {
-      if (g_page == CursorPage::SUMMARY &&
-          millis() - g_last_period_fetch_ms >= CURSOR_PERIOD_REFRESH_MS) {
-        beginCursorFetch(CursorFetchMode::PERIOD);
-      } else if (g_page == CursorPage::CHART_7 && g_chart_7_ready &&
-                 millis() - g_last_chart_7_fetch_ms >= CURSOR_CHART_REFRESH_MS) {
-        beginCursorChartFetch(7, true);
-      } else if (g_page == CursorPage::CHART_30 && g_chart_30_ready &&
-                 millis() - g_last_chart_30_fetch_ms >= CURSOR_CHART_REFRESH_MS) {
-        beginCursorChartFetch(30, true);
-      }
+    if (shouldScheduleCursorRefresh()) {
+      triggerCursorIdleRefresh();
     }
     return;
   }
@@ -807,6 +847,7 @@ void updateCursorApp() {
       strncpy(g_error_msg, "wifi fail", sizeof(g_error_msg));
       g_fetch_pending = false;
       g_silent_fetch = false;
+      finishCursorWifi();
       drawCursorApp();
       return;
     }
@@ -815,7 +856,12 @@ void updateCursorApp() {
       g_phase = CursorPhase::FETCHING;
       drawCursorApp();
     }
-    g_fetch_step = 1;
+    // 已有 user_id 的图表刷新可跳过鉴权
+    if (g_fetch_mode == CursorFetchMode::CHART && g_user_id > 0) {
+      g_fetch_step = 2;
+    } else {
+      g_fetch_step = 1;
+    }
     return;
   }
 
@@ -830,24 +876,32 @@ void updateCursorApp() {
       if (g_fetch_mode == CursorFetchMode::PERIOD) {
         g_fetch_pending = false;
         g_silent_fetch = false;
+        finishCursorWifi();
         drawCursorApp();
         return;
       }
       if (g_fetch_mode == CursorFetchMode::FULL) {
         g_fetch_pending = false;
         g_silent_fetch = false;
+        finishCursorWifi();
         drawCursorApp();
+        return;
+      }
+      if (g_fetch_mode == CursorFetchMode::CHART) {
+        g_fetch_step = 2;
         return;
       }
     } else if (!g_silent_fetch) {
       g_phase = CursorPhase::ERROR;
       g_fetch_pending = false;
       g_silent_fetch = false;
+      finishCursorWifi();
       drawCursorApp();
       return;
     } else {
       g_fetch_pending = false;
       g_silent_fetch = false;
+      finishCursorWifi();
       return;
     }
   }
@@ -869,6 +923,7 @@ void updateCursorApp() {
     g_status_msg[0] = '\0';
     g_fetch_pending = false;
     g_silent_fetch = false;
+    finishCursorWifi();
     if (g_phase != CursorPhase::ERROR) {
       g_phase = CursorPhase::READY;
     }
@@ -877,6 +932,7 @@ void updateCursorApp() {
 }
 
 void handleCursorApp(const String& key) {
+  noteCursorActivity();
   if (key == "r") {
     beginCursorFetch(CursorFetchMode::FULL);
     return;
