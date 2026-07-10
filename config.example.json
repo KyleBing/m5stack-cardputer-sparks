@@ -12,5 +12,8 @@
       "token": "0123456789abcdef0123456789abcdef",
       "model": "yeelink.light.lamp2"
     }
-  ]
+  ],
+  "cursor": {
+    "api_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
 }

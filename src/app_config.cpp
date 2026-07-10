@@ -47,6 +47,11 @@ bool loadAppConfig() {
         copyField(g_config.wifi_password, sizeof(g_config.wifi_password), wifi["password"]);
     }
 
+    JsonObject cursor = doc["cursor"];
+    if (!cursor.isNull()) {
+        copyField(g_config.cursor_api_key, sizeof(g_config.cursor_api_key), cursor["api_key"]);
+    }
+
     JsonArray devices = doc["devices"].as<JsonArray>();
     if (!devices.isNull()) {
         for (JsonObject device : devices) {

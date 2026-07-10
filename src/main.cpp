@@ -7,17 +7,18 @@
 #include "app_wifi.h"
 #include "app_mijia.h"
 #include "app_mijia_ui.h"
-#include "app_device_icons.h"
 #include "app_ble.h"
 #include "app_connectivity.h"
 #include "app_countdown.h"
 #include "app_stopwatch.h"
+#include "app_rtc.h"
+#include "app_icon_demo.h"
+#include "app_cursor.h"
 #include <WiFi.h>
 #include <esp_sleep.h>
 #include <driver/rtc_io.h>
 #include <esp_chip_info.h>
 #include <esp_system.h>
-#include <time.h>
 
 
 
@@ -55,6 +56,7 @@ enum class AppState {
     WEB,
     COUNTDOWN,
     STOPWATCH,
+    CURSOR,
 };
 
 struct MenuItem {
@@ -75,7 +77,7 @@ static const MenuItem MENU_ITEMS[] = {
     {'o', "Set", "Settings", AppState::SETTINGS},
     {'p', "Pwr", "Power", AppState::POWER},
     {'l', "Spk", "Speaker", AppState::SPEAKER},
-    {'`', "Slp", "Sleep", AppState::SLEEP},
+    {'s', "Slp", "Sleep", AppState::SLEEP},
     {'t', "Time", "Time", AppState::RTC},
     {'n', "InI2", "InI2", AppState::IN_I2C},
     {'e', "ExI2", "ExI2", AppState::EX_I2C},
@@ -87,7 +89,8 @@ static const MenuItem MENU_ITEMS[] = {
     {'c', "Circ", "Circle", AppState::CIRCLE},
     {'a', "Icn", "Icons", AppState::ICONS},
     {'q', "Cd", "Countdown", AppState::COUNTDOWN},
-    {'s', "Sw", "Stopwatch", AppState::STOPWATCH},
+    {'h', "Sw", "Stopwatch", AppState::STOPWATCH},
+    {'x', "Cur", "Cursor", AppState::CURSOR},
 };
 
 static const int MENU_ITEM_COUNT = sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0]);
@@ -1019,239 +1022,6 @@ void handleSpeakerApp(const String& key) {
     drawSpeakerApp(key);
 }
 
-// ===== RTC =====
-
-static bool rtcScreenReady = false;
-static bool rtcSyncTimedOut = false;
-static char rtcLastTime[16] = "";
-static char rtcLastDate[20] = "";
-static char rtcLastSrc[8] = "";
-static constexpr int RTC_TIME_TEXT_SIZE = 4;       // 时间主体 4 倍字体
-static constexpr int RTC_DATE_TEXT_SIZE = 2;
-static constexpr int RTC_TIME_LINE_H = 8 * RTC_TIME_TEXT_SIZE;
-static constexpr int RTC_DATE_LINE_H = 8 * RTC_DATE_TEXT_SIZE;
-static constexpr int RTC_TIME_BOTTOM_MARGIN = 5;   // 时间主体下方间距
-static constexpr int RTC_SRC_TEXT_SIZE = 1;
-static constexpr int RTC_SRC_LINE_H = INFO_LINE_H;
-static constexpr int RTC_FAIL_TEXT_SIZE = 2;
-static constexpr uint32_t RTC_SYNC_TIMEOUT_MS = 5000;
-static constexpr uint16_t RTC_SRC_COLOR = APP_COLOR_LABEL; // 来源标识专用色
-
-// 内容区高度（不含顶栏）
-static int rtcContentHeight() {
-    return M5Cardputer.Display.height() - APP_CONTENT_Y;
-}
-
-// 主时间垂直起始 y（时间+日期块在内容区居中，底部留给来源行）
-static int rtcTimeY() {
-    const int block_h = RTC_TIME_LINE_H + RTC_TIME_BOTTOM_MARGIN + RTC_DATE_LINE_H;
-    const int avail_h = rtcContentHeight() - RTC_SRC_LINE_H - 4;
-    return APP_CONTENT_Y + (avail_h - block_h) / 2;
-}
-
-static int rtcDateY() {
-    return rtcTimeY() + RTC_TIME_LINE_H + RTC_TIME_BOTTOM_MARGIN;
-}
-
-// 来源行贴近内容区左下角
-static int rtcSrcY() {
-    return M5Cardputer.Display.height() - RTC_SRC_LINE_H - 2;
-}
-
-// 按字号水平居中
-static int rtcCenteredX(const char* text, const int text_size) {
-    M5Cardputer.Display.setTextSize(text_size);
-    const int tw = M5Cardputer.Display.textWidth(text);
-    return (M5Cardputer.Display.width() - tw) / 2;
-}
-
-// 仅重绘居中时分秒
-void updateRtcTimeText(const char* time_buf) {
-    if (strcmp(time_buf, rtcLastTime) == 0) {
-        return;
-    }
-
-    const int y = rtcTimeY();
-    M5Cardputer.Display.fillRect(0, y, M5Cardputer.Display.width(), RTC_TIME_LINE_H, BLACK);
-    M5Cardputer.Display.setTextSize(RTC_TIME_TEXT_SIZE);
-    M5Cardputer.Display.setTextColor(WHITE, BLACK);
-    M5Cardputer.Display.setCursor(rtcCenteredX(time_buf, RTC_TIME_TEXT_SIZE), y);
-    M5Cardputer.Display.print(time_buf);
-    strncpy(rtcLastTime, time_buf, sizeof(rtcLastTime) - 1);
-    rtcLastTime[sizeof(rtcLastTime) - 1] = '\0';
-}
-
-// 仅重绘居中日期
-void updateRtcDateText(const char* date_buf) {
-    if (strcmp(date_buf, rtcLastDate) == 0) {
-        return;
-    }
-
-    const int y = rtcDateY();
-    M5Cardputer.Display.fillRect(0, y, M5Cardputer.Display.width(), RTC_DATE_LINE_H, BLACK);
-    M5Cardputer.Display.setTextSize(RTC_DATE_TEXT_SIZE);
-    M5Cardputer.Display.setTextColor(APP_COLOR_VALUE, BLACK);
-    M5Cardputer.Display.setCursor(rtcCenteredX(date_buf, RTC_DATE_TEXT_SIZE), y);
-    M5Cardputer.Display.print(date_buf);
-    strncpy(rtcLastDate, date_buf, sizeof(rtcLastDate) - 1);
-    rtcLastDate[sizeof(rtcLastDate) - 1] = '\0';
-}
-
-// 左下角 1x 来源标识（NTP / RTC）
-void updateRtcSourceText(const char* source) {
-    if (strcmp(source, rtcLastSrc) == 0) {
-        return;
-    }
-
-    const int y = rtcSrcY();
-    M5Cardputer.Display.fillRect(APP_CONTENT_X, y, 48, RTC_SRC_LINE_H, BLACK);
-    M5Cardputer.Display.setTextSize(RTC_SRC_TEXT_SIZE);
-    M5Cardputer.Display.setTextColor(RTC_SRC_COLOR, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
-    M5Cardputer.Display.print(source);
-    strncpy(rtcLastSrc, source, sizeof(rtcLastSrc) - 1);
-    rtcLastSrc[sizeof(rtcLastSrc) - 1] = '\0';
-}
-
-// 时间界面中间状态（连接 WiFi / NTP 同步）
-static void drawRtcBusyScreen(const char* msg) {
-    beginAppScreen("Time");
-    rtcScreenReady = true;
-    rtcLastTime[0] = '\0';
-    rtcLastDate[0] = '\0';
-    rtcLastSrc[0] = '\0';
-    M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_Y);
-    M5Cardputer.Display.println(msg);
-}
-
-// 通过 NTP 同步系统时间，并写回硬件 RTC（调用前须已连 WiFi，deadline_ms 为总截止时间）
-static bool trySyncNtpTime(const uint32_t deadline_ms) {
-    if (WiFi.status() != WL_CONNECTED) {
-        return false;
-    }
-
-    configTzTime("CST-8", "ntp.aliyun.com", "pool.ntp.org", "time.windows.com");
-
-    struct tm timeinfo{};
-    while (static_cast<int32_t>(millis() - deadline_ms) < 0) {
-        if (getLocalTime(&timeinfo, 200)) {
-            if (M5.Rtc.isEnabled()) {
-                M5.Rtc.setDateTime(&timeinfo);
-                M5.Rtc.setSystemTimeFromRtc();
-            }
-            return true;
-        }
-        delay(100);
-    }
-    return false;
-}
-
-// 读取当前时间：优先硬件 RTC，其次系统时间
-static bool readCurrentTime(struct tm& out, const char*& source) {
-    if (M5.Rtc.isEnabled()) {
-        const m5::rtc_datetime_t dt = M5.Rtc.getDateTime();
-        if (dt.date.year >= 2020) {
-            out.tm_year = dt.date.year - 1900;
-            out.tm_mon = dt.date.month - 1;
-            out.tm_mday = dt.date.date;
-            out.tm_hour = dt.time.hours;
-            out.tm_min = dt.time.minutes;
-            out.tm_sec = dt.time.seconds;
-            out.tm_wday = dt.date.weekDay;
-            source = "RTC";
-            return true;
-        }
-    }
-
-    const time_t now = time(nullptr);
-    if (now > 1600000000) {
-        localtime_r(&now, &out);
-        source = "NTP";
-        return true;
-    }
-
-    source = "none";
-    return false;
-}
-
-// RTC / NTP 时钟：首帧全屏，之后只刷新变化的时间文字
-void drawRtcApp(const bool full_init) {
-    struct tm timeinfo{};
-    const char* source = "none";
-    if (!readCurrentTime(timeinfo, source)) {
-        if (!full_init && rtcScreenReady) {
-            return;
-        }
-        beginAppScreen("Time");
-        rtcScreenReady = true;
-        rtcLastTime[0] = '\0';
-        rtcLastDate[0] = '\0';
-        rtcLastSrc[0] = '\0';
-        int y = APP_CONTENT_Y;
-        drawInfoLineAt(APP_CONTENT_X, y, "time", "not set", RTC_FAIL_TEXT_SIZE);
-        y += INFO_LINE_H_2X;
-        const AppConfig& cfg = getAppConfig();
-        if (!cfg.loaded || cfg.wifi_ssid[0] == '\0') {
-            drawInfoLineAt(APP_CONTENT_X, y, "hint", "set WiFi cfg", RTC_FAIL_TEXT_SIZE);
-        } else if (rtcSyncTimedOut) {
-            drawInfoLineAt(APP_CONTENT_X, y, "hint", "timeout", RTC_FAIL_TEXT_SIZE);
-        } else {
-            drawInfoLineAt(APP_CONTENT_X, y, "hint", "wifi/ntp fail", RTC_FAIL_TEXT_SIZE);
-        }
-        return;
-    }
-
-    char time_buf[16];
-    char date_buf[20];
-    snprintf(time_buf, sizeof(time_buf), "%02d:%02d:%02d",
-             timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
-    snprintf(date_buf, sizeof(date_buf), "%04d-%02d-%02d",
-             timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
-
-    if (full_init || !rtcScreenReady) {
-        beginAppScreen("Time");
-        rtcScreenReady = true;
-        rtcLastTime[0] = '\0';
-        rtcLastDate[0] = '\0';
-        rtcLastSrc[0] = '\0';
-    }
-    updateRtcTimeText(time_buf);
-    updateRtcDateText(date_buf);
-    updateRtcSourceText(source);
-}
-
-void enterRtcApp() {
-    rtcScreenReady = false;
-    rtcSyncTimedOut = false;
-    rtcLastTime[0] = '\0';
-    rtcLastDate[0] = '\0';
-    rtcLastSrc[0] = '\0';
-
-    const AppConfig& cfg = getAppConfig();
-    if (cfg.loaded && cfg.wifi_ssid[0] != '\0') {
-        const uint32_t deadline = millis() + RTC_SYNC_TIMEOUT_MS;
-        drawRtcBusyScreen("wifi connecting...");
-
-        uint32_t remain = deadline - millis();
-        const bool wifi_ok = remain > 0 && ensureConfigWifi(remain);
-        if (!wifi_ok) {
-            rtcSyncTimedOut = static_cast<int32_t>(millis() - deadline) >= 0;
-        } else if (static_cast<int32_t>(millis() - deadline) < 0) {
-            drawRtcBusyScreen("ntp syncing...");
-            if (!trySyncNtpTime(deadline)) {
-                rtcSyncTimedOut = static_cast<int32_t>(millis() - deadline) >= 0;
-            }
-        } else {
-            rtcSyncTimedOut = true;
-        }
-        releaseConfigWifi();
-    }
-
-    drawRtcApp(true);
-}
-
 // ===== IN I2C =====
 
 // 绘制 I2C 扫描结果（IN I2C / EX I2C 共用）
@@ -1364,240 +1134,6 @@ void handleCircleApp(const String& key) {
     }
 }
 
-// ===== ICONS =====
-
-struct IconDemoItem {
-    const char* name;
-    int width;
-    int height;
-    void (*draw)(int x, int y);
-};
-
-static int iconDemoPage = 0;
-static constexpr int ICON_DEMO_ITEMS_PER_PAGE = 1;
-static constexpr int ICON_DEMO_SIZE = 64;
-
-// 将小图标居中绘制在 ICON_DEMO_SIZE 方框内
-static void drawDemoInBox(const int x, const int y, const int w, const int h,
-                          void (*draw)(int, int)) {
-    draw(x + (ICON_DEMO_SIZE - w) / 2, y + (ICON_DEMO_SIZE - h) / 2);
-}
-
-static void drawDemoLogo(const int x, const int y) { drawAppLogo(x, y, ICON_DEMO_SIZE); }
-static void drawDemoArrowLeft(const int x, const int y) {
-    drawDemoInBox(x, y, ICON_ARROW_W, ICON_ARROW_H, [](const int bx, const int by) {
-        drawIconArrowLeft(bx, by + 4, WHITE);
-    });
-}
-static void drawDemoArrowRight(const int x, const int y) {
-    drawDemoInBox(x, y, ICON_ARROW_W, ICON_ARROW_H, [](const int bx, const int by) {
-        drawIconArrowRight(bx, by + 4, WHITE);
-    });
-}
-static void drawDemoArrowUp(const int x, const int y) {
-    drawDemoInBox(x, y, ICON_ARROW_W, ICON_ARROW_H, [](const int bx, const int by) {
-        drawIconArrowUp(bx, by + 4, WHITE);
-    });
-}
-static void drawDemoArrowDown(const int x, const int y) {
-    drawDemoInBox(x, y, ICON_ARROW_W, ICON_ARROW_H, [](const int bx, const int by) {
-        drawIconArrowDown(bx, by + 4, WHITE);
-    });
-}
-static void drawDemoArrowLeftRight(const int x, const int y) {
-    drawDemoInBox(x, y, ICON_ARROW_LR_W, ICON_ARROW_H, [](const int bx, const int by) {
-        drawIconArrowLeftRight(bx, by + 4, WHITE);
-    });
-}
-static void drawDemoArrowUpDown(const int x, const int y) {
-    drawDemoInBox(x, y, ICON_ARROW_W, ICON_ARROW_UD_H, [](const int bx, const int by) {
-        drawIconArrowUpDown(bx, by + 7, WHITE);
-    });
-}
-static void drawDemoSignalBars(const int x, const int y) {
-    drawDemoInBox(x, y, ICON_SIGNAL_W, ICON_SIGNAL_H, [](const int bx, const int by) {
-        drawSignalBars(bx, by, -56, WHITE);
-    });
-}
-static void drawDemoWifi(const int x, const int y) {
-    drawDemoInBox(x, y, ICON_WIFI_W, ICON_WIFI_H, [](const int bx, const int by) {
-        drawIconWifi(bx, by, -56, WHITE);
-    });
-}
-static void drawDemoBle(const int x, const int y) {
-    drawDemoInBox(x, y, ICON_BLE_W, ICON_BLE_H,
-                  [](const int bx, const int by) { drawIconBle(bx, by, WHITE); });
-}
-static void drawDemoChargingBolt(const int x, const int y) {
-    drawDemoInBox(x, y, 6, 12, [](const int bx, const int by) { drawIconChargingBolt(bx, by, 12); });
-}
-static void drawDemoBattery(const int x, const int y) {
-    const int bw = getIconBatteryDisplayWidth(false);
-    const int bh = getIconBatteryBodyHeight();
-    drawDemoInBox(x, y, bw, bh,
-                  [](const int bx, const int by) { drawIconBattery(bx, by, 75, false); });
-}
-static void drawDemoPageDots(const int x, const int y) {
-    drawDemoInBox(x, y, 22, 4, [](const int bx, const int by) { drawIconPageDots(bx, by + 2, 1, 4); });
-}
-static void drawDemoInfoChip(const int x, const int y) {
-    drawIconInfoChipSized(x, y, WHITE, ICON_DEMO_SIZE);
-}
-static void drawDemoInfoStorage(const int x, const int y) {
-    drawIconInfoStorageSized(x, y, WHITE, ICON_DEMO_SIZE);
-}
-static void drawDemoInfoBattery(const int x, const int y) {
-    drawIconInfoBatterySized(x, y, WHITE, ICON_DEMO_SIZE);
-}
-
-static constexpr int DEVICE_ICON_DEMO_GAP = 8;
-static constexpr int DEVICE_ICON_DEMO_PAIR_W =
-    DEVICE_ICON_NATIVE_PX * 2 + DEVICE_ICON_DEMO_GAP;
-
-// 并排展示 off / on 两种原生设备图标
-static void drawDemoDevicePair(const char* basename, const int x, const int y) {
-    char path[48];
-    snprintf(path, sizeof(path), "/icon/device/%s.png", basename);
-    drawDevicePngNative(path, x, y);
-    snprintf(path, sizeof(path), "/icon/device/%s_active.png", basename);
-    drawDevicePngNative(path, x + DEVICE_ICON_NATIVE_PX + DEVICE_ICON_DEMO_GAP, y);
-}
-
-#define DEFINE_DEVICE_ICON_DEMO(name) \
-    static void drawDemoDevice_##name(const int x, const int y) { \
-        drawDemoDevicePair(#name, x, y); \
-    }
-
-DEFINE_DEVICE_ICON_DEMO(airpurifier)
-DEFINE_DEVICE_ICON_DEMO(bslamp2)
-DEFINE_DEVICE_ICON_DEMO(camera)
-DEFINE_DEVICE_ICON_DEMO(cooker)
-DEFINE_DEVICE_ICON_DEMO(fan)
-DEFINE_DEVICE_ICON_DEMO(fryer)
-DEFINE_DEVICE_ICON_DEMO(juicer)
-DEFINE_DEVICE_ICON_DEMO(lamp2)
-DEFINE_DEVICE_ICON_DEMO(plug)
-DEFINE_DEVICE_ICON_DEMO(wifispeaker)
-DEFINE_DEVICE_ICON_DEMO(default)
-
-static const IconDemoItem ICON_DEMO_ITEMS[] = {
-    {"app logo", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoLogo},
-    {"arrow left", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoArrowLeft},
-    {"arrow right", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoArrowRight},
-    {"arrow up", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoArrowUp},
-    {"arrow down", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoArrowDown},
-    {"arrow left-right", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoArrowLeftRight},
-    {"arrow up-down", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoArrowUpDown},
-    {"signal bars", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoSignalBars},
-    {"wifi", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoWifi},
-    {"ble", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoBle},
-    {"charging bolt", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoChargingBolt},
-    {"battery", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoBattery},
-    {"page dots", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoPageDots},
-    {"info chip", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoInfoChip},
-    {"info storage", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoInfoStorage},
-    {"info battery", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoInfoBattery},
-    {"device airpurifier", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX, drawDemoDevice_airpurifier},
-    {"device bslamp2", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX, drawDemoDevice_bslamp2},
-    {"device camera", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX, drawDemoDevice_camera},
-    {"device cooker", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX, drawDemoDevice_cooker},
-    {"device fan", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX, drawDemoDevice_fan},
-    {"device fryer", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX, drawDemoDevice_fryer},
-    {"device juicer", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX, drawDemoDevice_juicer},
-    {"device lamp2", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX, drawDemoDevice_lamp2},
-    {"device plug", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX, drawDemoDevice_plug},
-    {"device wifispeaker", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX,
-     drawDemoDevice_wifispeaker},
-    {"device default", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX, drawDemoDevice_default},
-};
-
-static int getIconDemoItemCount() {
-    return sizeof(ICON_DEMO_ITEMS) / sizeof(ICON_DEMO_ITEMS[0]);
-}
-
-static int getIconDemoPageCount() {
-    const int total = getIconDemoItemCount();
-    return (total + ICON_DEMO_ITEMS_PER_PAGE - 1) / ICON_DEMO_ITEMS_PER_PAGE;
-}
-
-static void drawIconDemoApp() {
-    beginAppScreen("Icons");
-    const int page_count = getIconDemoPageCount();
-    if (iconDemoPage >= page_count) {
-        iconDemoPage = page_count - 1;
-    }
-    if (iconDemoPage < 0) {
-        iconDemoPage = 0;
-    }
-
-    int y = APP_CONTENT_Y;
-    char buf[32];
-    static const KeyHintItem nav_items[] = {
-        {'[', "prev"},
-        {']', "next"},
-    };
-    drawKeyHintsRow(APP_CONTENT_X, y, nav_items, sizeof(nav_items) / sizeof(nav_items[0]), 1,
-                    APP_COLOR_HINT);
-    snprintf(buf, sizeof(buf), "page %d/%d", iconDemoPage + 1, page_count);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X + 168, y);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.print(buf);
-    y += INFO_LINE_H + 4;
-
-    const int start = iconDemoPage * ICON_DEMO_ITEMS_PER_PAGE;
-    int end = start + ICON_DEMO_ITEMS_PER_PAGE;
-    const int total = getIconDemoItemCount();
-    if (end > total) {
-        end = total;
-    }
-
-    for (int i = start; i < end; i++) {
-        const IconDemoItem& item = ICON_DEMO_ITEMS[i];
-        const int row_y = y;
-        const bool large_icon = item.height > ICON_DEMO_SIZE;
-        const int title_size = large_icon ? 1 : 2;
-        const int title_line_h = title_size == 2 ? INFO_LINE_H_2X : INFO_LINE_H;
-
-        M5Cardputer.Display.setTextSize(title_size);
-        M5Cardputer.Display.setTextColor(WHITE, BLACK);
-        M5Cardputer.Display.setCursor(APP_CONTENT_X, row_y);
-        M5Cardputer.Display.printf("%02d %s", i + 1, item.name);
-
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(APP_CONTENT_X, row_y + title_line_h);
-        if (large_icon) {
-            M5Cardputer.Display.printf("off | on  %dx%d", item.width, item.height);
-        } else {
-            M5Cardputer.Display.printf("size %dx%d", item.width, item.height);
-        }
-
-        const int label_bottom = row_y + title_line_h + INFO_LINE_H + 4;
-        const int avail_h = M5Cardputer.Display.height() - label_bottom - 4;
-        const int icon_x = M5Cardputer.Display.width() - APP_CONTENT_X - item.width;
-        const int icon_y = label_bottom + (avail_h - item.height) / 2;
-        item.draw(icon_x, icon_y);
-
-        y += title_line_h + INFO_LINE_H + item.height + 12;
-    }
-}
-
-static void enterIconDemoApp() {
-    iconDemoPage = 0;
-    drawIconDemoApp();
-}
-
-static void handleIconDemoNav(const Keyboard_Class::KeysState& status) {
-    const int delta = getMenuNavDelta(status);
-    if (delta == 0) {
-        return;
-    }
-    const int page_count = getIconDemoPageCount();
-    iconDemoPage = (iconDemoPage + delta + page_count) % page_count;
-    drawIconDemoApp();
-}
-
 // ===== SLEEP =====
 
 enum class SleepPhase {
@@ -1691,7 +1227,7 @@ static void drawLightSleepPrompt(const int seconds_left) {
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(APP_COLOR_MUTED, BLACK);
     M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
-    M5Cardputer.Display.println("press ` again for deep sleep");
+    M5Cardputer.Display.println("press s again for deep sleep");
 }
 
 // 深度休眠提示
@@ -1842,6 +1378,9 @@ void enterApp(const AppState state) {
         case AppState::STOPWATCH:
             enterStopwatchApp();
             break;
+        case AppState::CURSOR:
+            enterCursorApp();
+            break;
         default:
             break;
     }
@@ -1883,7 +1422,7 @@ void loop() {
         }
         if (M5Cardputer.Keyboard.isChange() && M5Cardputer.Keyboard.isPressed()) {
             const String key = getPressedKey();
-            if (key == "`" && sleepPhase == SleepPhase::PROMPT_LIGHT) {
+            if (key == "s" && sleepPhase == SleepPhase::PROMPT_LIGHT) {
                 switchToDeepSleepPrompt();
             }
         }
@@ -1944,13 +1483,15 @@ void loop() {
         updateCountdownApp();
     } else if (currentState == AppState::STOPWATCH) {
         updateStopwatchApp();
+    } else if (currentState == AppState::CURSOR) {
+        updateCursorApp();
     }
 
     if (currentState == AppState::RTC) {
         static uint32_t lastRtcUpdateMs = 0;
         if (now - lastRtcUpdateMs >= 1000) {
             lastRtcUpdateMs = now;
-            drawRtcApp(false);
+            updateRtcApp();
         }
     }
 
@@ -2025,12 +1566,17 @@ void loop() {
                 break;
             case AppState::COUNTDOWN:
                 if (M5Cardputer.Keyboard.isPressed()) {
-                    handleCountdownApp(getPressedKey());
+                    handleCountdownApp(M5Cardputer.Keyboard.keysState());
                 }
                 break;
             case AppState::STOPWATCH:
                 if (M5Cardputer.Keyboard.isPressed()) {
                     handleStopwatchApp(getPressedKey());
+                }
+                break;
+            case AppState::CURSOR:
+                if (M5Cardputer.Keyboard.isPressed()) {
+                    handleCursorApp(getPressedKey());
                 }
                 break;
             default:

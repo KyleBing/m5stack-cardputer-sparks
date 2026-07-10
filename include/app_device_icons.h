@@ -10,6 +10,9 @@ static constexpr int DEVICE_ICON_NATIVE_PX = 70;
 // 按 model 子串匹配图标名；无匹配返回 "default"
 const char* deviceIconBasenameForModel(const char* model);
 
+// 以 nullptr 结尾的图标 basename 列表（较长名在前，与匹配顺序一致）
+const char* const* deviceIconNames();
+
 // 生成 /icon/device/{basename}[_active].png 路径（静态缓冲，勿并发使用）
 const char* deviceIconPathForModel(const char* model, bool active);
 

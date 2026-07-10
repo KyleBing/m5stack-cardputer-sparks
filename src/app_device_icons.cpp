@@ -43,6 +43,10 @@ static bool strContainsIgnoreCase(const char* haystack, const char* needle) {
     return false;
 }
 
+const char* const* deviceIconNames() {
+    return DEVICE_ICON_NAMES;
+}
+
 const char* deviceIconBasenameForModel(const char* model) {
     if (model != nullptr && model[0] != '\0') {
         for (const char* const* name = DEVICE_ICON_NAMES; *name != nullptr; ++name) {

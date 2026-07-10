@@ -28,6 +28,7 @@ static int wifiSelectedIdx = -1;
 static char wifiPassword[WIFI_PASS_MAX + 1] = "";
 static char wifiStatus[48] = "";
 static uint32_t wifiConnectDeadline = 0;
+static bool wifiConnectFromConfig = false;
 
 static int getWifiListPageCount() {
     if (wifiScanCount <= 0) {
@@ -81,29 +82,37 @@ static void truncateTextToWidth(const char* src, char* out, const size_t out_siz
 }
 
 // 绘制说明行：',' 左箭头，'.' 右箭头
-static void drawWifiHintText(const int x, const int y, const char* text) {
-    drawHintText(x, y, text, 1);
+static void drawWifiHintText(const int x, const int y, const char* text, const int text_size = 1) {
+    drawHintText(x, y, text, text_size);
 }
 
 static void drawWifiHints(const int y) {
     switch (wifiPhase) {
         case WifiAppPhase::STATUS: {
-            const int badge_w = drawKeyBadge(APP_CONTENT_X, y, 's', 2);
-            M5Cardputer.Display.setTextSize(2);
-            M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-            M5Cardputer.Display.setCursor(APP_CONTENT_X + badge_w, y + 1);
-            M5Cardputer.Display.print("scan");
+            const AppConfig& cfg = getAppConfig();
+            if (cfg.loaded && cfg.wifi_ssid[0] != '\0') {
+                KeyHintItem items[] = {{'r', "refresh"}, {'c', "change"}};
+                drawKeyHintsRow(APP_CONTENT_X, y, items, 2, 2, APP_COLOR_HINT);
+            } else {
+                const int badge_w = drawKeyBadge(APP_CONTENT_X, y, 'c', 2);
+                M5Cardputer.Display.setTextSize(2);
+                M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+                M5Cardputer.Display.setCursor(APP_CONTENT_X + badge_w, y + 1);
+                M5Cardputer.Display.print("scan");
+            }
             break;
         }
         case WifiAppPhase::LIST:
-            drawWifiHintText(APP_CONTENT_X, y, "1-4 pick , . page");
+            drawWifiHintText(APP_CONTENT_X, y, "1-4 pick , . page", 1);
             break;
         case WifiAppPhase::PASSWORD:
-            drawWifiHintText(APP_CONTENT_X, y, "ent connect del bk");
+            drawWifiHintText(APP_CONTENT_X, y, "ent connect del bk", 2);
             break;
-        case WifiAppPhase::CONNECTING:
-            drawWifiHintText(APP_CONTENT_X, y, "connecting");
+        case WifiAppPhase::CONNECTING: {
+            KeyHintItem items[] = {{'r', "retry"}};
+            drawKeyHintsRow(APP_CONTENT_X, y, items, 1, 2, APP_COLOR_HINT);
             break;
+        }
         default:
             break;
     }
@@ -151,7 +160,7 @@ static void drawWifiStatusScreen() {
         }
     }
 
-    drawWifiHints(y);
+    drawWifiHints(M5Cardputer.Display.height() - INFO_LINE_H_2X);
 }
 
 static void drawWifiListScreen() {
@@ -260,29 +269,64 @@ static void drawWifiPasswordScreen() {
     y += WIFI_LIST_LINE_H;
 
     if (wifiStatus[0] != '\0') {
-        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextSize(2);
         M5Cardputer.Display.setTextColor(ORANGE, BLACK);
         M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
         M5Cardputer.Display.println(wifiStatus);
-        y += WIFI_HINT_LINE_H;
+        y += WIFI_LIST_LINE_H;
     }
 
-    drawWifiHints(y);
+    drawWifiHints(M5Cardputer.Display.height() - INFO_LINE_H_2X);
 }
 
 static void drawWifiConnectingScreen() {
     beginAppScreen("WiFi");
-    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(WHITE, BLACK);
     M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_Y);
     M5Cardputer.Display.println("connecting...");
-    if (wifiSelectedIdx >= 0 && wifiSelectedIdx < wifiScanCount) {
-        M5Cardputer.Display.println(WiFi.SSID(wifiSelectedIdx).c_str());
+
+    if (wifiConnectFromConfig) {
+        const AppConfig& cfg = getAppConfig();
+        if (cfg.loaded && cfg.wifi_ssid[0] != '\0') {
+            char ssid[33];
+            truncateSsid(cfg.wifi_ssid, ssid, sizeof(ssid), 18);
+            M5Cardputer.Display.println(ssid);
+        }
+    } else if (wifiSelectedIdx >= 0 && wifiSelectedIdx < wifiScanCount) {
+        char ssid[33];
+        truncateSsid(WiFi.SSID(wifiSelectedIdx).c_str(), ssid, sizeof(ssid), 18);
+        M5Cardputer.Display.println(ssid);
     }
+
     if (wifiStatus[0] != '\0') {
         M5Cardputer.Display.setTextColor(ORANGE, BLACK);
         M5Cardputer.Display.println(wifiStatus);
     }
+
+    drawWifiHints(M5Cardputer.Display.height() - INFO_LINE_H_2X);
+}
+
+// 使用 config 中已保存的 WiFi 发起连接
+static void startWifiConfigConnect() {
+    const AppConfig& cfg = getAppConfig();
+    if (!cfg.loaded || cfg.wifi_ssid[0] == '\0') {
+        strncpy(wifiStatus, "no config", sizeof(wifiStatus));
+        wifiPhase = WifiAppPhase::STATUS;
+        drawWifiStatusScreen();
+        return;
+    }
+
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect();
+    WiFi.begin(cfg.wifi_ssid, cfg.wifi_password);
+
+    wifiSelectedIdx = -1;
+    wifiConnectFromConfig = true;
+    wifiPhase = WifiAppPhase::CONNECTING;
+    wifiConnectDeadline = millis() + 12000;
+    wifiStatus[0] = '\0';
+    drawWifiConnectingScreen();
 }
 
 static void startWifiScan() {
@@ -314,6 +358,7 @@ static void startWifiConnect(const char* password) {
     WiFi.disconnect();
     WiFi.begin(ssid.c_str(), password);
 
+    wifiConnectFromConfig = false;
     wifiPhase = WifiAppPhase::CONNECTING;
     wifiConnectDeadline = millis() + 15000;
     strncpy(wifiStatus, "wait...", sizeof(wifiStatus));
@@ -329,6 +374,7 @@ static void selectWifiNetwork(const int list_index) {
     wifiSelectedIdx = idx;
     wifiPassword[0] = '\0';
     wifiStatus[0] = '\0';
+    wifiConnectFromConfig = false;
 
     if (WiFi.encryptionType(idx) == WIFI_AUTH_OPEN) {
         startWifiConnect("");
@@ -357,12 +403,26 @@ static void backspaceWifiPassword() {
 }
 
 void enterWifiApp() {
-    wifiPhase = WifiAppPhase::STATUS;
     wifiListPage = 0;
     wifiSelectedIdx = -1;
     wifiPassword[0] = '\0';
     wifiStatus[0] = '\0';
+    wifiConnectFromConfig = false;
+
+    const AppConfig& cfg = getAppConfig();
     WiFi.mode(WIFI_STA);
+
+    // 有已保存 WiFi 时自动连接并显示状态
+    if (cfg.loaded && cfg.wifi_ssid[0] != '\0') {
+        if (WiFi.status() == WL_CONNECTED && WiFi.SSID() == cfg.wifi_ssid) {
+            wifiPhase = WifiAppPhase::STATUS;
+        } else {
+            startWifiConfigConnect();
+            return;
+        }
+    } else {
+        wifiPhase = WifiAppPhase::STATUS;
+    }
     drawWifiApp();
 }
 
@@ -395,11 +455,13 @@ void updateWifiApp() {
     }
 
     if (WiFi.status() == WL_CONNECTED) {
-        if (saveAppConfigWifi(WiFi.SSID().c_str(), wifiPassword)) {
+        if (!wifiConnectFromConfig &&
+            saveAppConfigWifi(WiFi.SSID().c_str(), wifiPassword)) {
             strncpy(wifiStatus, "saved", sizeof(wifiStatus));
         } else {
             strncpy(wifiStatus, "connected", sizeof(wifiStatus));
         }
+        wifiConnectFromConfig = false;
         wifiPhase = WifiAppPhase::STATUS;
         drawWifiStatusScreen();
         updateAppHeaderStatus();
@@ -408,6 +470,7 @@ void updateWifiApp() {
 
     if (static_cast<int32_t>(millis() - wifiConnectDeadline) >= 0) {
         strncpy(wifiStatus, "timeout", sizeof(wifiStatus));
+        wifiConnectFromConfig = false;
         wifiPhase = WifiAppPhase::STATUS;
         drawWifiStatusScreen();
     }
@@ -415,12 +478,31 @@ void updateWifiApp() {
 
 void handleWifiApp(const Keyboard_Class::KeysState& status) {
     if (wifiPhase == WifiAppPhase::CONNECTING) {
+        for (const char c : status.word) {
+            if (c == 'r' || c == 'R') {
+                if (wifiConnectFromConfig) {
+                    startWifiConfigConnect();
+                } else if (wifiSelectedIdx >= 0) {
+                    startWifiConnect(wifiPassword);
+                }
+            }
+        }
         return;
     }
 
     if (wifiPhase == WifiAppPhase::STATUS) {
         for (const char c : status.word) {
-            if (c == 's' || c == 'S') {
+            if (c == 'r' || c == 'R') {
+                const AppConfig& cfg = getAppConfig();
+                if (cfg.loaded && cfg.wifi_ssid[0] != '\0') {
+                    startWifiConfigConnect();
+                } else {
+                    wifiStatus[0] = '\0';
+                    drawWifiStatusScreen();
+                }
+                return;
+            }
+            if (c == 'c' || c == 'C') {
                 startWifiScan();
                 return;
             }

@@ -173,3 +173,9 @@ void beginAppScreen(const char* title) {
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(WHITE, BLACK);
 }
+
+void clearAppContentArea() {
+    const int screen_w = M5Cardputer.Display.width();
+    const int screen_h = M5Cardputer.Display.height();
+    M5Cardputer.Display.fillRect(0, APP_CONTENT_Y, screen_w, screen_h - APP_CONTENT_Y, BLACK);
+}

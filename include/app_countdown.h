@@ -1,7 +1,7 @@
 #pragma once
 
-#include <WString.h>
+#include "M5Cardputer.h"
 
 void enterCountdownApp();
 void updateCountdownApp();
-void handleCountdownApp(const String& key);
+void handleCountdownApp(const Keyboard_Class::KeysState& status);

@@ -22,3 +22,6 @@ void updateMenuScreenBattery(int page_count);
 
 // 清屏并绘制子界面 header
 void beginAppScreen(const char* title);
+
+// 仅清除 header 下方内容区（局部刷新用）
+void clearAppContentArea();

@@ -1,9 +1,13 @@
 #include "app_web.h"
 #include "app_common.h"
 #include "app_config.h"
+#include "app_device_icons.h"
 #include "app_header.h"
+#include <FS.h>
+#include <LittleFS.h>
 #include <WebServer.h>
 #include <WiFi.h>
+#include <cstring>
 
 static constexpr const char* AP_SSID = "Cardputer-Setup";
 static constexpr const char* AP_PASS = "cardputer";
@@ -33,6 +37,7 @@ static WebStartupPhase g_startup_phase = WebStartupPhase::IDLE;
 static uint32_t g_connect_deadline_ms = 0;
 static bool g_wifi_begin_sent = false;
 static bool g_force_ap_mode = false;
+static bool g_web_screen_ready = false;
 
 static const char* DEFAULT_CONFIG = R"({
   "wifi": {
@@ -48,7 +53,10 @@ static const char* DEFAULT_CONFIG = R"({
       "token": "0123456789abcdef0123456789abcdef",
       "model": "yeelink.light.lamp2"
     }
-  ]
+  ],
+  "cursor": {
+    "api_key": "your-cursor-session-jwt"
+  }
 })";
 
 // textarea / HTML 属性转义
@@ -99,40 +107,45 @@ static void sendHtmlPage(const String& body) {
               "<style>"
               "*{box-sizing:border-box}"
               "body{font-family:system-ui,sans-serif;margin:0;padding:10px 12px;line-height:1.4;"
-              "width:100%;max-width:100%}"
-              "h1{font-size:1.2rem;margin:0 0 8px}"
-              "input,textarea{width:100%;padding:6px 8px;font-size:13px;border:1px solid #ccc;"
-              "border-radius:4px;font-family:inherit}"
+              "width:100%;max-width:100%;background:#121212;color:#e0e0e0}"
+              "h1{font-size:1.2rem;margin:0 0 8px;color:#f0f0f0}"
+              "input,textarea{width:100%;padding:6px 8px;font-size:13px;border:1px solid #444;"
+              "border-radius:4px;font-family:inherit;background:#1e1e1e;color:#e8e8e8}"
               "textarea{resize:vertical;min-height:28px;font-family:ui-monospace,monospace;"
               "font-size:12px;line-height:1.35}"
-              "label{font-size:12px;color:#555;display:block;margin-bottom:10px}"
-              "button{padding:8px 14px;margin:0 6px 6px 0;border:1px solid #bbb;border-radius:4px;"
-              "background:#f5f5f5;cursor:pointer;font-size:13px}"
+              "label{font-size:12px;color:#aaa;display:block;margin-bottom:10px}"
+              "button{padding:8px 14px;margin:0 6px 6px 0;border:1px solid #444;border-radius:4px;"
+              "background:#2a2a2a;color:#e0e0e0;cursor:pointer;font-size:13px}"
               "button.primary{background:#1a73e8;color:#fff;border-color:#1a73e8}"
-              "button.danger{color:#c00;border-color:#e8b4b4;background:#fff5f5}"
+              "button.danger{color:#ff8a80;border-color:#5c3333;background:#2a1a1a}"
               "button.icon-btn{padding:3px 6px;font-size:12px;line-height:1;min-width:26px;"
               "white-space:nowrap}"
+              "a.btn{display:inline-block;padding:8px 14px;margin:0 6px 6px 0;border:1px solid #444;"
+              "border-radius:4px;background:#2a2a2a;color:#e0e0e0;cursor:pointer;font-size:13px;"
+              "text-decoration:none}"
+              "a.btn.primary{background:#1a73e8;color:#fff;border-color:#1a73e8}"
               ".topbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;"
               "gap:8px;margin-bottom:8px}"
               ".nav{font-size:13px;margin:0}"
-              ".nav a{color:#1a73e8}"
-              ".tabs{display:flex;gap:0;border-bottom:2px solid #e0e0e0;margin-bottom:12px}"
+              ".nav a{color:#8ab4f8}"
+              ".tabs{display:flex;gap:0;border-bottom:2px solid #333;margin-bottom:12px}"
               ".tab{padding:10px 18px;cursor:pointer;border:none;background:none;font-size:14px;"
-              "color:#666;border-bottom:2px solid transparent;margin-bottom:-2px}"
-              ".tab.active{color:#1a73e8;border-bottom-color:#1a73e8;font-weight:600}"
+              "color:#888;border-bottom:2px solid transparent;margin-bottom:-2px}"
+              ".tab.active{color:#8ab4f8;border-bottom-color:#8ab4f8;font-weight:600}"
               ".panel{display:none}"
               ".panel.active{display:block}"
+              ".hint{font-size:12px;color:#999;margin:0 0 10px}"
               ".toolbar{margin:10px 0;display:flex;flex-wrap:wrap;align-items:center;gap:6px}"
-              ".toolbar .count{font-size:13px;color:#666;margin-left:auto}"
+              ".toolbar .count{font-size:13px;color:#888;margin-left:auto}"
               ".table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}"
               "table.dev-table{width:100%;min-width:948px;border-collapse:collapse;table-layout:fixed}"
-              ".dev-table th,.dev-table td{border:1px solid #e0e0e0;padding:4px;vertical-align:top;"
-              "background:#fff}"
-              ".dev-table th{background:#f5f5f5;font-size:12px;font-weight:600;text-align:left;"
-              "padding:6px 4px}"
-              ".dev-table tr:nth-child(even) td{background:#fafafa}"
-              ".dev-table tr:hover td{background:#e3f2fd!important}"
-              ".dev-table .col-idx{width:36px;text-align:center;color:#888;font-size:12px;"
+              ".dev-table th,.dev-table td{border:1px solid #333;padding:4px;vertical-align:top;"
+              "background:#1a1a1a}"
+              ".dev-table th{background:#222;font-size:12px;font-weight:600;text-align:left;"
+              "padding:6px 4px;color:#ccc}"
+              ".dev-table tr:nth-child(even) td{background:#161616}"
+              ".dev-table tr:hover td{background:#1e2a3a!important}"
+              ".dev-table .col-idx{width:36px;text-align:center;color:#777;font-size:12px;"
               "vertical-align:middle}"
               ".dev-table .col-act{width:168px;vertical-align:middle}"
               ".dev-table .col-act .act-stack{display:flex;flex-direction:row;flex-wrap:nowrap;"
@@ -140,14 +153,21 @@ static void sendHtmlPage(const String& body) {
               ".dev-table .col-act button{width:auto;margin:0;flex-shrink:0}"
               ".dev-table .col-name{width:14%}"
               ".dev-table .col-ip{width:11%}"
-              ".dev-table .col-token{width:22%}"
-              ".dev-table .col-model{width:18%}"
+              ".dev-table .col-token{width:20%}"
+              ".dev-table .col-model{width:22%}"
               ".dev-table .col-id{width:10%}"
               ".dev-table .col-mac{width:13%}"
+              ".model-cell{display:flex;gap:6px;align-items:flex-start}"
+              ".model-cell textarea{flex:1;min-width:0}"
+              ".dev-icon{width:32px;height:32px;object-fit:contain;flex-shrink:0;margin-top:2px;"
+              "background:#000;border-radius:4px}"
               ".wifi-grid{max-width:480px}"
-              ".save-bar{margin-top:14px;padding-top:12px;border-top:1px solid #e0e0e0}"
-              ".ok{color:#0a0}.err{color:#a00}"
-              "pre{background:#111;color:#eee;padding:12px;overflow:auto;font-size:12px}"
+              ".save-bar{margin-top:14px;padding-top:12px;border-top:1px solid #333}"
+              ".result-actions{margin-top:16px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}"
+              ".ok{color:#81c784}.err{color:#ff8a80}"
+              "code{background:#2a2a2a;padding:2px 4px;border-radius:3px;color:#e0e0e0}"
+              "pre{background:#0d0d0d;color:#e0e0e0;padding:12px;overflow:auto;font-size:12px;"
+              "border:1px solid #333;border-radius:4px}"
               "textarea.json-editor{height:min(70vh,520px);font-family:ui-monospace,monospace}"
               "</style></head><body>");
     html += body;
@@ -169,6 +189,7 @@ static void handleFormRoot() {
               "<div class='tabs'>"
               "<button type='button' class='tab active' data-tab='wifi'>WiFi</button>"
               "<button type='button' class='tab' data-tab='devices'>米家设备</button>"
+              "<button type='button' class='tab' data-tab='cursor'>Cursor</button>"
               "</div>"
               "<div id='panel-wifi' class='panel active'>"
               "<div class='wifi-grid'>"
@@ -193,6 +214,11 @@ static void handleFormRoot() {
               "</tr></thead>"
               "<tbody id='dev-tbody'></tbody>"
               "</table></div></div>"
+              "<div id='panel-cursor' class='panel'>"
+              "<p class='hint'>Cursor 会话 Token（JWT 或 sub::jwt），"
+              "可从 Cursor 登录态 / state.vscdb 获取。</p>"
+              "<label>Session Token<textarea id='cursor-key' rows='4'></textarea></label>"
+              "</div>"
               "<div class='save-bar'>"
               "<button type='submit' class='primary' id='btn-save'>保存到设备</button>"
               "</div></form>"
@@ -202,13 +228,31 @@ static void handleFormRoot() {
     body += F("const DEV_MAX=");
     body += WEB_DEVICE_MAX;
     body += F(";");
+    // 与固件 deviceIconBasenameForModel 同一套 basename 列表
+    body += F("const ICON_NAMES=[");
+    for (const char* const* name = deviceIconNames(); *name != nullptr; ++name) {
+        body += '\'';
+        body += *name;
+        body += F("',");
+    }
+    body += F("];");
     body += F(
-        "let cfg={wifi:{ssid:'',password:''},devices:[]};"
+        "let cfg={wifi:{ssid:'',password:''},devices:[],cursor:{api_key:''}};"
         "function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/\"/g,'&quot;')"
         ".replace(/</g,'&lt;');}"
         "function ta(f,v){return `<textarea data-f='${f}' rows='1'>${esc(v)}</textarea>`;}"
+        // 与固件匹配规则一致：子串忽略大小写，较长名优先，再回退 light/default
+        "function iconBase(model){const m=String(model||'').toLowerCase();"
+        "for(const n of ICON_NAMES){if(m.includes(n))return n;}"
+        "if(m.includes('light'))return 'light';return 'default';}"
+        "function iconUrl(model){return '/icon/device/'+iconBase(model)+'.png';}"
+        "function modelCell(model){return `<div class='model-cell'>"
+        "<img class='dev-icon' src='${iconUrl(model)}' alt='' title='${iconBase(model)}'>"
+        "${ta('model',model)}</div>`;}"
         "function collect(){cfg.wifi.ssid=document.getElementById('wifi-ssid').value;"
         "cfg.wifi.password=document.getElementById('wifi-pass').value;cfg.devices=[];"
+        "if(!cfg.cursor)cfg.cursor={api_key:''};"
+        "cfg.cursor.api_key=document.getElementById('cursor-key').value;"
         "document.querySelectorAll('#dev-tbody tr').forEach(row=>{"
         "const d={};row.querySelectorAll('[data-f]').forEach(el=>{d[el.dataset.f]=el.value;});"
         "cfg.devices.push(d);});}"
@@ -225,7 +269,7 @@ static void handleFormRoot() {
         "</div></td>"
         "<td class='col-ip'>${ta('ip',d.ip)}</td>"
         "<td class='col-token'>${ta('token',d.token)}</td>"
-        "<td class='col-model'>${ta('model',d.model)}</td>"
+        "<td class='col-model'>${modelCell(d.model)}</td>"
         "<td class='col-id'>${ta('id',d.id)}</td>"
         "<td class='col-mac'>${ta('mac',d.mac)}</td>`;tb.appendChild(tr);});"
         "document.getElementById('dev-count').textContent=`共 ${cfg.devices.length} / ${DEV_MAX} 台`;}"
@@ -240,11 +284,13 @@ static void handleFormRoot() {
         "document.querySelectorAll('.panel').forEach(p=>{"
         "p.classList.toggle('active',p.id==='panel-'+id);});}"
         "function init(){try{cfg=JSON.parse(document.getElementById('cfg-data').textContent);}"
-        "catch(e){cfg={wifi:{ssid:'',password:''},devices:[]};}"
+        "catch(e){cfg={wifi:{ssid:'',password:''},devices:[],cursor:{api_key:''}};}"
         "if(!cfg.wifi)cfg.wifi={ssid:'',password:''};"
         "if(!cfg.devices)cfg.devices=[];"
+        "if(!cfg.cursor)cfg.cursor={api_key:''};"
         "document.getElementById('wifi-ssid').value=cfg.wifi.ssid||'';"
         "document.getElementById('wifi-pass').value=cfg.wifi.password||'';"
+        "document.getElementById('cursor-key').value=cfg.cursor.api_key||'';"
         "render();"
         "document.querySelectorAll('.tab').forEach(t=>{"
         "t.onclick=()=>switchTab(t.dataset.tab);});"
@@ -259,6 +305,11 @@ static void handleFormRoot() {
         "else if(b.dataset.act==='top')moveTop(i);"
         "else if(b.dataset.act==='bottom')moveBottom(i);"
         "else if(b.dataset.act==='del'){collect();cfg.devices.splice(i,1);render();}};"
+        // 输入 model 时即时刷新匹配图标
+        "document.getElementById('dev-tbody').oninput=e=>{const el=e.target;"
+        "if(!el||el.dataset.f!=='model')return;"
+        "const img=el.closest('tr').querySelector('.dev-icon');"
+        "if(!img)return;const base=iconBase(el.value);img.src=iconUrl(el.value);img.title=base;};"
         "document.getElementById('save-form').onsubmit=()=>{collect();"
         "document.getElementById('config-payload').value=JSON.stringify(cfg,null,2);};}"
         "init();");
@@ -273,7 +324,7 @@ static void handleAdvancedRoot() {
     String body;
     body.reserve(cfg.length() + 512);
     body += F("<h1>高级 JSON 编辑</h1>"
-              "<p class='nav'><a href='/'>← 返回表单编辑</a> · "
+              "<p class='nav'><a href='/'>← 返回主页</a> · "
               "<a href='/example'>示例格式</a></p>"
               "<form method='POST' action='/save'>"
               "<textarea class='json-editor' name='config'>");
@@ -296,23 +347,26 @@ static void handleSave() {
         String body = F("<h1>已保存</h1><p class='ok'>config.json 写入成功。</p>"
                         "<p>设备数: ");
         body += getAppConfig().device_count;
-        body += F("</p><p><a href='/'>返回表单编辑</a> · "
-                  "<a href='/advanced'>高级 JSON</a></p>");
+        body += F("</p><div class='result-actions'>"
+                  "<a href='/' class='btn primary'>返回主页</a>"
+                  "<a href='/advanced' class='btn'>高级 JSON</a></div>");
         sendHtmlPage(body);
     } else {
         strncpy(g_web_status, "json error", sizeof(g_web_status));
         String body = F("<h1>保存失败</h1><p class='err'>JSON 格式无效，请检查后重试。</p>"
-                        "<p><a href='/'>返回表单编辑</a> · "
-                        "<a href='/advanced'>高级 JSON</a></p>");
+                        "<div class='result-actions'>"
+                        "<a href='/' class='btn primary'>返回主页</a>"
+                        "<a href='/advanced' class='btn'>高级 JSON</a></div>");
         sendHtmlPage(body);
     }
 }
 
 static void handleExample() {
     String body = F("<h1>示例 config.json</h1><p>米家控制使用 <code>ip</code> + <code>token</code>，"
-                    "开关命令为 <code>set_power</code>。</p><pre>");
+                    "开关命令为 <code>set_power</code>。Cursor 用量需配置 <code>cursor.api_key</code> "
+                    "（会话 JWT）。</p><pre>");
     body += DEFAULT_CONFIG;
-    body += F("</pre><p><a href='/'>返回表单编辑</a></p>");
+    body += F("</pre><p class='nav'><a href='/'>← 返回主页</a></p>");
     sendHtmlPage(body);
 }
 
@@ -364,13 +418,49 @@ static void loadingDots(char* buf, const size_t buf_size) {
     buf[i] = '\0';
 }
 
+// 从 LittleFS 提供 /icon/device/*.png（供配置页预览）
+static bool tryServeDeviceIcon() {
+    const String uri = g_server.uri();
+    if (!uri.startsWith("/icon/device/") || !uri.endsWith(".png")) {
+        return false;
+    }
+    if (uri.indexOf("..") >= 0 || uri.length() > 64) {
+        return false;
+    }
+    // 仅允许字母数字与 _-
+    const char* p = uri.c_str() + strlen("/icon/device/");
+    if (*p == '\0') {
+        return false;
+    }
+    for (const char* c = p; *c != '\0'; ++c) {
+        const bool ok = (*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z') ||
+                        (*c >= '0' && *c <= '9') || *c == '_' || *c == '-' || *c == '.';
+        if (!ok) {
+            return false;
+        }
+    }
+
+    File file = LittleFS.open(uri, "r");
+    if (!file) {
+        return false;
+    }
+    g_server.streamFile(file, "image/png");
+    file.close();
+    return true;
+}
+
 // 注册 HTTP 路由
 static void registerWebRoutes() {
     g_server.on("/", HTTP_GET, handleFormRoot);
     g_server.on("/advanced", HTTP_GET, handleAdvancedRoot);
     g_server.on("/save", HTTP_POST, handleSave);
     g_server.on("/example", HTTP_GET, handleExample);
-    g_server.onNotFound([]() { g_server.send(404, "text/plain", "not found"); });
+    g_server.onNotFound([]() {
+        if (tryServeDeviceIcon()) {
+            return;
+        }
+        g_server.send(404, "text/plain", "not found");
+    });
 }
 
 // 已连路由器时直接在局域网 IP 上提供配置页
@@ -505,7 +595,12 @@ static const char* stripHttpPrefix(const char* url) {
 }
 
 void drawWebApp() {
-    beginAppScreen("Config Setup");
+    if (!g_web_screen_ready) {
+        beginAppScreen("Config Setup");
+        g_web_screen_ready = true;
+    } else {
+        clearAppContentArea();
+    }
 
     int y = APP_CONTENT_Y;
 
@@ -515,6 +610,11 @@ void drawWebApp() {
     };
 
     // label / value 均为 2x
+    const auto drawLine2x = [&](const char* label, const char* value) {
+        drawInfoLineAt(APP_CONTENT_X, y, label, value, 2);
+        y += INFO_LINE_H_2X;
+    };
+
     const auto drawLineValue2x = [&](const char* label, const char* value) {
         M5Cardputer.Display.setTextSize(2);
         M5Cardputer.Display.setTextColor(INFO_LABEL_COLOR, BLACK);
@@ -528,32 +628,32 @@ void drawWebApp() {
         y += infoLineHeight(2);
     };
 
-    const auto drawKeyHint = [&](const char key, const char* text) {
-        int cx = APP_CONTENT_X + drawKeyBadge(APP_CONTENT_X, y, key, 1);
-        M5Cardputer.Display.setTextSize(1);
+    const auto drawKeyHint = [&](const char key, const char* text, const int text_size = 1) {
+        int cx = APP_CONTENT_X + drawKeyBadge(APP_CONTENT_X, y, key, text_size);
+        M5Cardputer.Display.setTextSize(text_size);
         M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
         M5Cardputer.Display.setCursor(cx, y);
         M5Cardputer.Display.print(text);
-        y += INFO_LINE_H;
+        y += (text_size == 2) ? INFO_LINE_H_2X : INFO_LINE_H;
     };
 
-    // 连接中
+    // 连接中：初始提示全部 2x
     if (g_startup_phase == WebStartupPhase::CONNECTING) {
         char dots[5];
         loadingDots(dots, sizeof(dots));
         char status[20];
         snprintf(status, sizeof(status), "%s%s", g_web_status, dots);
-        drawLine1x("status", status);
+        drawLine2x("status", status);
 
         const AppConfig& cfg = getAppConfig();
         if (!g_force_ap_mode && cfg.loaded && cfg.wifi_ssid[0] != '\0') {
-            drawLine1x("wifi", cfg.wifi_ssid);
-            drawLine1x("plan", "LAN then AP");
+            drawLine2x("wifi", cfg.wifi_ssid);
+            drawLine2x("plan", "LAN then AP");
         } else {
-            drawLine1x("plan", "AP hotspot");
+            drawLine2x("plan", "AP hotspot");
         }
 
-        drawKeyHint('a', "skip to AP mode");
+        drawKeyHint('a', "skip to AP mode", 2);
         return;
     }
 
@@ -600,6 +700,7 @@ void handleWebApp(const String& key) {
 }
 
 void enterWebApp() {
+    g_web_screen_ready = false;
     beginWebStartup(false);
     drawWebApp();
 }
