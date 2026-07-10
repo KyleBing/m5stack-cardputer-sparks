@@ -3,6 +3,7 @@
 #include "app_common.h"
 #include "app_config.h"
 #include "app_header.h"
+#include "M5Cardputer.h"
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <WiFi.h>
@@ -19,6 +20,8 @@ static constexpr uint32_t CURSOR_IDLE_TRIGGER_MS = 60000;
 static constexpr uint32_t CURSOR_REFRESH_INTERVAL_MS = 300000;
 static constexpr uint32_t CURSOR_WIFI_TIMEOUT_MS = 5000;
 static constexpr int CURSOR_BAR_MARGIN_X = 5;
+static constexpr int CURSOR_CHART_ETA_7_SEC = 11;
+static constexpr int CURSOR_CHART_ETA_30_SEC = 30;
 
 enum class CursorPhase {
     IDLE,
@@ -72,12 +75,18 @@ static float g_chart_30_cents[30]{};
 static bool g_chart_7_ready = false;
 static bool g_chart_30_ready = false;
 static int g_chart_fetch_days = 7;
+static uint32_t g_chart_fetch_start_ms = 0;
+static int g_chart_fetch_eta_sec = CURSOR_CHART_ETA_7_SEC;
+static int g_last_countdown_sec = -1;
 static uint32_t g_last_activity_ms = 0;
 static uint32_t g_last_scheduled_refresh_ms = 0;
 static bool g_periodic_refresh_active = false;
 
 static void beginCursorFetch(const CursorFetchMode mode);
 static void beginCursorChartFetch(const int days, const bool silent);
+static void startChartFetchTimer(const int days);
+static int chartFetchCountdownSec();
+static void refreshChartLoadingFrame();
 
 // 记录用户操作，重置空闲刷新计时
 static void noteCursorActivity() {
@@ -371,6 +380,9 @@ static bool fetchDailyUsage(const int range_days, float* daily_out) {
   int total = 0;
 
   while (page <= 20) {
+    refreshChartLoadingFrame();
+    M5Cardputer.update();
+
     snprintf(body, sizeof(body),
              "{\"teamId\":0,\"startDate\":\"%lld\",\"endDate\":\"%lld\",\"userId\":%d,"
              "\"page\":%d,\"pageSize\":100}",
@@ -381,6 +393,7 @@ static bool fetchDailyUsage(const int range_days, float* daily_out) {
     if (!cursorHttpRequest("POST", "/api/dashboard/get-filtered-usage-events", body, response, code)) {
       return page == 1 ? false : true;
     }
+    refreshChartLoadingFrame();
 
     JsonDocument doc;
     JsonDocument filter;
@@ -573,14 +586,77 @@ static void drawDailyBars(const int x, const int y, const int w, const int bar_h
   }
 }
 
+// 记录图表拉取倒计时起点
+static void startChartFetchTimer(const int days) {
+  g_chart_fetch_start_ms = millis();
+  g_chart_fetch_eta_sec = (days == 30) ? CURSOR_CHART_ETA_30_SEC : CURSOR_CHART_ETA_7_SEC;
+  g_last_countdown_sec = -1;
+}
+
+// 剩余秒数（不低于 0）
+static int chartFetchCountdownSec() {
+  if (g_chart_fetch_start_ms == 0) {
+    return g_chart_fetch_eta_sec;
+  }
+  const uint32_t elapsed = (millis() - g_chart_fetch_start_ms) / 1000;
+  int left = g_chart_fetch_eta_sec - static_cast<int>(elapsed);
+  return left < 0 ? 0 : left;
+}
+
 // 柱状图区域居中 loading 叠层
 static void drawChartLoadingOverlay(const int x, const int y, const int w, const int h) {
+  const char* text = "loading...";
+  if (g_phase == CursorPhase::WIFI) {
+    text = "connecting...";
+  } else if (g_status_msg[0] != '\0') {
+    text = g_status_msg;
+  }
+
+  char eta_buf[16];
+  const int left = chartFetchCountdownSec();
+  if (left >= g_chart_fetch_eta_sec) {
+    snprintf(eta_buf, sizeof(eta_buf), "approx %ds", g_chart_fetch_eta_sec);
+  } else {
+    snprintf(eta_buf, sizeof(eta_buf), "%ds", left);
+  }
+
   M5Cardputer.Display.setTextSize(2);
   M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-  const char* text = "loading...";
   const int tw = M5Cardputer.Display.textWidth(text);
-  M5Cardputer.Display.setCursor(x + (w - tw) / 2, y + (h - 16) / 2);
+  M5Cardputer.Display.setCursor(x + (w - tw) / 2, y + (h - 28) / 2);
   M5Cardputer.Display.print(text);
+
+  M5Cardputer.Display.setTextSize(1);
+  const int eta_w = M5Cardputer.Display.textWidth(eta_buf);
+  M5Cardputer.Display.setCursor(x + (w - eta_w) / 2, y + (h - 28) / 2 + 20);
+  M5Cardputer.Display.print(eta_buf);
+}
+
+// 仅刷新图表 loading 区与 header（拉取过程中每秒更新倒计时）
+static void refreshChartLoadingFrame() {
+  if (g_silent_fetch || g_page == CursorPage::SUMMARY) {
+    return;
+  }
+  const int y = APP_CONTENT_Y;
+  const int screen_w = M5Cardputer.Display.width();
+  const int chart_x = CURSOR_BAR_MARGIN_X;
+  const int chart_w = screen_w - CURSOR_BAR_MARGIN_X * 2;
+  const int bottom_hint_h = 12;
+  const int chart_h =
+      M5Cardputer.Display.height() - y - bottom_hint_h - CURSOR_BAR_LABEL_H;
+  if (chart_h < 20) {
+    return;
+  }
+
+  const int left = chartFetchCountdownSec();
+  if (left == g_last_countdown_sec) {
+    return;
+  }
+  g_last_countdown_sec = left;
+
+  M5Cardputer.Display.fillRect(chart_x + 1, y + 1, chart_w - 2, chart_h - 2, BLACK);
+  drawChartLoadingOverlay(chart_x, y, chart_w, chart_h);
+  updateAppHeaderStatus();
 }
 
 static void formatMoney(const int cents, char* buf, const size_t buf_size) {
@@ -690,8 +766,11 @@ static void drawCursorChartPage(const int days, const float* daily_cents, const 
   const int gap = (days == 7) ? 3 : 0;
 
   if (chart_h >= 20) {
-    drawDailyBars(chart_x, y, chart_w, chart_h, days, ready ? daily_cents : nullptr, gap, ready);
-    if (!ready) {
+    if (ready) {
+      drawDailyBars(chart_x, y, chart_w, chart_h, days, daily_cents, gap, true);
+    } else {
+      // 加载中不画空柱框，避免顶部竖条视觉上盖住 header WiFi 图标
+      M5Cardputer.Display.drawRect(chart_x, y, chart_w, chart_h, DARKGREY);
       drawChartLoadingOverlay(chart_x, y, chart_w, chart_h);
     }
   }
@@ -703,8 +782,8 @@ void drawCursorApp() {
 
   int y = APP_CONTENT_Y;
 
-  // 静默刷新时不打断当前界面
-  if (!g_silent_fetch &&
+  // 静默刷新时不打断当前界面；图表页在柱状图区域内显示 loading
+  if (!g_silent_fetch && g_page == CursorPage::SUMMARY &&
       (g_phase == CursorPhase::WIFI || g_phase == CursorPhase::FETCHING)) {
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
@@ -714,6 +793,7 @@ void drawCursorApp() {
     } else {
       M5Cardputer.Display.println(g_status_msg[0] != '\0' ? g_status_msg : "loading...");
     }
+    updateAppHeaderStatus();
     return;
   }
 
@@ -724,6 +804,7 @@ void drawCursorApp() {
     y += INFO_LINE_H_2X;
     const KeyHintItem items[] = {{'r', "retry"}};
     drawKeyHintsRow(APP_CONTENT_X, y, items, 1, 2, APP_COLOR_HINT);
+    updateAppHeaderStatus();
     return;
   }
 
@@ -732,6 +813,7 @@ void drawCursorApp() {
     drawInfoLineAt(APP_CONTENT_X, y, "cfg", "no token", 2);
     y += INFO_LINE_H_2X;
     drawInfoLineAt(APP_CONTENT_X, y, "hint", "u web setup", 2);
+    updateAppHeaderStatus();
     return;
   }
 
@@ -740,21 +822,25 @@ void drawCursorApp() {
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
     M5Cardputer.Display.println("no data");
+    updateAppHeaderStatus();
     return;
   }
 
   if (g_page == CursorPage::SUMMARY) {
     drawCursorSummaryPage(y);
     drawCursorHints();
+    updateAppHeaderStatus();
     return;
   }
 
   if (g_page == CursorPage::CHART_7) {
     drawCursorChartPage(7, g_chart_7_cents, g_chart_7_ready);
+    updateAppHeaderStatus();
     return;
   }
 
   drawCursorChartPage(30, g_chart_30_cents, g_chart_30_ready);
+  updateAppHeaderStatus();
 }
 
 static void beginCursorFetch(const CursorFetchMode mode) {
@@ -852,6 +938,7 @@ void updateCursorApp() {
       return;
     }
     quickSyncTime();
+    updateAppHeaderStatus();
     if (!g_silent_fetch) {
       g_phase = CursorPhase::FETCHING;
       drawCursorApp();
@@ -908,6 +995,10 @@ void updateCursorApp() {
 
   if (g_fetch_step == 2) {
     float* target = (g_chart_fetch_days == 30) ? g_chart_30_cents : g_chart_7_cents;
+    if (!g_silent_fetch) {
+      startChartFetchTimer(g_chart_fetch_days);
+      drawCursorApp();
+    }
     if (fetchDailyUsage(g_chart_fetch_days, target)) {
       if (g_chart_fetch_days == 30) {
         g_chart_30_ready = true;
@@ -921,6 +1012,8 @@ void updateCursorApp() {
       strncpy(g_error_msg, "chart fail", sizeof(g_error_msg));
     }
     g_status_msg[0] = '\0';
+    g_chart_fetch_start_ms = 0;
+    g_last_countdown_sec = -1;
     g_fetch_pending = false;
     g_silent_fetch = false;
     finishCursorWifi();

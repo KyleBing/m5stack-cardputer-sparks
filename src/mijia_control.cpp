@@ -41,11 +41,50 @@ MijiaDevKind mijiaClassifyModel(const char* model) {
     return MijiaDevKind::GENERIC;
 }
 
+// 按型号取色温范围（K）；无调节能力时 min == max
+static void mijiaLightCtRange(const char* model, int& min_k, int& max_k) {
+    min_k = 2700;
+    max_k = 6500;
+    if (model == nullptr || model[0] == '\0') {
+        return;
+    }
+    if (strcmp(model, "yeelink.light.lamp2") == 0) {
+        min_k = 2500;
+        max_k = 4800;
+        return;
+    }
+    if (strcmp(model, "yeelink.light.lamp1") == 0 || strcmp(model, "yeelink.light.lamp4") == 0) {
+        min_k = 2700;
+        max_k = 5000;
+        return;
+    }
+    if (strstr(model, ".mono") != nullptr) {
+        min_k = 2700;
+        max_k = 2700;
+        return;
+    }
+    if (!startsWith(model, "yeelink.light.")) {
+        min_k = 0;
+        max_k = 0;
+    }
+}
+
+bool mijiaLightSupportsCt(const char* model) {
+    int min_k = 0;
+    int max_k = 0;
+    mijiaLightCtRange(model, min_k, max_k);
+    return max_k > min_k;
+}
+
 void mijiaResetUiState(MijiaUiState& state) {
     state.power_known = false;
     state.power_on = false;
     state.extra_known = false;
     state.bright = 50;
+    state.color_temp = 4000;
+    state.ct_known = false;
+    state.ct_min = 2700;
+    state.ct_max = 6500;
     state.speed = 0;
     state.roll = false;
     state.mode = 0;
@@ -86,11 +125,14 @@ void mijiaRefreshDevice(const MijiaDevice* dev, MijiaUiState& state) {
     switch (kind) {
         case MijiaDevKind::LIGHT: {
             bool bright_known = false;
+            bool ct_known = false;
+            mijiaLightCtRange(dev->model, state.ct_min, state.ct_max);
             result = miioGetLightStatus(dev->ip, dev->token, state.power_on, state.bright,
-                                        bright_known);
+                                        bright_known, state.color_temp, ct_known);
             if (result.ok) {
                 state.power_known = true;
-                state.extra_known = bright_known;
+                state.ct_known = ct_known && mijiaLightSupportsCt(dev->model);
+                state.extra_known = bright_known || state.ct_known;
             }
             break;
         }
@@ -182,6 +224,34 @@ void mijiaSetBrightPercent(const MijiaDevice* dev, MijiaUiState& state, const in
     if (result.ok) {
         state.extra_known = true;
         state.bright = target;
+        state.power_on = true;
+        state.power_known = true;
+    }
+    applyResult(state, result);
+}
+
+void mijiaAdjustColorTemp(const MijiaDevice* dev, MijiaUiState& state, const int delta_k) {
+    if (dev == nullptr || !mijiaLightSupportsCt(dev->model)) {
+        return;
+    }
+
+    int target = state.ct_known ? state.color_temp : (state.ct_min + state.ct_max) / 2;
+    target = clampInt(target + delta_k, state.ct_min, state.ct_max);
+    mijiaSetColorTemp(dev, state, target);
+}
+
+void mijiaSetColorTemp(const MijiaDevice* dev, MijiaUiState& state, const int kelvin) {
+    if (dev == nullptr || !mijiaLightSupportsCt(dev->model)) {
+        return;
+    }
+
+    const int target = clampInt(kelvin, state.ct_min, state.ct_max);
+    strncpy(state.status, "ct...", sizeof(state.status));
+    const MiioResult result = miioSetColorTemp(dev->ip, dev->token, target);
+    if (result.ok) {
+        state.ct_known = true;
+        state.color_temp = target;
+        state.extra_known = true;
         state.power_on = true;
         state.power_known = true;
     }

@@ -455,12 +455,16 @@ static void updateBmiXYPanel(const int panelX, const int panelW, const int conte
     bmiPrevDotX[0] = dotX;
     bmiPrevDotY[0] = dotY;
 
-    M5Cardputer.Display.fillRect(panelX + 2, contentTop + 2, 58, 18, BLACK);
+    // X/Y 贴左栏顶边左右两侧，避免与中部参考圆重叠
+    M5Cardputer.Display.fillRect(panelX + 2, contentTop, panelW - 4, 8, BLACK);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(WHITE, BLACK);
-    M5Cardputer.Display.setCursor(panelX + 2, contentTop + 2);
-    M5Cardputer.Display.printf("X %+.2f\n", ax);
-    M5Cardputer.Display.printf("Y %+.2f", ay);
+    char xyBuf[16];
+    snprintf(xyBuf, sizeof(xyBuf), "X %+.2f", ax);
+    M5Cardputer.Display.setCursor(panelX + 2, contentTop);
+    M5Cardputer.Display.print(xyBuf);
+    snprintf(xyBuf, sizeof(xyBuf), "Y %+.2f", ay);
+    M5Cardputer.Display.drawRightString(xyBuf, panelX + panelW - 2, contentTop);
 }
 
 // 右栏：Z 竖轴指示 + 数值靠右
@@ -482,12 +486,13 @@ static void updateBmiZPanel(const int panelX, const int panelW, const int conten
     bmiPrevDotX[1] = axisCx;
     bmiPrevDotY[1] = dotY;
 
-    M5Cardputer.Display.fillRect(panelX + panelW - 54, contentTop + 2, 52, 10, BLACK);
+    // Z 贴右栏顶边右侧
+    M5Cardputer.Display.fillRect(panelX + 2, contentTop, panelW - 4, 8, BLACK);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(WHITE, BLACK);
     char zBuf[16];
     snprintf(zBuf, sizeof(zBuf), "Z %+.2f", az);
-    M5Cardputer.Display.drawRightString(zBuf, panelX + panelW - 2, contentTop + 2);
+    M5Cardputer.Display.drawRightString(zBuf, panelX + panelW - 2, contentTop);
 }
 
 // BMI（IMU）页面：左 XY、右 Z，型号显示在 header
@@ -670,7 +675,7 @@ void drawInfoApp() {
 
     if (item_count > visible) {
         char hint[24];
-        snprintf(hint, sizeof(hint), "%d/%d  , . [ ] scroll", infoScrollIdx + 1, max_scroll + 1);
+        snprintf(hint, sizeof(hint), "%d/%d  , . scroll", infoScrollIdx + 1, max_scroll + 1);
         drawHintText(APP_CONTENT_X, M5Cardputer.Display.height() - 12, hint);
     }
 }
@@ -829,8 +834,6 @@ void drawMicApp() {
 
 // ===== SETTINGS =====
 
-static constexpr int BRIGHTNESS_BAR_MARGIN_X = 8;
-
 // 亮度加减并限制在 0-255，同时写入 config.json
 void adjustBrightness(const int delta) {
     const int next = constrain(static_cast<int>(M5Cardputer.Display.getBrightness()) + delta, 0, 255);
@@ -886,72 +889,55 @@ bool handleSettingsArrowKeys(const Keyboard_Class::KeysState& status) {
     return true;
 }
 
-// 绘制亮度条（左右留 margin）
-void drawBrightnessBar(const int x, const int y, const int barW, const int barH,
-                     const uint8_t brightness) {
-    const int innerW = barW - 2;
-
-    M5Cardputer.Display.drawRect(x, y, barW, barH, DARKGREY);
-
-    // 刻度：0 / 64 / 128 / 192 / 255
-    for (int i = 0; i <= 4; i++) {
-        const int tickX = x + 1 + i * innerW / 4;
-        M5Cardputer.Display.drawFastVLine(tickX, y + barH, 3, DARKGREY);
-    }
-
-    const int fillW = static_cast<int>(static_cast<int64_t>(brightness) * innerW / 255);
-    if (fillW > 0) {
-        M5Cardputer.Display.fillRect(x + 1, y + 1, fillW, barH - 2, GREEN);
-    }
-}
-
 void drawSettingsApp() {
     beginAppScreen(getMenuItemNameFull(AppState::SETTINGS));
 
     const int screenW = M5Cardputer.Display.width();
     const uint8_t brightness = M5Cardputer.Display.getBrightness();
+    const int content_w = screenW - APP_CONTENT_X * 2;
+    const int pct = brightness * 100 / 255;
 
-    // 标题 2 倍字，亮度值 1 倍字跟在后面
-    M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setTextColor(WHITE, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_Y);
-    M5Cardputer.Display.print("Brightness");
-    const int valueX = M5Cardputer.Display.getCursorX() + 4;
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setCursor(valueX, APP_CONTENT_Y + 5);
-    M5Cardputer.Display.printf("%d", brightness);
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d", brightness);
+    int cy = APP_CONTENT_Y;
+    cy = drawMijiaBarRow(APP_CONTENT_X, cy, "bright", buf, pct, content_w, GREEN);
 
-    const int barY = APP_CONTENT_Y + 20;
-    const int barX = BRIGHTNESS_BAR_MARGIN_X;
-    const int barW = screenW - BRIGHTNESS_BAR_MARGIN_X * 2;
-    drawBrightnessBar(barX, barY, barW, 12, brightness);
-
-    // 说明区：小字 + 边框
+    // 说明区：按键徽章 + 文案
     constexpr int pad = 4;
-    constexpr int lineH = 10;
     constexpr int hintLines = 5;
     const int boxX = APP_CONTENT_X;
-    const int boxY = barY + 18;
-    const int boxW = screenW - APP_CONTENT_X * 2;
-    const int boxH = pad * 2 + hintLines * lineH;
+    const int boxY = cy + 4;
+    const int boxW = content_w;
+    const int boxH = pad * 2 + hintLines * INFO_LINE_H;
 
     M5Cardputer.Display.drawRect(boxX, boxY, boxW, boxH, DARKGREY);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(WHITE, BLACK);
 
     int ty = boxY + pad;
-    M5Cardputer.Display.setCursor(boxX + pad, ty);
-    M5Cardputer.Display.println("0-9  preset");
-    ty += lineH;
-    M5Cardputer.Display.setCursor(boxX + pad, ty);
-    M5Cardputer.Display.println("<>   step 1");
-    ty += lineH;
-    M5Cardputer.Display.setCursor(boxX + pad, ty);
-    M5Cardputer.Display.println("^v   step 10");
-    ty += lineH;
-    M5Cardputer.Display.setCursor(boxX + pad, ty);
-    M5Cardputer.Display.println("r    invert");
-    ty += lineH;
+    const auto drawKeyHint = [&](const char key, const char* text) {
+        int cx = boxX + pad + drawKeyBadge(boxX + pad, ty, key, 1);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(cx, ty);
+        M5Cardputer.Display.print(text);
+        ty += INFO_LINE_H;
+    };
+    const auto drawDualKeyHint = [&](const char key1, const char key2, const char* text) {
+        int cx = boxX + pad;
+        cx += drawKeyBadge(cx, ty, key1, 1);
+        cx += drawKeyBadge(cx, ty, key2, 1);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(cx, ty);
+        M5Cardputer.Display.print(text);
+        ty += INFO_LINE_H;
+    };
+
+    drawKeyHint('0', "0-9 preset");
+    drawDualKeyHint(',', '/', " step 1");
+    drawDualKeyHint(';', '.', " step 10");
+    drawKeyHint('r', "invert");
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.setCursor(boxX + pad, ty);
     M5Cardputer.Display.printf("inv: %s", M5Cardputer.Display.getInvert() ? "ON" : "OFF");
 }
@@ -1378,7 +1364,7 @@ static void drawSleepCountdownOnly(const int seconds_left) {
 static void drawLightSleepPrompt(const int seconds_left) {
     beginAppScreen("Sleep");
 
-    int y = APP_CONTENT_Y + 8;
+    int y = APP_CONTENT_Y;
     drawInfoLineAt(APP_CONTENT_X, y, "LIGHT", "SLEEP", 2);
     y += INFO_LINE_H_2X + 4;
 
@@ -1403,7 +1389,7 @@ static void drawLightSleepPrompt(const int seconds_left) {
 static void drawDeepSleepPrompt(const int seconds_left) {
     beginAppScreen("Sleep");
 
-    int y = APP_CONTENT_Y + 8;
+    int y = APP_CONTENT_Y;
     drawInfoLineAt(APP_CONTENT_X, y, "DEEP", "SLEEP", 2);
     y += INFO_LINE_H_2X + 4;
 

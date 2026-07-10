@@ -39,6 +39,22 @@ static int getHeaderStatusWidth(const bool include_battery, const bool wifi, con
     return w;
 }
 
+// 计算状态图标区最左 x（与 drawHeaderStatusIcons 布局一致）
+static int headerStatusLeftX(const int status_right, const bool include_battery, const bool wifi,
+                             const bool ble, const bool charging) {
+    int x = status_right;
+    if (include_battery) {
+        x -= getIconBatteryDisplayWidth(charging);
+    }
+    if (wifi) {
+        x -= HEADER_STATUS_GAP + ICON_WIFI_W;
+    }
+    if (ble) {
+        x -= HEADER_STATUS_GAP + ICON_BLE_W;
+    }
+    return x;
+}
+
 // 从右向左绘制连接状态图标，在 header 内垂直居中
 static int drawHeaderStatusIcons(const int right_x, const bool include_battery) {
     const bool wifi = isWifiStaConnected();
@@ -127,40 +143,50 @@ void drawMenuScreenHeader(const char* app_name, const int page, const int page_c
 }
 
 void updateMenuHeaderStatus(const int page_count) {
-    static int prev_width = 0;
+    static int prev_clear_left = -1;
     const int screen_w = M5Cardputer.Display.width();
     const int status_right = getMenuStatusRightX(screen_w, page_count);
     const bool wifi = isWifiStaConnected();
     const bool ble = isBleStackReady();
     const bool charging = isBatteryCharging();
-    const int width = getHeaderStatusWidth(true, wifi, ble, charging);
-    const int clear_width = (width > prev_width) ? width : prev_width;
-    int left_x = status_right - clear_width - HEADER_STATUS_CLEAR_PAD;
-    if (left_x < 0) {
-        left_x = 0;
+    const int left_x = headerStatusLeftX(status_right, true, wifi, ble, charging);
+    int clear_left = left_x - HEADER_STATUS_CLEAR_PAD;
+    if (clear_left < 0) {
+        clear_left = 0;
     }
-    clearHeaderStatusArea(left_x, status_right);
+    if (prev_clear_left >= 0 && prev_clear_left < clear_left) {
+        clear_left = prev_clear_left;
+    }
+    clearHeaderStatusArea(clear_left, status_right);
     drawHeaderStatusIcons(status_right, true);
     drawHeaderDivider(screen_w);
-    prev_width = width;
+    prev_clear_left = left_x - HEADER_STATUS_CLEAR_PAD;
+    if (prev_clear_left < 0) {
+        prev_clear_left = 0;
+    }
 }
 
 void updateAppHeaderStatus() {
-    static int prev_width = 0;
+    static int prev_clear_left = -1;
     const int screen_w = M5Cardputer.Display.width();
     const int status_right = screen_w - 2 - APP_BACK_BTN_W - 4;
     const bool wifi = isWifiStaConnected();
     const bool ble = isBleStackReady();
-    const int width = getHeaderStatusWidth(false, wifi, ble, false);
-    const int clear_width = (width > prev_width) ? width : prev_width;
-    int left_x = status_right - clear_width - HEADER_STATUS_CLEAR_PAD;
-    if (left_x < 0) {
-        left_x = 0;
+    const int left_x = headerStatusLeftX(status_right, false, wifi, ble, false);
+    int clear_left = left_x - HEADER_STATUS_CLEAR_PAD;
+    if (clear_left < 0) {
+        clear_left = 0;
     }
-    clearHeaderStatusArea(left_x, status_right);
+    if (prev_clear_left >= 0 && prev_clear_left < clear_left) {
+        clear_left = prev_clear_left;
+    }
+    clearHeaderStatusArea(clear_left, status_right);
     drawHeaderStatusIcons(status_right, false);
     drawHeaderDivider(screen_w);
-    prev_width = width;
+    prev_clear_left = left_x - HEADER_STATUS_CLEAR_PAD;
+    if (prev_clear_left < 0) {
+        prev_clear_left = 0;
+    }
 }
 
 void updateMenuScreenBattery(const int page_count) {

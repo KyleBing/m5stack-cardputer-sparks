@@ -1,5 +1,6 @@
 #include "app_common.h"
 #include "app_config.h"
+#include "app_header.h"
 #include "app_icons.h"
 #include <WiFi.h>
 #include <cctype>
@@ -137,6 +138,8 @@ bool ensureConfigWifi(const uint32_t timeout_ms) {
 void releaseConfigWifi() {
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
+    // 立即刷新 header，避免 WiFi 图标残影
+    updateAppHeaderStatus();
 }
 
 String getPressedKey() {
@@ -183,10 +186,10 @@ int getMenuNavDelta(const Keyboard_Class::KeysState& status) {
         }
     }
     for (const char c : status.word) {
-        if (c == ';' || c == ',' || c == '[') {
+        if (c == ';' || c == ',') {
             return -1;
         }
-        if (c == '.' || c == '/' || c == ']') {
+        if (c == '.' || c == '/') {
             return 1;
         }
     }

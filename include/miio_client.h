@@ -16,12 +16,15 @@ MiioResult miioGetPower(const char* ip, const char* token_hex, bool& on);
 // 设置 power（set_power on/off，yeelink 等设备必须用此接口）
 MiioResult miioSetPower(const char* ip, const char* token_hex, bool on);
 
-// 灯：查询 power + bright（1-100）
+// 灯：查询 power + bright（1-100）+ ct（色温 K，可选）
 MiioResult miioGetLightStatus(const char* ip, const char* token_hex, bool& on, int& bright,
-                              bool& bright_known);
+                              bool& bright_known, int& color_temp, bool& ct_known);
 
 // 灯：设置亮度 1-100
 MiioResult miioSetBright(const char* ip, const char* token_hex, int bright);
+
+// 灯：设置色温（Kelvin，set_ct_abx）
+MiioResult miioSetColorTemp(const char* ip, const char* token_hex, int kelvin);
 
 // dmaker.fan.p5：查询 power/speed/roll/mode(0=normal 1=nature)
 MiioResult miioFanP5GetStatus(const char* ip, const char* token_hex, bool& on, int& speed,

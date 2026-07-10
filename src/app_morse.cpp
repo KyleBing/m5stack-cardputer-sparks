@@ -144,8 +144,8 @@ static void drawMorseApp(const bool full_init) {
 
     const int hint_y = M5Cardputer.Display.height() - 12;
     const KeyHintItem items[] = {
-        {'[', "freq-"},
-        {']', "freq+"},
+        {'-', "freq-"},
+        {'=', "freq+"},
     };
     drawKeyHintsRow(APP_CONTENT_X, hint_y, items, 2, 1, APP_COLOR_HINT);
 }
@@ -198,12 +198,12 @@ void updateMorseApp() {
 
 void handleMorseApp(const Keyboard_Class::KeysState& status) {
     for (const char c : status.word) {
-        if (c == ']') {
+        if (c == '=' || c == '+') {
             g_tone_hz = constrain(g_tone_hz + 50, 300, 2000);
             drawMorseApp(false);
             return;
         }
-        if (c == '[') {
+        if (c == '-') {
             g_tone_hz = constrain(g_tone_hz - 50, 300, 2000);
             drawMorseApp(false);
             return;

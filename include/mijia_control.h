@@ -21,6 +21,10 @@ struct MijiaUiState {
     bool power_on;
     bool extra_known;
     int bright;      // 灯 1-100
+    int color_temp;  // 灯色温 K
+    bool ct_known;
+    int ct_min;
+    int ct_max;
     int speed;       // 风扇 0-100 或 1-4
     bool roll;       // 风扇摇头
     int mode;        // 净化器 0-5
@@ -42,6 +46,15 @@ void mijiaAdjustBright(const MijiaDevice* dev, MijiaUiState& state, int delta);
 
 // 灯：直接设亮度百分比 1-100
 void mijiaSetBrightPercent(const MijiaDevice* dev, MijiaUiState& state, int percent);
+
+// 灯：是否支持色温调节
+bool mijiaLightSupportsCt(const char* model);
+
+// 灯：调节色温（delta_k 可正可负，单位 K）
+void mijiaAdjustColorTemp(const MijiaDevice* dev, MijiaUiState& state, int delta_k);
+
+// 灯：直接设色温 K
+void mijiaSetColorTemp(const MijiaDevice* dev, MijiaUiState& state, int kelvin);
 
 // 风扇 P5：调节风速
 void mijiaAdjustFanP5Speed(const MijiaDevice* dev, MijiaUiState& state, int delta);

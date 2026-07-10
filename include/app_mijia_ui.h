@@ -13,7 +13,9 @@ static constexpr int MIJIA_TAG_H = 12;
 static constexpr int MIJIA_TAG_H_2X = 20;              // 2x 字号 tag 高度
 static constexpr int MIJIA_PANEL_TEXT_SIZE = 1;        // 控制页右栏控制项字号
 static constexpr int MIJIA_PANEL_NAME_TEXT_SIZE = 2;   // 控制页设备名字号
-static constexpr int MIJIA_DEVICE_NAME_TOP_MARGIN = 10; // 设备名距内容区顶部
+static constexpr int MIJIA_DEVICE_NAME_TOP_MARGIN = 0; // 设备名距内容区顶部
+static constexpr int MIJIA_PANEL_RIGHT_PAD = 10;        // 控制页右栏右边距
+static constexpr int MIJIA_PANEL_ICON_UP_OFFSET = 5;    // 左栏图标上移
 static constexpr int MIJIA_PANEL_BAR_TEXT_SIZE = 2;    // 进度条说明与数值字号
 // 列表项高度：缩放图标 + 三行文字
 static constexpr int MIJIA_LIST_ITEM_H = 42;
@@ -41,6 +43,10 @@ void drawMijiaPercentBar(int x, int y, int w, int h, int percent, uint16_t fill_
 // 带刻度线的百分比进度条（tick_count 为刻度数量，含首尾）
 void drawMijiaScaledPercentBar(int x, int y, int w, int h, int percent, uint16_t fill_color,
                                int tick_count = 11);
+
+// 说明在左、数值右对齐（上行）；下行进度条（percent 0-100）
+int drawMijiaBarRow(int x, int y, const char* label, const char* value, int percent, int total_w,
+                    uint16_t fill_color);
 
 // 分段档位条（level 1..max_level，0 表示全灭）
 void drawMijiaLevelSegments(int x, int y, int w, int h, int level, int max_level,

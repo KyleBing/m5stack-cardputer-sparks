@@ -4,6 +4,7 @@
 #include "app_common.h"
 #include "app_colors.h"
 #include <BLEDevice.h>
+#include <M5GFX.h>
 #include <cstring>
 
 static constexpr const char* BLE_DEVICE_NAME = "Cardputer";
@@ -11,8 +12,55 @@ static constexpr int BLE_SCAN_SECONDS = 4;
 static constexpr int BLE_SCAN_MAX_ITEMS = 24;
 static constexpr int BLE_SCAN_PAGE_SIZE = 4;
 static constexpr int BLE_TAG_H = 18;
+static constexpr int BLE_LINE_H = 14;
 static constexpr int BLE_LIST_LINE_START_X = APP_CONTENT_X + 36;
 static constexpr int BLE_LIST_LINE_END_X = APP_CONTENT_X + 236;
+
+// 蓝牙界面默认 Font0；设备列表名称用 efontCN14 以显示中文
+static void setBleFont0() {
+    M5Cardputer.Display.setFont(&fonts::Font0);
+    M5Cardputer.Display.setTextSize(1);
+}
+
+static void setBleCnFont() {
+    M5Cardputer.Display.setFont(&fonts::efontCN_14);
+}
+
+static void resetBleFont() {
+    M5Cardputer.Display.setFont(nullptr);
+}
+
+// Font0 行绘制
+static void drawBleLineAt(const int x, const int y, const char* label, const char* value) {
+    setBleFont0();
+    M5Cardputer.Display.setTextColor(INFO_LABEL_COLOR, BLACK);
+    M5Cardputer.Display.setCursor(x, y);
+    M5Cardputer.Display.print(label);
+    M5Cardputer.Display.print(": ");
+    M5Cardputer.Display.setTextColor(INFO_VALUE_COLOR, BLACK);
+    M5Cardputer.Display.println(value);
+    resetBleFont();
+}
+
+// 设备列表行：序号 Font0，设备名 efontCN14
+static void drawBleDeviceListRow(const int x, const int y, const int index, const char* name) {
+    char num[8];
+    snprintf(num, sizeof(num), "%02d ", index);
+
+    setBleFont0();
+    M5Cardputer.Display.setTextColor(INFO_LABEL_COLOR, BLACK);
+    M5Cardputer.Display.setCursor(x, y);
+    M5Cardputer.Display.print("dev: ");
+    M5Cardputer.Display.setTextColor(INFO_VALUE_COLOR, BLACK);
+    M5Cardputer.Display.print(num);
+    const int name_x = x + M5Cardputer.Display.textWidth("dev: ") + M5Cardputer.Display.textWidth(num);
+
+    setBleCnFont();
+    M5Cardputer.Display.setTextColor(INFO_VALUE_COLOR, BLACK);
+    M5Cardputer.Display.setCursor(name_x, y);
+    M5Cardputer.Display.println(name);
+    resetBleFont();
+}
 
 static bool bleScreenReady = false;
 static bool bleScanning = false;
@@ -46,8 +94,8 @@ static void updateBleLine(const int y, const char* label, const char* value, cha
         return;
     }
 
-    M5Cardputer.Display.fillRect(APP_CONTENT_X, y, 220, INFO_LINE_H, BLACK);
-    drawInfoLineAt(APP_CONTENT_X, y, label, value);
+    M5Cardputer.Display.fillRect(APP_CONTENT_X, y, 220, BLE_LINE_H, BLACK);
+    drawBleLineAt(APP_CONTENT_X, y, label, value);
     strncpy(cache, value, cache_size - 1);
     cache[cache_size - 1] = '\0';
 }
@@ -121,6 +169,7 @@ static void drawBleActionHints(const int x, const int y, const bool info_mode) {
 static void drawBleStateTag(const int x, const int y, const bool on) {
     const uint16_t bg = on ? BLUE : YELLOW;
     const char* text = on ? "ON" : "OFF";
+    setBleFont0();
     M5Cardputer.Display.setTextSize(2);
     const int tw = M5Cardputer.Display.textWidth(text);
     const int w = tw + 18;
@@ -129,6 +178,7 @@ static void drawBleStateTag(const int x, const int y, const bool on) {
     M5Cardputer.Display.setTextColor(on ? WHITE : BLACK, bg);
     M5Cardputer.Display.setCursor(x + (w - tw) / 2, y + 2);
     M5Cardputer.Display.print(text);
+    resetBleFont();
 }
 
 static int getBlePageCount() {
@@ -203,7 +253,7 @@ static void drawBleScanListFull() {
     int y = y_start;
 
     if (bleScanning) {
-        drawInfoLineAt(APP_CONTENT_X, y, "scan", "scanning...", 2);
+        drawBleLineAt(APP_CONTENT_X, y, "scan", "scanning...");
         return;
     }
 
@@ -216,33 +266,32 @@ static void drawBleScanListFull() {
         bleScanPage = 0;
     }
     if (bleScanCount == 0) {
-        // 未扫描前使用 2 倍提示，不展示分页信息
-        drawInfoLineAt(APP_CONTENT_X, y, "scan", "press s", 2);
-        y += INFO_LINE_H_2X;
-        drawInfoLineAt(APP_CONTENT_X, y, "list", "empty", 2);
+        drawBleLineAt(APP_CONTENT_X, y, "scan", "press s");
+        y += BLE_LINE_H;
+        drawBleLineAt(APP_CONTENT_X, y, "list", "empty");
         return;
     }
 
-    // 仅在有列表内容时展示 1 倍提示和分页信息
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    // 仅在有列表内容时展示提示和分页信息
     drawBleActionHints(APP_CONTENT_X, y, false);
+    setBleFont0();
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     snprintf(buf, sizeof(buf), "%d/%d", bleScanPage + 1, page_count);
     M5Cardputer.Display.setCursor(APP_CONTENT_X + 160, y);
     M5Cardputer.Display.print("page:");
     M5Cardputer.Display.print(buf);
-    y += INFO_LINE_H;
+    resetBleFont();
+    y += BLE_LINE_H;
 
     const int start = bleScanPage * BLE_SCAN_PAGE_SIZE;
     const int end = (start + BLE_SCAN_PAGE_SIZE < bleScanCount) ? start + BLE_SCAN_PAGE_SIZE : bleScanCount;
     for (int i = start; i < end; i++) {
         const BleScanItem& item = bleScanItems[i];
-        snprintf(buf, sizeof(buf), "%02d %s", i + 1, item.name);
-        drawInfoLineAt(APP_CONTENT_X, y, "dev", buf);
-        y += INFO_LINE_H;
+        drawBleDeviceListRow(APP_CONTENT_X, y, i + 1, item.name);
+        y += BLE_LINE_H;
         snprintf(buf, sizeof(buf), "%s %ddBm %s", item.addr, item.rssi, item.category);
-        drawInfoLineAt(APP_CONTENT_X, y, "sig", buf);
-        y += INFO_LINE_H;
+        drawBleLineAt(APP_CONTENT_X, y, "sig", buf);
+        y += BLE_LINE_H;
         // 分隔线从 label 区域右侧一直画到最右边
         M5Cardputer.Display.drawFastHLine(BLE_LIST_LINE_START_X, y,
                                           BLE_LIST_LINE_END_X - BLE_LIST_LINE_START_X,
@@ -260,14 +309,14 @@ static void drawBleInfoPanel(const char* name, const char* addr, const char* adv
     int y = APP_CONTENT_Y;
     drawBleStateTag(APP_CONTENT_X, y, on);
     y += BLE_TAG_H + 6;
-    drawInfoLineAt(APP_CONTENT_X, y, "name", name);
-    y += INFO_LINE_H;
-    drawInfoLineAt(APP_CONTENT_X, y, "addr", addr);
-    y += INFO_LINE_H;
-    drawInfoLineAt(APP_CONTENT_X, y, "adv", adv);
-    y += INFO_LINE_H;
-    drawInfoLineAt(APP_CONTENT_X, y, "client", client);
-    y += INFO_LINE_H + 4;
+    drawBleLineAt(APP_CONTENT_X, y, "name", name);
+    y += BLE_LINE_H;
+    drawBleLineAt(APP_CONTENT_X, y, "addr", addr);
+    y += BLE_LINE_H;
+    drawBleLineAt(APP_CONTENT_X, y, "adv", adv);
+    y += BLE_LINE_H;
+    drawBleLineAt(APP_CONTENT_X, y, "client", client);
+    y += BLE_LINE_H + 4;
     drawBleActionHints(APP_CONTENT_X, y, true);
 }
 

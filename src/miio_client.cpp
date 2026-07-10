@@ -423,17 +423,18 @@ static bool parseIntAt(const char* json, const int index, int& value) {
 }
 
 MiioResult miioGetLightStatus(const char* ip, const char* token_hex, bool& on, int& bright,
-                              bool& bright_known) {
+                              bool& bright_known, int& color_temp, bool& ct_known) {
     const MiioQueryScope query_scope(MIIO_QUERY_TIMEOUT_MS);
     MiioResult result{};
     bright_known = false;
+    ct_known = false;
 
     char resp[320];
     if (!miioParseTokenHex(token_hex, g_token)) {
         setResult(result, false, "bad token");
         return result;
     }
-    if (!miioCommand(ip, "get_prop", "[\"power\",\"bright\"]", resp, sizeof(resp))) {
+    if (!miioCommand(ip, "get_prop", "[\"power\",\"bright\",\"ct\"]", resp, sizeof(resp))) {
         setResult(result, false, g_last_error);
         return result;
     }
@@ -460,8 +461,16 @@ MiioResult miioGetLightStatus(const char* ip, const char* token_hex, bool& on, i
         bright_known = true;
     }
 
-    char msg[24];
-    if (bright_known) {
+    int ct = 0;
+    if (parseIntAt(resp, 2, ct) && ct > 0) {
+        color_temp = ct;
+        ct_known = true;
+    }
+
+    char msg[32];
+    if (bright_known && ct_known) {
+        snprintf(msg, sizeof(msg), on ? "ON %d%% %dK" : "OFF", bright, color_temp);
+    } else if (bright_known) {
         snprintf(msg, sizeof(msg), on ? "ON %d%%" : "OFF", bright);
     } else {
         snprintf(msg, sizeof(msg), on ? "ON" : "OFF");
@@ -478,6 +487,19 @@ MiioResult miioSetBright(const char* ip, const char* token_hex, const int bright
     if (result.ok) {
         char msg[16];
         snprintf(msg, sizeof(msg), "B=%d", clampInt(bright, 1, 100));
+        setResult(result, true, msg);
+    }
+    return result;
+}
+
+MiioResult miioSetColorTemp(const char* ip, const char* token_hex, const int kelvin) {
+    char params[32];
+    snprintf(params, sizeof(params), "[%d,\"smooth\",300]", kelvin);
+    char resp[256];
+    MiioResult result = miioRun(ip, token_hex, "set_ct_abx", params, resp, sizeof(resp));
+    if (result.ok) {
+        char msg[16];
+        snprintf(msg, sizeof(msg), "CT=%dK", kelvin);
         setResult(result, true, msg);
     }
     return result;
