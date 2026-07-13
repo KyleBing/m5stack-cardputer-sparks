@@ -8,6 +8,9 @@ static constexpr const char* CONFIG_PATH = "/config.json";
 
 static AppConfig g_config{};
 
+// 按设备 id 查找（供 loadAppConfig 解析编组）
+int mijiaFindDeviceIndexById(const char* id);
+
 // 安全拷贝字符串到定长缓冲区
 static void copyField(char* dest, const size_t dest_size, const char* src) {
     if (src == nullptr || dest_size == 0) {
@@ -48,8 +51,9 @@ bool initAppConfigFs() {
 bool loadAppConfig() {
     g_config = {};
     g_config.loaded = false;
-    g_config.brightness = 30;
+    g_config.brightness = 30; // 默认 30%
     g_config.time_key_sound = true; // 默认开
+    g_config.mijia_on_off_sound = true;
     copyField(g_config.timezone, sizeof(g_config.timezone), APP_TIMEZONE_DEFAULT);
 
     if (!LittleFS.exists(CONFIG_PATH)) {
@@ -83,12 +87,24 @@ bool loadAppConfig() {
         copyField(g_config.cursor_token, sizeof(g_config.cursor_token), token);
     }
 
-    g_config.brightness = static_cast<uint8_t>(doc["brightness"] | 30);
+    // 亮度：配置为 0~100；>100 视为旧版 0~255 并换算
+    {
+        int raw = doc["brightness"] | 30;
+        if (raw < 0) {
+            raw = 0;
+        }
+        if (raw > 100) {
+            raw = raw * 100 / 255;
+        }
+        g_config.brightness = static_cast<uint8_t>(raw);
+    }
     // 默认开；缺字段时保持开启
     g_config.time_key_sound = true;
+    g_config.mijia_on_off_sound = true;
     JsonObject sound = doc["sound"];
     if (!sound.isNull()) {
         g_config.time_key_sound = sound["time_key"] | true;
+        g_config.mijia_on_off_sound = sound["mijia_on_off"] | true;
     }
 
     // 时区：缺字段时保持默认 CST-8
@@ -130,6 +146,67 @@ bool loadAppConfig() {
         }
     }
 
+    // 编组：members 以设备 id 引用，加载时解析成下标
+    JsonArray groups = doc["device_groups"].as<JsonArray>();
+    if (!groups.isNull()) {
+        for (JsonVariant group_var : groups) {
+            if (g_config.device_group_count >= MIJIA_GROUP_MAX) {
+                break;
+            }
+            JsonObject group = group_var.as<JsonObject>();
+            if (group.isNull()) {
+                continue;
+            }
+            MijiaDeviceGroup& entry = g_config.device_groups[g_config.device_group_count];
+            copyField(entry.name, sizeof(entry.name), group["name"]);
+            const char* name_zh = group["name_zh"];
+            if (name_zh == nullptr || name_zh[0] == '\0') {
+                name_zh = group["name_cn"];
+            }
+            copyField(entry.name_zh, sizeof(entry.name_zh), name_zh);
+            entry.member_count = 0;
+
+            JsonArray members = group["members"].as<JsonArray>();
+            if (!members.isNull()) {
+                for (JsonVariant member_var : members) {
+                    if (entry.member_count >= MIJIA_GROUP_MEMBER_MAX) {
+                        break;
+                    }
+                    const char* member_id = nullptr;
+                    if (member_var.is<const char*>()) {
+                        // 兼容纯 id 字符串
+                        member_id = member_var.as<const char*>();
+                    } else {
+                        JsonObject member = member_var.as<JsonObject>();
+                        if (!member.isNull()) {
+                            member_id = member["id"];
+                        }
+                    }
+                    if (member_id == nullptr || member_id[0] == '\0') {
+                        continue;
+                    }
+                    const int idx = mijiaFindDeviceIndexById(member_id);
+                    if (idx < 0) {
+                        continue;
+                    }
+                    // 去重
+                    bool dup = false;
+                    for (int i = 0; i < entry.member_count; i++) {
+                        if (entry.member_indices[i] == idx) {
+                            dup = true;
+                            break;
+                        }
+                    }
+                    if (dup) {
+                        continue;
+                    }
+                    entry.member_indices[entry.member_count++] = idx;
+                }
+            }
+            g_config.device_group_count++;
+        }
+    }
+
     g_config.loaded = true;
     return true;
 }
@@ -162,6 +239,18 @@ bool mijiaDeviceUsesBle(const MijiaDevice& dev) {
         return false;
     }
     return true;
+}
+
+int mijiaFindDeviceIndexById(const char* id) {
+    if (id == nullptr || id[0] == '\0') {
+        return -1;
+    }
+    for (int i = 0; i < g_config.device_count; i++) {
+        if (g_config.devices[i].id[0] != '\0' && strcmp(g_config.devices[i].id, id) == 0) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 bool saveAppConfigJson(const char* json) {
@@ -218,7 +307,7 @@ bool saveAppConfigWifi(const char* ssid, const char* password) {
     return loadAppConfig();
 }
 
-bool saveAppConfigBrightness(const uint8_t brightness) {
+bool saveAppConfigBrightness(const uint8_t brightness_percent) {
     JsonDocument doc;
     if (LittleFS.exists(CONFIG_PATH)) {
         File in = LittleFS.open(CONFIG_PATH, "r");
@@ -231,7 +320,8 @@ bool saveAppConfigBrightness(const uint8_t brightness) {
         }
     }
 
-    doc["brightness"] = brightness;
+    const uint8_t pct = brightness_percent > 100 ? 100 : brightness_percent;
+    doc["brightness"] = pct;
 
     if (doc["devices"].isNull()) {
         doc["devices"].to<JsonArray>();
@@ -244,6 +334,14 @@ bool saveAppConfigBrightness(const uint8_t brightness) {
     serializeJsonPretty(doc, out);
     out.close();
     return loadAppConfig();
+}
+
+// 取得/创建 sound 对象，保留已有字段
+static JsonObject ensureSoundObject(JsonDocument& doc) {
+    if (!doc["sound"].is<JsonObject>()) {
+        doc["sound"].to<JsonObject>();
+    }
+    return doc["sound"].as<JsonObject>();
 }
 
 bool saveAppConfigTimeKeySound(const bool enabled) {
@@ -259,8 +357,37 @@ bool saveAppConfigTimeKeySound(const bool enabled) {
         }
     }
 
-    JsonObject sound = doc["sound"].to<JsonObject>();
+    JsonObject sound = ensureSoundObject(doc);
     sound["time_key"] = enabled;
+
+    if (doc["devices"].isNull()) {
+        doc["devices"].to<JsonArray>();
+    }
+
+    File out = LittleFS.open(CONFIG_PATH, "w");
+    if (!out) {
+        return false;
+    }
+    serializeJsonPretty(doc, out);
+    out.close();
+    return loadAppConfig();
+}
+
+bool saveAppConfigMijiaOnOffSound(const bool enabled) {
+    JsonDocument doc;
+    if (LittleFS.exists(CONFIG_PATH)) {
+        File in = LittleFS.open(CONFIG_PATH, "r");
+        if (in) {
+            const DeserializationError err = deserializeJson(doc, in);
+            in.close();
+            if (err) {
+                doc.clear();
+            }
+        }
+    }
+
+    JsonObject sound = ensureSoundObject(doc);
+    sound["mijia_on_off"] = enabled;
 
     if (doc["devices"].isNull()) {
         doc["devices"].to<JsonArray>();
@@ -305,6 +432,15 @@ bool saveAppConfigTimezone(const char* timezone) {
     serializeJsonPretty(doc, out);
     out.close();
     return loadAppConfig();
+}
+
+uint8_t brightnessPercentToHw(const uint8_t percent) {
+    const uint8_t pct = percent > 100 ? 100 : percent;
+    return static_cast<uint8_t>((static_cast<uint16_t>(pct) * 255 + 50) / 100);
+}
+
+uint8_t brightnessHwToPercent(const uint8_t hw) {
+    return static_cast<uint8_t>((static_cast<uint16_t>(hw) * 100 + 127) / 255);
 }
 
 bool readAppConfigRaw(String& out) {

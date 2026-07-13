@@ -1343,11 +1343,13 @@ static const char* settingsModuleName(const SettingsModule mod) {
     }
 }
 
-// 亮度加减并限制在 0-255，同时写入 config.json
+// 亮度加减并限制在 0-100（显示用），实际 setBrightness 转 0-255，同时写入 config.json
 void adjustBrightness(const int delta) {
-    const int next = constrain(static_cast<int>(M5Cardputer.Display.getBrightness()) + delta, 0, 255);
-    const uint8_t value = static_cast<uint8_t>(next);
-    M5Cardputer.Display.setBrightness(value);
+    const int pct =
+        constrain(static_cast<int>(brightnessHwToPercent(M5Cardputer.Display.getBrightness())) + delta,
+                  0, 100);
+    const uint8_t value = static_cast<uint8_t>(pct);
+    M5Cardputer.Display.setBrightness(brightnessPercentToHw(value));
     saveAppConfigBrightness(value);
 }
 
@@ -1416,10 +1418,10 @@ static void drawSettingsBrightBar(const int x, const int y, const int w, const i
 }
 
 static void drawSettingsScreenPanel(const int x, const int y, const int w) {
-    const uint8_t brightness = M5Cardputer.Display.getBrightness();
-    const int pct = brightness * 100 / 255;
+    // 界面显示 0~100；硬件仍为 0~255
+    const int pct = brightnessHwToPercent(M5Cardputer.Display.getBrightness());
     char buf[16];
-    snprintf(buf, sizeof(buf), "%d", brightness);
+    snprintf(buf, sizeof(buf), "%d", pct);
 
     // 右侧设置内容用 1x，保留面板 10px padding
     M5Cardputer.Display.setTextSize(1);
@@ -1446,20 +1448,28 @@ static void drawSettingsScreenPanel(const int x, const int y, const int w) {
 }
 
 static void drawSettingsSoundPanel(const int x, const int y, const int w) {
-    const bool on = isTimeKeySoundEnabled();
+    const bool time_on = isTimeKeySoundEnabled();
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
     M5Cardputer.Display.setCursor(x, y);
     M5Cardputer.Display.print("time key");
-    M5Cardputer.Display.setTextColor(on ? APP_COLOR_OK : APP_COLOR_HINT, BLACK);
-    const char* val = on ? "ON" : "OFF";
-    M5Cardputer.Display.setCursor(x + w - M5Cardputer.Display.textWidth(val), y);
-    M5Cardputer.Display.print(val);
+    M5Cardputer.Display.setTextColor(time_on ? APP_COLOR_OK : APP_COLOR_HINT, BLACK);
+    const char* time_val = time_on ? "ON" : "OFF";
+    M5Cardputer.Display.setCursor(x + w - M5Cardputer.Display.textWidth(time_val), y);
+    M5Cardputer.Display.print(time_val);
+
+    const bool mijia_on = isMijiaOnOffSoundEnabled();
+    const int mijia_y = y + INFO_LINE_H;
+    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
+    M5Cardputer.Display.setCursor(x, mijia_y);
+    M5Cardputer.Display.print("mijia pwr");
+    M5Cardputer.Display.setTextColor(mijia_on ? APP_COLOR_OK : APP_COLOR_HINT, BLACK);
+    const char* mijia_val = mijia_on ? "ON" : "OFF";
+    M5Cardputer.Display.setCursor(x + w - M5Cardputer.Display.textWidth(mijia_val), mijia_y);
+    M5Cardputer.Display.print(mijia_val);
 
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(x, y + 14);
-    M5Cardputer.Display.print("SW/CD keys");
-    M5Cardputer.Display.setCursor(x, y + 24);
+    M5Cardputer.Display.setCursor(x, mijia_y + INFO_LINE_H + 2);
     M5Cardputer.Display.print("CD alarm always");
 }
 
@@ -1493,6 +1503,17 @@ static void drawSettingsHints() {
         M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
         M5Cardputer.Display.setCursor(cx, hint_y);
         M5Cardputer.Display.print("inv");
+    }
+
+    if (g_settings_module == SettingsModule::Sound) {
+        cx += M5Cardputer.Display.textWidth("val");
+        M5Cardputer.Display.print(" ");
+        cx += M5Cardputer.Display.textWidth(" ");
+        cx += drawKeyBadge(cx, hint_y, 'm', 1);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(cx, hint_y);
+        M5Cardputer.Display.print("mijia");
     }
 }
 
@@ -1546,7 +1567,7 @@ void handleSettingsApp(const Keyboard_Class::KeysState& status) {
     const int val_delta = getSettingsValueDelta(status);
     if (val_delta != 0) {
         if (g_settings_module == SettingsModule::Screen) {
-            adjustBrightness(val_delta * 16);
+            adjustBrightness(val_delta * 5); // 0~100 步进 5
             drawSettingsApp();
             return;
         }
@@ -1565,14 +1586,21 @@ void handleSettingsApp(const Keyboard_Class::KeysState& status) {
     if (g_settings_module == SettingsModule::Screen) {
         if (key.length() == 1 && key[0] >= '0' && key[0] <= '9') {
             const int level = key[0] - '0';
-            const uint8_t value = static_cast<uint8_t>(level * 255 / 9);
-            M5Cardputer.Display.setBrightness(value);
-            saveAppConfigBrightness(value);
+            const uint8_t pct = static_cast<uint8_t>(level * 100 / 9);
+            M5Cardputer.Display.setBrightness(brightnessPercentToHw(pct));
+            saveAppConfigBrightness(pct);
             drawSettingsApp();
             return;
         }
         if (key == "r") {
             M5Cardputer.Display.invertDisplay(!M5Cardputer.Display.getInvert());
+            drawSettingsApp();
+        }
+    }
+
+    if (g_settings_module == SettingsModule::Sound) {
+        if (key == "m") {
+            saveAppConfigMijiaOnOffSound(!isMijiaOnOffSoundEnabled());
             drawSettingsApp();
         }
     }
@@ -2392,7 +2420,7 @@ void setup() {
     if (getAppConfig().loaded) {
         brightness = getAppConfig().brightness;
     }
-    M5Cardputer.Display.setBrightness(brightness);
+    M5Cardputer.Display.setBrightness(brightnessPercentToHw(brightness));
     flushCardputerInput();
     showMenu();
 }

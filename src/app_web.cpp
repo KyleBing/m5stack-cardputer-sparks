@@ -56,6 +56,15 @@ static const char* DEFAULT_CONFIG = R"({
       "model": "yeelink.light.lamp2"
     },
     {
+      "name": "bedroom-light",
+      "name_zh": "卧室灯",
+      "id": "987654321",
+      "mac": "AA:BB:CC:DD:EE:01",
+      "ip": "192.168.1.51",
+      "token": "0123456789abcdef0123456789abcdef",
+      "model": "yeelink.light.lamp2"
+    },
+    {
       "name": "Sensor_HT",
       "name_zh": "温湿度计",
       "id": "blt.3.example",
@@ -64,8 +73,24 @@ static const char* DEFAULT_CONFIG = R"({
       "ble": { "key": "0123456789abcdef0123456789abcdef" }
     }
   ],
+  "device_groups": [
+    {
+      "name": "AllLights",
+      "name_zh": "全部灯光",
+      "members": [
+        { "id": "123456789", "name": "living-room-light", "name_zh": "客厅灯" },
+        { "id": "987654321", "name": "bedroom-light", "name_zh": "卧室灯" }
+      ]
+    }
+  ],
   "cursor": {
     "token": "your-cursor-session-jwt"
+  },
+  "timezone": "CST-8",
+  "brightness": 30,
+  "sound": {
+    "time_key": true,
+    "mijia_on_off": true
   }
 })";
 
@@ -205,6 +230,33 @@ static void sendHtmlPage(const String& body) {
               ".token-paths li{margin:0 0 4px}"
               ".token-cmd{margin:0 0 12px;font-size:11px;line-height:1.4;white-space:pre-wrap;word-break:break-all}"
               ".token-formats{font-size:12px;color:var(--hint);margin:0 0 10px}"
+              ".group-card{border:1px solid var(--tab-bd);border-radius:6px;padding:10px 12px;"
+              "margin:0 0 12px;background:var(--td-bg)}"
+              ".group-card .group-head{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;"
+              "margin-bottom:8px}"
+              ".group-card .group-head label{margin:0;flex:1;min-width:140px}"
+              ".group-card .group-acts{display:flex;gap:4px;flex-wrap:wrap}"
+              ".group-members{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));"
+              "gap:6px;margin-top:6px}"
+              ".group-members label.member{display:flex;gap:8px;align-items:flex-start;margin:0;"
+              "padding:6px 8px;border:1px solid var(--tab-bd);border-radius:4px;font-size:12px;"
+              "color:var(--fg);cursor:pointer;box-sizing:border-box}"
+              ".group-members label.member.ble{opacity:.55}"
+              /* 覆盖全局 input{width:100%}，避免 checkbox 撑满把文字挤成竖排 */
+              ".group-members label.member input[type=checkbox]{width:auto;min-width:16px;"
+              "margin:2px 0 0;padding:0;flex:0 0 auto;accent-color:#1a73e8}"
+              ".group-members .member-meta{flex:1 1 auto;min-width:0;line-height:1.35;"
+              "overflow-wrap:anywhere}"
+              ".group-members .member-id{font-family:ui-monospace,monospace;font-size:11px;"
+              "color:var(--hint);word-break:break-all}"
+              ".sys-grid{max-width:480px}"
+              ".sys-grid .check-row{display:flex;align-items:center;gap:8px;margin:0 0 10px;"
+              "font-size:13px;color:var(--fg);cursor:pointer}"
+              ".sys-grid .check-row input{width:auto;margin:0;accent-color:#1a73e8}"
+              ".sys-grid .bright-row{display:flex;align-items:center;gap:10px}"
+              ".sys-grid .bright-row input[type=range]{flex:1;min-width:0;padding:0}"
+              ".sys-grid .bright-val{min-width:2.5em;font-variant-numeric:tabular-nums;"
+              "color:var(--fg)}"
               "</style></head><body>");
     html += body;
     html += F("</body></html>");
@@ -227,7 +279,9 @@ static void handleFormRoot() {
               "<div class='tabs'>"
               "<button type='button' class='tab active' data-tab='wifi'>WiFi</button>"
               "<button type='button' class='tab' data-tab='devices'>米家设备</button>"
+              "<button type='button' class='tab' data-tab='groups'>编组</button>"
               "<button type='button' class='tab' data-tab='cursor'>Cursor</button>"
+              "<button type='button' class='tab' data-tab='system'>系统设置</button>"
               "</div>"
               "<div id='panel-wifi' class='panel active'>"
               "<div class='wifi-grid'>"
@@ -254,6 +308,16 @@ static void handleFormRoot() {
               "</tr></thead>"
               "<tbody id='dev-tbody'></tbody>"
               "</table></div></div>"
+              "<div id='panel-groups' class='panel'>"
+              "<p class='hint'>用设备 <code>id</code> 编组；改名不影响成员。"
+              "成员里的 name / name_zh 仅方便阅读，保存时会从设备表同步。"
+              "BLE 只读设备可勾选但设备端开/关会跳过。</p>"
+              "<div class='toolbar'>"
+              "<button type='button' id='btn-add-group'>+ 添加编组</button>"
+              "<span class='count' id='group-count'></span>"
+              "</div>"
+              "<div id='group-list'></div>"
+              "</div>"
               "<div id='panel-cursor' class='panel'>"
               "<h2>Cursor Session Token</h2>"
               "<p class='hint'>用于 Cursor 应用拉取用量数据，写入 "
@@ -284,6 +348,25 @@ static void handleFormRoot() {
               "或仅粘贴 JWT。</p>"
               "<label>Session Token<textarea id='cursor-key' rows='4'></textarea></label>"
               "</div>"
+              "<div id='panel-system' class='panel'>"
+              "<h2>系统设置</h2>"
+              "<p class='hint'>时区、亮度与提示音。亮度配置为 0~100，"
+              "设备端会换算为背光 0~255。</p>"
+              "<div class='sys-grid'>"
+              "<label>时区（POSIX TZ）"
+              "<input id='sys-timezone' placeholder='CST-8' autocomplete='off'></label>"
+              "<label>亮度（0~100）"
+              "<div class='bright-row'>"
+              "<input id='sys-brightness' type='range' min='0' max='100' step='1'>"
+              "<span class='bright-val' id='sys-brightness-val'>30</span>"
+              "</div></label>"
+              "<label class='check-row'>"
+              "<input id='sys-sound-time-key' type='checkbox'>"
+              "<span>Time 按键声（stopwatch / countdown）</span></label>"
+              "<label class='check-row'>"
+              "<input id='sys-sound-mijia' type='checkbox'>"
+              "<span>米家开/关提示音</span></label>"
+              "</div></div>"
               "<div class='save-bar'>"
               "<button type='submit' class='primary' id='btn-save'>保存到设备</button>"
               "</div></form>"
@@ -292,6 +375,10 @@ static void handleFormRoot() {
     body += F("</script><script>");
     body += F("const DEV_MAX=");
     body += WEB_DEVICE_MAX;
+    body += F(";const GROUP_MAX=");
+    body += String(MIJIA_GROUP_MAX);
+    body += F(";const GROUP_MEMBER_MAX=");
+    body += String(MIJIA_GROUP_MEMBER_MAX);
     body += F(";");
     // 与固件 deviceIconBasenameForModel 同一套 basename 列表
     body += F("const ICON_NAMES=[");
@@ -302,7 +389,8 @@ static void handleFormRoot() {
     }
     body += F("];");
     body += F(
-        "let cfg={wifi:{ssid:'',password:''},devices:[],cursor:{token:''}};"
+        "let cfg={wifi:{ssid:'',password:''},devices:[],device_groups:[],cursor:{token:''},"
+        "timezone:'CST-8',brightness:30,sound:{time_key:true,mijia_on_off:true}};"
         "function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/\"/g,'&quot;')"
         ".replace(/</g,'&lt;');}"
         "function ta(f,v){return `<textarea data-f='${f}' rows='1'>${esc(v)}</textarea>`;}"
@@ -314,18 +402,52 @@ static void handleFormRoot() {
         "function modelCell(model){return `<div class='model-cell'>"
         "<img class='dev-icon' src='${iconUrl(model)}' alt='' title='${iconBase(model)}'>"
         "${ta('model',model)}</div>`;}"
-        "function collect(){cfg.wifi.ssid=document.getElementById('wifi-ssid').value;"
-        "cfg.wifi.password=document.getElementById('wifi-pass').value;cfg.devices=[];"
-        "if(!cfg.cursor)cfg.cursor={token:''};"
-        "cfg.cursor.token=document.getElementById('cursor-key').value;"
+        "function bleKeyOf(d){return (d.ble&&d.ble.key)||d.ble_key||'';}"
+        "function isBleDev(d){return !!bleKeyOf(d);}"
+        "function memberIdOf(m){return typeof m==='string'?m:(m&&m.id)||'';}"
+        // 从设备表同步成员 name/name_zh；剔除无效 id
+        "function syncGroupMembers(g){const byId={};"
+        "(cfg.devices||[]).forEach(d=>{if(d&&d.id)byId[d.id]=d;});"
+        "const seen=new Set();const out=[];"
+        "(g.members||[]).forEach(m=>{const id=memberIdOf(m);if(!id||seen.has(id))return;"
+        "const d=byId[id];if(!d)return;seen.add(id);"
+        "const row={id:id,name:d.name||''};"
+        "const zh=d.name_zh||d.name_cn||'';if(zh)row.name_zh=zh;"
+        "out.push(row);});"
+        "g.members=out.slice(0,GROUP_MEMBER_MAX);return g;}"
+        "function collectDevices(){cfg.devices=[];"
         "document.querySelectorAll('#dev-tbody tr').forEach(row=>{"
         "const d={};row.querySelectorAll('[data-f]').forEach(el=>{d[el.dataset.f]=el.value;});"
         "const bk=d.ble_key||'';delete d.ble_key;"
         "if(bk)d.ble={key:bk};else delete d.ble;"
         "if(!d.name_zh)delete d.name_zh;"
         "cfg.devices.push(d);});}"
-        "function bleKeyOf(d){return (d.ble&&d.ble.key)||d.ble_key||'';}"
-        "function render(){const tb=document.getElementById('dev-tbody');tb.innerHTML='';"
+        "function collectGroups(){cfg.device_groups=[];"
+        "document.querySelectorAll('#group-list .group-card').forEach(card=>{"
+        "const g={name:card.querySelector('[data-gf=name]').value||'',"
+        "name_zh:card.querySelector('[data-gf=name_zh]').value||'',members:[]};"
+        "card.querySelectorAll('.group-members input[type=checkbox]:checked').forEach(cb=>{"
+        "if(g.members.length>=GROUP_MEMBER_MAX)return;"
+        "const id=cb.value;if(!id)return;"
+        "const d=(cfg.devices||[]).find(x=>x&&x.id===id);"
+        "const row={id:id,name:(d&&d.name)||cb.dataset.name||''};"
+        "const zh=(d&&(d.name_zh||d.name_cn))||cb.dataset.namezh||'';"
+        "if(zh)row.name_zh=zh;g.members.push(row);});"
+        "if(!g.name_zh)delete g.name_zh;"
+        "cfg.device_groups.push(g);});}"
+        "function collect(){cfg.wifi.ssid=document.getElementById('wifi-ssid').value;"
+        "cfg.wifi.password=document.getElementById('wifi-pass').value;"
+        "if(!cfg.cursor)cfg.cursor={token:''};"
+        "cfg.cursor.token=document.getElementById('cursor-key').value;"
+        "cfg.timezone=document.getElementById('sys-timezone').value||'CST-8';"
+        "let b=+document.getElementById('sys-brightness').value;if(isNaN(b))b=30;"
+        "if(b<0)b=0;if(b>100)b=100;cfg.brightness=b;"
+        "if(!cfg.sound)cfg.sound={};"
+        "cfg.sound.time_key=document.getElementById('sys-sound-time-key').checked;"
+        "cfg.sound.mijia_on_off=document.getElementById('sys-sound-mijia').checked;"
+        "collectDevices();collectGroups();"
+        "(cfg.device_groups||[]).forEach(syncGroupMembers);}"
+        "function renderDevices(){const tb=document.getElementById('dev-tbody');tb.innerHTML='';"
         "cfg.devices.forEach((d,i)=>{const tr=document.createElement('tr');tr.dataset.i=i;"
         "tr.innerHTML=`<td class='col-idx'>${i+1}</td>"
         "<td class='col-name'>${ta('name',d.name)}</td>"
@@ -344,25 +466,74 @@ static void handleFormRoot() {
         "<td class='col-id'>${ta('id',d.id)}</td>"
         "<td class='col-mac'>${ta('mac',d.mac)}</td>`;tb.appendChild(tr);});"
         "document.getElementById('dev-count').textContent=`共 ${cfg.devices.length} / ${DEV_MAX} 台`;}"
+        "function renderGroups(){const list=document.getElementById('group-list');list.innerHTML='';"
+        "if(!cfg.device_groups)cfg.device_groups=[];"
+        "cfg.device_groups.forEach(syncGroupMembers);"
+        "cfg.device_groups.forEach((g,gi)=>{const selected=new Set((g.members||[]).map(memberIdOf));"
+        "const card=document.createElement('div');card.className='group-card';card.dataset.gi=gi;"
+        "let membersHtml='';"
+        "(cfg.devices||[]).forEach(d=>{if(!d||!d.id)return;"
+        "const zh=d.name_zh||d.name_cn||'';"
+        "const label=zh?`${esc(zh)} (${esc(d.name||'')})`:`${esc(d.name||'(unnamed)')}`;"
+        "const ble=isBleDev(d);"
+        "membersHtml+=`<label class='member${ble?' ble':''}'>"
+        "<input type='checkbox' value='${esc(d.id)}' data-name='${esc(d.name||'')}' "
+        "data-namezh='${esc(zh)}' ${selected.has(d.id)?'checked':''}>"
+        "<span class='member-meta'><span>${label}${ble?' · BLE':''}</span>"
+        "<div class='member-id'>id: ${esc(d.id)}</div></span></label>`;});"
+        "if(!membersHtml)membersHtml='<p class=\"hint\">请先在「米家设备」里填写设备 id</p>';"
+        "card.innerHTML=`<div class='group-head'>"
+        "<label>名称<input data-gf='name' value='${esc(g.name||'')}'></label>"
+        "<label>中文名<input data-gf='name_zh' value='${esc(g.name_zh||g.name_cn||'')}'></label>"
+        "<div class='group-acts'>"
+        "<button type='button' class='icon-btn' data-gact='up' title='上移'>↑</button>"
+        "<button type='button' class='icon-btn' data-gact='down' title='下移'>↓</button>"
+        "<button type='button' class='danger icon-btn' data-gact='del' title='删除'>删</button>"
+        "</div></div>"
+        "<div class='hint'>成员 ${selected.size} / ${GROUP_MEMBER_MAX}</div>"
+        "<div class='group-members'>${membersHtml}</div>`;"
+        "list.appendChild(card);});"
+        "document.getElementById('group-count').textContent="
+        "`共 ${cfg.device_groups.length} / ${GROUP_MAX} 组`;}"
+        "function render(){renderDevices();renderGroups();}"
         "function move(i,d){collect();const j=i+d;if(j<0||j>=cfg.devices.length)return;"
         "[cfg.devices[i],cfg.devices[j]]=[cfg.devices[j],cfg.devices[i]];render();}"
         "function moveTop(i){collect();if(i<=0)return;"
         "const item=cfg.devices.splice(i,1)[0];cfg.devices.unshift(item);render();}"
         "function moveBottom(i){collect();if(i>=cfg.devices.length-1)return;"
         "const item=cfg.devices.splice(i,1)[0];cfg.devices.push(item);render();}"
+        "function moveGroup(i,d){collect();const j=i+d;if(j<0||j>=cfg.device_groups.length)return;"
+        "[cfg.device_groups[i],cfg.device_groups[j]]=[cfg.device_groups[j],cfg.device_groups[i]];"
+        "renderGroups();}"
         "function switchTab(id){document.querySelectorAll('.tab').forEach(t=>{"
         "t.classList.toggle('active',t.dataset.tab===id);});"
         "document.querySelectorAll('.panel').forEach(p=>{"
         "p.classList.toggle('active',p.id==='panel-'+id);});}"
         "function init(){try{cfg=JSON.parse(document.getElementById('cfg-data').textContent);}"
-        "catch(e){cfg={wifi:{ssid:'',password:''},devices:[],cursor:{token:''}};}"
+        "catch(e){cfg={wifi:{ssid:'',password:''},devices:[],device_groups:[],cursor:{token:''},"
+        "timezone:'CST-8',brightness:30,sound:{time_key:true,mijia_on_off:true}};}"
         "if(!cfg.wifi)cfg.wifi={ssid:'',password:''};"
         "if(!cfg.devices)cfg.devices=[];"
+        "if(!cfg.device_groups)cfg.device_groups=[];"
         "if(!cfg.cursor)cfg.cursor={token:''};"
         "if(!cfg.cursor.token&&cfg.cursor.api_key)cfg.cursor.token=cfg.cursor.api_key;"
+        "if(!cfg.timezone)cfg.timezone='CST-8';"
+        "let bright=cfg.brightness;if(bright==null||isNaN(+bright))bright=30;"
+        "bright=+bright;if(bright>100)bright=Math.round(bright*100/255);"
+        "if(bright<0)bright=0;if(bright>100)bright=100;cfg.brightness=bright;"
+        "if(!cfg.sound)cfg.sound={};"
+        "if(cfg.sound.time_key==null)cfg.sound.time_key=true;"
+        "if(cfg.sound.mijia_on_off==null)cfg.sound.mijia_on_off=true;"
         "document.getElementById('wifi-ssid').value=cfg.wifi.ssid||'';"
         "document.getElementById('wifi-pass').value=cfg.wifi.password||'';"
         "document.getElementById('cursor-key').value=cfg.cursor.token||'';"
+        "document.getElementById('sys-timezone').value=cfg.timezone||'CST-8';"
+        "document.getElementById('sys-brightness').value=String(cfg.brightness);"
+        "document.getElementById('sys-brightness-val').textContent=String(cfg.brightness);"
+        "document.getElementById('sys-sound-time-key').checked=!!cfg.sound.time_key;"
+        "document.getElementById('sys-sound-mijia').checked=!!cfg.sound.mijia_on_off;"
+        "document.getElementById('sys-brightness').oninput=e=>{"
+        "document.getElementById('sys-brightness-val').textContent=e.target.value;};"
         "render();"
         "document.querySelectorAll('.tab').forEach(t=>{"
         "t.onclick=()=>switchTab(t.dataset.tab);});"
@@ -371,18 +542,30 @@ static void handleFormRoot() {
         "cfg.devices.push({name:'',name_zh:'',id:'',mac:'',ip:'',token:'',model:'',ble:{key:''}});"
         "render();"
         "switchTab('devices');};"
+        "document.getElementById('btn-add-group').onclick=()=>{collect();"
+        "if(cfg.device_groups.length>=GROUP_MAX){alert('最多 '+GROUP_MAX+' 组');return;}"
+        "cfg.device_groups.push({name:'',name_zh:'',members:[]});renderGroups();"
+        "switchTab('groups');};"
         "document.getElementById('dev-tbody').onclick=e=>{const b=e.target.closest('button');"
         "if(!b)return;const i=+b.closest('tr').dataset.i;"
         "if(b.dataset.act==='up')move(i,-1);"
         "else if(b.dataset.act==='down')move(i,1);"
         "else if(b.dataset.act==='top')moveTop(i);"
         "else if(b.dataset.act==='bottom')moveBottom(i);"
-        "else if(b.dataset.act==='del'){collect();cfg.devices.splice(i,1);render();}};"
+        "else if(b.dataset.act==='del'){collect();const removed=cfg.devices.splice(i,1)[0];"
+        "const rid=removed&&removed.id;if(rid){(cfg.device_groups||[]).forEach(g=>{"
+        "g.members=(g.members||[]).filter(m=>memberIdOf(m)!==rid);});}"
+        "render();}};"
         // 输入 model 时即时刷新匹配图标
         "document.getElementById('dev-tbody').oninput=e=>{const el=e.target;"
         "if(!el||el.dataset.f!=='model')return;"
         "const img=el.closest('tr').querySelector('.dev-icon');"
         "if(!img)return;const base=iconBase(el.value);img.src=iconUrl(el.value);img.title=base;};"
+        "document.getElementById('group-list').onclick=e=>{const b=e.target.closest('button');"
+        "if(!b||!b.dataset.gact)return;const i=+b.closest('.group-card').dataset.gi;"
+        "if(b.dataset.gact==='up')moveGroup(i,-1);"
+        "else if(b.dataset.gact==='down')moveGroup(i,1);"
+        "else if(b.dataset.gact==='del'){collect();cfg.device_groups.splice(i,1);renderGroups();}};"
         "document.getElementById('save-form').onsubmit=()=>{collect();"
         "document.getElementById('config-payload').value=JSON.stringify(cfg,null,2);};}"
         "init();");
@@ -418,6 +601,9 @@ static void handleSave() {
 
     const String json = g_server.arg("config");
     if (saveAppConfigJson(json.c_str())) {
+        // 保存后立即生效时区与亮度
+        applyLocalTimezone();
+        M5Cardputer.Display.setBrightness(brightnessPercentToHw(getAppConfig().brightness));
         snprintf(g_web_status, sizeof(g_web_status), "saved %d dev",
                  getAppConfig().device_count);
         String body = F("<h1>已保存</h1><p class='ok'>config.json 写入成功。</p>"
@@ -440,6 +626,8 @@ static void handleSave() {
 static void handleExample() {
     String body = F("<h1>示例 config.json</h1><p>WiFi 米家用 <code>ip</code> + <code>token</code>；"
                     "BLE 传感器用 <code>mac</code> + <code>ble.key</code>，可加 <code>name_zh</code>。"
+                    "编组见 <code>device_groups</code>，成员用设备 <code>id</code> 引用。"
+                    "系统项见主页 <strong>系统设置</strong>（时区 / 亮度 0~100 / 提示音）。"
                     "Cursor 用量见主页 "
                     "<strong>Cursor</strong> 标签页。</p><pre>");
     body += DEFAULT_CONFIG;

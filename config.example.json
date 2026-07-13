@@ -14,6 +14,15 @@
       "model": "yeelink.light.lamp2"
     },
     {
+      "name": "bedroom-light",
+      "name_zh": "卧室灯",
+      "id": "987654321",
+      "mac": "AA:BB:CC:DD:EE:01",
+      "ip": "192.168.1.51",
+      "token": "0123456789abcdef0123456789abcdef",
+      "model": "yeelink.light.lamp2"
+    },
+    {
       "name": "Sensor_HT",
       "name_zh": "温湿度计",
       "id": "blt.3.example",
@@ -24,12 +33,42 @@
       }
     }
   ],
+  "device_groups": [
+    {
+      "name": "AllLights",
+      "name_zh": "全部灯光",
+      "members": [
+        {
+          "id": "123456789",
+          "name": "living-room-light",
+          "name_zh": "客厅灯"
+        },
+        {
+          "id": "987654321",
+          "name": "bedroom-light",
+          "name_zh": "卧室灯"
+        }
+      ]
+    },
+    {
+      "name": "LivingRoom",
+      "name_zh": "客厅",
+      "members": [
+        {
+          "id": "123456789",
+          "name": "living-room-light",
+          "name_zh": "客厅灯"
+        }
+      ]
+    }
+  ],
   "cursor": {
     "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
   },
   "timezone": "CST-8",
   "brightness": 30,
   "sound": {
-    "time_key": false
+    "time_key": true,
+    "mijia_on_off": true
   }
 }

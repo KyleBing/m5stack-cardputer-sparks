@@ -116,6 +116,7 @@ DEFINE_DEVICE_ICON_DEMO(fryer)
 DEFINE_DEVICE_ICON_DEMO(juicer)
 DEFINE_DEVICE_ICON_DEMO(lamp2)
 DEFINE_DEVICE_ICON_DEMO(plug)
+DEFINE_DEVICE_ICON_DEMO(sensor_ht)
 DEFINE_DEVICE_ICON_DEMO(wifispeaker)
 DEFINE_DEVICE_ICON_DEMO(default)
 
@@ -145,6 +146,7 @@ static const IconDemoItem ICON_DEMO_ITEMS[] = {
     {"device juicer", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX, drawDemoDevice_juicer},
     {"device lamp2", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX, drawDemoDevice_lamp2},
     {"device plug", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX, drawDemoDevice_plug},
+    {"device sensor_ht", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX, drawDemoDevice_sensor_ht},
     {"device wifispeaker", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX,
      drawDemoDevice_wifispeaker},
     {"device default", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX, drawDemoDevice_default},

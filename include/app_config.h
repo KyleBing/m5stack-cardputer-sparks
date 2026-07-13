@@ -15,6 +15,16 @@ struct MijiaDevice {
 };
 
 static constexpr int MIJIA_DEVICE_MAX = 50;
+static constexpr int MIJIA_GROUP_MAX = 16;
+static constexpr int MIJIA_GROUP_MEMBER_MAX = 16;
+
+// 设备编组：members 在 JSON 里用 id 引用；加载时解析成下标
+struct MijiaDeviceGroup {
+    char name[32];
+    char name_zh[48];
+    int member_indices[MIJIA_GROUP_MEMBER_MAX]; // 对应 devices[]；无效已剔除
+    int member_count;
+};
 
 static constexpr int CURSOR_TOKEN_MAX = 1024;
 // POSIX TZ 默认东八区（NTP 为 UTC，显示靠此字段）
@@ -25,10 +35,13 @@ struct AppConfig {
     char wifi_password[65];
     char cursor_token[CURSOR_TOKEN_MAX];
     char timezone[48]; // POSIX TZ，如 CST-8；缺省东八区
-    uint8_t brightness;
-    bool time_key_sound; // Time 内按键声（countdown 到点闹钟不受影响）
+    uint8_t brightness;      // 配置存 0~100；setBrightness 时再转 0~255
+    bool time_key_sound;     // Time 内按键声（countdown 到点闹钟不受影响）
+    bool mijia_on_off_sound; // 米家开/关提示音
     MijiaDevice devices[MIJIA_DEVICE_MAX];
     int device_count;
+    MijiaDeviceGroup device_groups[MIJIA_GROUP_MAX];
+    int device_group_count;
     bool loaded;
 };
 
@@ -44,14 +57,21 @@ bool saveAppConfigJson(const char* json);
 // 更新 WiFi 字段并写回（保留 devices 等其它配置）
 bool saveAppConfigWifi(const char* ssid, const char* password);
 
-// 更新屏幕亮度并写回
-bool saveAppConfigBrightness(uint8_t brightness);
+// 更新屏幕亮度并写回（percent：0~100）
+bool saveAppConfigBrightness(uint8_t brightness_percent);
 
 // 更新 Time 按键声开关并写回
 bool saveAppConfigTimeKeySound(bool enabled);
 
+// 更新米家开/关提示音开关并写回
+bool saveAppConfigMijiaOnOffSound(bool enabled);
+
 // 更新时区（POSIX TZ）并写回
 bool saveAppConfigTimezone(const char* timezone);
+
+// 亮度：配置 0~100 ↔ 硬件 0~255
+uint8_t brightnessPercentToHw(uint8_t percent);
+uint8_t brightnessHwToPercent(uint8_t hw);
 
 // 读取原始 config.json 文本（用于 Web 展示）
 bool readAppConfigRaw(String& out);
@@ -66,3 +86,6 @@ const char* mijiaDeviceDisplayName(const MijiaDevice& dev);
 
 // 是否走 BLE 被动读取（有 ble_key 且无可用局域网 miIO）
 bool mijiaDeviceUsesBle(const MijiaDevice& dev);
+
+// 按设备 id 查找 devices[] 下标；未找到返回 -1
+int mijiaFindDeviceIndexById(const char* id);

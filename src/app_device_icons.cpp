@@ -8,6 +8,7 @@
 static const char* const DEVICE_ICON_NAMES[] = {
     "airpurifier",
     "wifispeaker",
+    "sensor_ht",
     "bslamp2",
     "juicer",
     "camera",

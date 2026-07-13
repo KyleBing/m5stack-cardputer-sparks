@@ -10,6 +10,9 @@
 
 ### 新增
 
+- **Mijia** 设备编组（`device_groups`）：Web 配网「编组」页维护；设备端 `d` 进入 Groups，批量开关成员；BtnA 在编组内同步切换
+- **Mijia** 温湿度设备图标 `sensor_ht`（含 active / 25w）；Icons 应用可预览；model 含子串时自动匹配
+- **Settings**：Sound 增加米家开/关提示音（`sound.mijia_on_off`，`m` 切换）
 - **Mijia BLE**：被动扫描 MiBeacon / 青萍广播；温湿度计（温度 / 湿度 / 电量）与人体 / 无线开关等事件设备；`r` 短扫刷新，主循环非阻塞 poll
 - **配置**：设备支持 `name_zh`、`ble.key`（bindkey）；Web 配网表增加 BLE Key；显示名优先中文；`timezone`（POSIX TZ，默认 `CST-8`）
 - **Countdown** 电子闹钟：到点哔-哔-歇（最多 30s），结束页 `x` 取消并回到设置
@@ -21,6 +24,7 @@
 
 ### 改进
 
+- **Settings** 亮度改为 0~100 百分比显示与配置（硬件仍映射 0~255）
 - **时区**：启动 / 唤醒后 `applyLocalTimezone`；RTC 按 UTC 存储、本地显示；NTP 同步写入 `config.json` 时区
 - **Countdown**：修复全量重绘盖住左下角 `RUN`/`PAUSED`；去掉结束态 `Time's up!`；开始 / 暂停 / 重置音效对齐秒表
 - **Mijia BLE**：前台后台多设备监听 + 读数缓存；`r` 聚焦扫脏包可继续听；温湿度控制页 KV 布局与 `Xs ago` / listening 状态；开关提示音

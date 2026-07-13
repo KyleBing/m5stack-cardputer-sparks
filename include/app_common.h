@@ -97,3 +97,5 @@ void playUiTone(float freq_hz, uint32_t duration_ms);
 // Time 按键声：受 settings/sound.time_key 控制（countdown 闹钟请用 playUiTone）
 void playTimeKeyTone(float freq_hz, uint32_t duration_ms);
 bool isTimeKeySoundEnabled();
+// 米家开/关提示音：受 settings/sound.mijia_on_off 控制
+bool isMijiaOnOffSoundEnabled();

@@ -21,9 +21,13 @@
 static int mijiaDeviceIdx = 0;  // 当前选中的设备索引
 static bool mijiaOverviewMode = false; // 是否在概览模式
 static bool mijiaOverviewGridMode = false; // 是否在宫格模式
+static bool mijiaGroupMode = false; // 是否在编组模式（d 键）
 static bool mijiaHelpVisible = false; // 是否在帮助模式
 static int mijiaOverviewScrollIdx = 0; // 概览模式下的滚动索引
 static int mijiaOverviewEntryDeviceIdx = 0; // 概览模式下的入口设备索引
+static int mijiaGroupIdx = 0; // 当前编组
+static int mijiaGroupScrollIdx = 0; // 编组内成员页起始下标
+static char mijiaGroupStatus[32] = ""; // 编组操作汇总状态
 static MijiaUiState mijiaUi{}; // 当前设备的UI状态
 static int mijiaRefreshGen = 0; // 刷新生成器
 static volatile bool mijiaRefreshTaskRunning = false; // 刷新任务是否正在运行
@@ -78,6 +82,15 @@ static int mijiaOverviewRefreshQueueLen = 0;
 static int mijiaOverviewRefreshQueuePos = 0;
 static int mijiaOverviewPendingCells[MIJIA_GRID_PAGE_SIZE];
 static int mijiaOverviewPendingCellCount = 0;
+// 编组批量 QUERY / SET_POWER 队列（顺序执行）
+static int mijiaGroupJobQueue[MIJIA_GROUP_MEMBER_MAX];
+static int mijiaGroupJobQueueLen = 0;
+static int mijiaGroupJobQueuePos = 0;
+static bool mijiaGroupJobIsSetPower = false;
+static bool mijiaGroupJobPowerOn = false;
+static int mijiaGroupJobOk = 0;
+static int mijiaGroupJobFail = 0;
+static int mijiaGroupJobSkip = 0;
 
 enum class MijiaJobType : uint8_t {
     QUERY,
@@ -100,6 +113,10 @@ static void scheduleMijiaRefresh();
 static void requestMijiaRefresh();
 static void scheduleMijiaOverviewRefreshJob();
 static void requestMijiaOverviewPageRefresh();
+static void scheduleMijiaGroupJob();
+static void requestMijiaGroupPageRefresh();
+static void requestMijiaGroupPower(bool on);
+static void toggleMijiaGroupPower();
 static void cancelMijiaPendingJobs();
 static bool scheduleMijiaJob(MijiaRefreshJob* job);
 static void queueMijiaGridCellRefresh(int device_idx);
@@ -113,11 +130,21 @@ static void onMijiaGridDeviceChanged(int old_idx, int new_idx);
 static void mijiaJobTaskFn(void* arg);
 static void drawMijiaHelpPage();
 static void drawMijiaGridHelpPage();
+static void drawMijiaGroupHelpPage();
 static void invalidateMijiaControlSurface();
 static void applyMijiaControlRefresh(bool force_full = false);
 static void drawMijiaOverview(int& y);
+static void drawMijiaGroupView();
 static void refreshMijiaGridCell(int device_idx);
 static void refreshMijiaGridSelection(int old_idx, int new_idx);
+static void enterMijiaGroupMode();
+static void exitMijiaGroupMode();
+static void switchMijiaGroup(int delta);
+static void switchMijiaGroupPage(int delta);
+static void enterMijiaOverview(bool grid_mode);
+static void exitMijiaOverview();
+static const MijiaDeviceGroup* getCurrentMijiaGroup();
+static bool mijiaDeviceIsGroupActuator(const MijiaDevice& dev);
 static void refreshMijiaListSelection(int old_idx, int new_idx);
 static bool handleMijiaGridSelectionNav(const Keyboard_Class::KeysState& status);
 static bool handleMijiaListSelectionNav(const Keyboard_Class::KeysState& status);
@@ -326,15 +353,23 @@ static void applyMijiaControlRefresh(const bool force_full) {
     snapshotMijiaRenderedPanel(net);
 }
 
-// 按当前模式重绘控制页、概览或帮助页
+// 按当前模式重绘控制页、概览、编组或帮助页
 static void redrawMijiaScreen() {
     if (mijiaHelpVisible) {
         invalidateMijiaControlSurface();
-        if (mijiaOverviewGridMode) {
+        if (mijiaGroupMode) {
+            drawMijiaGroupHelpPage();
+        } else if (mijiaOverviewGridMode) {
             drawMijiaGridHelpPage();
         } else {
             drawMijiaHelpPage();
         }
+        return;
+    }
+    if (mijiaGroupMode) {
+        invalidateMijiaControlSurface();
+        beginAppScreen("Groups");
+        drawMijiaGroupView();
         return;
     }
     if (mijiaOverviewMode) {
@@ -507,10 +542,35 @@ static void cancelMijiaPendingJobs() {
     mijiaOverviewRefreshQueueLen = 0;
     mijiaOverviewRefreshQueuePos = 0;
     mijiaOverviewPendingCellCount = 0;
+    mijiaGroupJobQueueLen = 0;
+    mijiaGroupJobQueuePos = 0;
     if (mijiaDeferredJob != nullptr) {
         delete mijiaDeferredJob;
         mijiaDeferredJob = nullptr;
     }
+}
+
+// 编组可执行电源控制的设备（跳过 BLE / 传感器）
+static bool mijiaDeviceIsGroupActuator(const MijiaDevice& dev) {
+    if (mijiaDeviceUsesBle(dev)) {
+        return false;
+    }
+    const MijiaDevKind kind = mijiaClassifyModel(dev.model);
+    return kind != MijiaDevKind::SENSOR_HT && kind != MijiaDevKind::BLE_EVENT;
+}
+
+static const MijiaDeviceGroup* getCurrentMijiaGroup() {
+    const AppConfig& cfg = getAppConfig();
+    if (!cfg.loaded || cfg.device_group_count <= 0) {
+        return nullptr;
+    }
+    if (mijiaGroupIdx < 0) {
+        mijiaGroupIdx = 0;
+    }
+    if (mijiaGroupIdx >= cfg.device_group_count) {
+        mijiaGroupIdx = cfg.device_group_count - 1;
+    }
+    return &cfg.device_groups[mijiaGroupIdx];
 }
 
 // 宫格单格刷新排队，主循环中执行避免在任务里画屏
@@ -530,7 +590,13 @@ static void queueMijiaGridCellRefresh(const int device_idx) {
 
 static void flushMijiaGridCellUpdates() {
     // Help 打开时不刷格子，避免盖住帮助页
-    if (!mijiaOverviewMode || !mijiaOverviewGridMode || mijiaHelpVisible) {
+    if (mijiaHelpVisible) {
+        mijiaOverviewPendingCellCount = 0;
+        return;
+    }
+    const bool grid_like =
+        (mijiaOverviewMode && mijiaOverviewGridMode) || mijiaGroupMode;
+    if (!grid_like) {
         mijiaOverviewPendingCellCount = 0;
         return;
     }
@@ -582,12 +648,18 @@ static void finishMijiaRefreshTask(const int job_gen) {
     if (mijiaHelpVisible) {
         return;
     }
+    // 编组批量队列优先
+    if (mijiaGroupMode && mijiaGroupJobQueuePos < mijiaGroupJobQueueLen) {
+        scheduleMijiaGroupJob();
+        return;
+    }
     // 宫格概览队列优先于控制页单设备查询
     if (mijiaOverviewRefreshQueuePos < mijiaOverviewRefreshQueueLen) {
         scheduleMijiaOverviewRefreshJob();
         return;
     }
-    if (!mijiaOverviewGridMode && job_gen != mijiaRefreshGen && !mijiaRefreshTimedOut) {
+    if (!mijiaOverviewGridMode && !mijiaGroupMode && job_gen != mijiaRefreshGen &&
+        !mijiaRefreshTimedOut) {
         scheduleMijiaRefresh();
     }
 }
@@ -618,6 +690,10 @@ static void mijiaJobTaskFn(void* arg) {
             if (job_type == MijiaJobType::QUERY) {
                 mijiaOverviewRefreshQueuePos++;
             }
+            if (mijiaGroupMode && mijiaGroupJobQueueLen > 0) {
+                mijiaGroupJobSkip++;
+                mijiaGroupJobQueuePos++;
+            }
             queueMijiaGridCellRefresh(job_idx);
         } else if (!overview_cache && job_gen == mijiaRefreshGen && job_idx == mijiaDeviceIdx) {
             strncpy(mijiaUi.status, mijiaBleCanScan(device) ? "press r" : "ble n/a",
@@ -635,6 +711,10 @@ static void mijiaJobTaskFn(void* arg) {
             strncpy(mijiaOverviewUi[job_idx].status, "wifi fail", sizeof(mijiaOverviewUi[job_idx].status));
             if (job_type == MijiaJobType::QUERY) {
                 mijiaOverviewRefreshQueuePos++;
+            }
+            if (mijiaGroupMode && mijiaGroupJobQueueLen > 0) {
+                mijiaGroupJobFail++;
+                mijiaGroupJobQueuePos++;
             }
             queueMijiaGridCellRefresh(job_idx);
         } else if (!overview_cache && job_gen == mijiaRefreshGen && job_idx == mijiaDeviceIdx) {
@@ -680,6 +760,18 @@ static void mijiaJobTaskFn(void* arg) {
         temp.power_known = false;
         mijiaOverviewUi[job_idx] = temp;
         mijiaOverviewRefreshQueuePos++;
+        if (mijiaGroupMode && mijiaGroupJobQueueLen > 0) {
+            mijiaGroupJobFail++;
+            mijiaGroupJobQueuePos++;
+        }
+        queueMijiaGridCellRefresh(job_idx);
+    } else if (job_timed_out && overview_cache && mijiaGroupMode && mijiaGroupJobQueueLen > 0 &&
+               job_gen == mijiaRefreshGen) {
+        // 编组 SET_POWER 超时：记失败并继续下一个
+        strncpy(mijiaOverviewUi[job_idx].status, "timeout",
+                sizeof(mijiaOverviewUi[job_idx].status));
+        mijiaGroupJobFail++;
+        mijiaGroupJobQueuePos++;
         queueMijiaGridCellRefresh(job_idx);
     } else if (job_timed_out && job_type == MijiaJobType::QUERY && job_gen == mijiaRefreshGen &&
                job_idx == mijiaDeviceIdx && !overview_cache) {
@@ -693,6 +785,18 @@ static void mijiaJobTaskFn(void* arg) {
             mijiaOverviewUi[job_idx] = temp;
             if (job_type == MijiaJobType::QUERY) {
                 mijiaOverviewRefreshQueuePos++;
+            }
+            if (mijiaGroupMode && mijiaGroupJobQueueLen > 0) {
+                // 编组批量：统计成功/失败并推进队列
+                const bool ok = (job_type == MijiaJobType::SET_POWER)
+                                    ? (temp.power_known && temp.power_on == power_on)
+                                    : temp.power_known;
+                if (ok) {
+                    mijiaGroupJobOk++;
+                } else {
+                    mijiaGroupJobFail++;
+                }
+                mijiaGroupJobQueuePos++;
             }
             queueMijiaGridCellRefresh(job_idx);
             if (job_idx == mijiaDeviceIdx) {
@@ -827,16 +931,19 @@ static void switchMijiaDevice(const int delta, const int device_count) {
     scheduleMijiaRefresh();
 }
 
-// 开关提示音：开升调 / 关降调，受 Setup sound 开关控制（喇叭 <800Hz 几乎听不见）
+// 开关提示音：开升调 / 关降调，受 sound.mijia_on_off 控制（喇叭 <800Hz 几乎听不见）
 static void playMijiaPowerTone(const bool on) {
+    if (!isMijiaOnOffSoundEnabled()) {
+        return;
+    }
     if (on) {
-        playTimeKeyTone(1000, 35);
+        playUiTone(1000, 35);
         delay(40);
-        playTimeKeyTone(1400, 45);
+        playUiTone(1400, 45);
     } else {
-        playTimeKeyTone(1200, 35);
+        playUiTone(1200, 35);
         delay(40);
-        playTimeKeyTone(880, 50);
+        playUiTone(880, 50);
     }
 }
 
@@ -1010,6 +1117,288 @@ static void toggleMijiaOverviewPower(const int device_idx) {
     const MijiaUiState& state = mijiaOverviewUi[device_idx];
     const bool on = state.power_known ? !state.power_on : true;
     requestMijiaOverviewPower(device_idx, on);
+}
+
+// 更新编组底栏汇总文案
+static void updateMijiaGroupStatusSummary() {
+    const int done = mijiaGroupJobOk + mijiaGroupJobFail + mijiaGroupJobSkip;
+    const int total = mijiaGroupJobQueueLen;
+    if (total <= 0) {
+        strncpy(mijiaGroupStatus, "", sizeof(mijiaGroupStatus));
+        return;
+    }
+    if (done < total) {
+        snprintf(mijiaGroupStatus, sizeof(mijiaGroupStatus), "%d/%d...", done, total);
+        return;
+    }
+    if (mijiaGroupJobFail == 0 && mijiaGroupJobSkip == 0) {
+        snprintf(mijiaGroupStatus, sizeof(mijiaGroupStatus), "%d/%d ok", mijiaGroupJobOk, total);
+    } else {
+        snprintf(mijiaGroupStatus, sizeof(mijiaGroupStatus), "%d/%d ok", mijiaGroupJobOk, total);
+    }
+}
+
+// 编组：依次 QUERY / SET_POWER 下一个成员
+static void scheduleMijiaGroupJob() {
+    if (!mijiaGroupMode) {
+        return;
+    }
+    if (mijiaGroupJobQueuePos >= mijiaGroupJobQueueLen) {
+        updateMijiaGroupStatusSummary();
+        mijiaNeedRedraw = true;
+        return;
+    }
+    if (mijiaRefreshTaskRunning) {
+        return;
+    }
+
+    const AppConfig& cfg = getAppConfig();
+    const int idx = mijiaGroupJobQueue[mijiaGroupJobQueuePos];
+    if (!cfg.loaded || idx < 0 || idx >= cfg.device_count) {
+        mijiaGroupJobSkip++;
+        mijiaGroupJobQueuePos++;
+        scheduleMijiaGroupJob();
+        return;
+    }
+
+    updateMijiaGroupStatusSummary();
+    mijiaNeedRedraw = true;
+
+    auto* job = new MijiaRefreshJob{};
+    job->gen = mijiaRefreshGen;
+    job->device_idx = idx;
+    job->device = cfg.devices[idx];
+    job->deadline_ms = millis() + MIJIA_GRID_REFRESH_TIMEOUT_MS;
+    job->overview_cache = true;
+    job->type = mijiaGroupJobIsSetPower ? MijiaJobType::SET_POWER : MijiaJobType::QUERY;
+    job->power_on = mijiaGroupJobPowerOn;
+
+    if (mijiaGroupJobIsSetPower) {
+        strncpy(mijiaOverviewUi[idx].status,
+                mijiaGroupJobPowerOn ? "turn on..." : "turn off...",
+                sizeof(mijiaOverviewUi[idx].status));
+        queueMijiaGridCellRefresh(idx);
+    }
+
+    mijiaRefreshTaskRunning = true;
+    if (xTaskCreate(mijiaJobTaskFn, "mijia_job", 8192, job, 1, nullptr) != pdPASS) {
+        delete job;
+        mijiaRefreshTaskRunning = false;
+        mijiaGroupJobFail++;
+        mijiaGroupJobQueuePos++;
+        scheduleMijiaGroupJob();
+    }
+}
+
+// 编组：刷新当前组全部成员状态
+static void requestMijiaGroupPageRefresh() {
+    if (!mijiaGroupMode) {
+        return;
+    }
+    const MijiaDeviceGroup* group = getCurrentMijiaGroup();
+    if (group == nullptr || group->member_count <= 0) {
+        strncpy(mijiaGroupStatus, "empty", sizeof(mijiaGroupStatus));
+        mijiaNeedRedraw = true;
+        return;
+    }
+
+    const AppConfig& cfg = getAppConfig();
+    bool need_wifi = false;
+    for (int i = 0; i < group->member_count; i++) {
+        const int idx = group->member_indices[i];
+        if (idx >= 0 && idx < cfg.device_count && mijiaDeviceIsGroupActuator(cfg.devices[idx])) {
+            need_wifi = true;
+            break;
+        }
+    }
+    if (need_wifi && mijiaWifiPhase != MijiaWifiPhase::READY && !isMijiaConfigWifiConnected()) {
+        strncpy(mijiaGroupStatus, "wifi fail", sizeof(mijiaGroupStatus));
+        mijiaNeedRedraw = true;
+        return;
+    }
+
+    cancelMijiaPendingJobs();
+    mijiaGroupJobQueueLen = 0;
+    mijiaGroupJobQueuePos = 0;
+    mijiaGroupJobIsSetPower = false;
+    mijiaGroupJobOk = 0;
+    mijiaGroupJobFail = 0;
+    mijiaGroupJobSkip = 0;
+
+    for (int i = 0; i < group->member_count; i++) {
+        const int idx = group->member_indices[i];
+        if (idx < 0 || idx >= cfg.device_count) {
+            continue;
+        }
+        if (!mijiaDeviceIsGroupActuator(cfg.devices[idx])) {
+            // BLE/只读：用缓存或标记 skip，不进队列
+            if (mijiaDeviceUsesBle(cfg.devices[idx])) {
+                if (applyBleCacheToUi(idx, mijiaOverviewUi[idx], false)) {
+                    formatBleCacheAgeStatus(mijiaBleCache[idx].updated_ms,
+                                            mijiaOverviewUi[idx].status,
+                                            sizeof(mijiaOverviewUi[idx].status));
+                } else {
+                    strncpy(mijiaOverviewUi[idx].status, "ble",
+                            sizeof(mijiaOverviewUi[idx].status));
+                }
+            } else {
+                strncpy(mijiaOverviewUi[idx].status, "skip",
+                        sizeof(mijiaOverviewUi[idx].status));
+            }
+            queueMijiaGridCellRefresh(idx);
+            continue;
+        }
+        if (mijiaOverviewUi[idx].power_known) {
+            continue;
+        }
+        mijiaGroupJobQueue[mijiaGroupJobQueueLen++] = idx;
+        mijiaResetUiState(mijiaOverviewUi[idx]);
+        strncpy(mijiaOverviewUi[idx].status, "query...", sizeof(mijiaOverviewUi[idx].status));
+        queueMijiaGridCellRefresh(idx);
+    }
+
+    if (mijiaGroupJobQueueLen == 0) {
+        strncpy(mijiaGroupStatus, "ready", sizeof(mijiaGroupStatus));
+        mijiaNeedRedraw = true;
+        return;
+    }
+    strncpy(mijiaGroupStatus, "query...", sizeof(mijiaGroupStatus));
+    scheduleMijiaGroupJob();
+}
+
+// 编组：对全部可控制成员顺序设电源
+static void requestMijiaGroupPower(const bool on) {
+    if (!mijiaGroupMode) {
+        return;
+    }
+    const MijiaDeviceGroup* group = getCurrentMijiaGroup();
+    if (group == nullptr || group->member_count <= 0) {
+        strncpy(mijiaGroupStatus, "empty", sizeof(mijiaGroupStatus));
+        mijiaNeedRedraw = true;
+        return;
+    }
+    if (!ensureConfigWifi()) {
+        strncpy(mijiaGroupStatus, "wifi fail", sizeof(mijiaGroupStatus));
+        mijiaNeedRedraw = true;
+        return;
+    }
+
+    const AppConfig& cfg = getAppConfig();
+    playMijiaPowerTone(on);
+    cancelMijiaPendingJobs();
+    mijiaGroupJobQueueLen = 0;
+    mijiaGroupJobQueuePos = 0;
+    mijiaGroupJobIsSetPower = true;
+    mijiaGroupJobPowerOn = on;
+    mijiaGroupJobOk = 0;
+    mijiaGroupJobFail = 0;
+    mijiaGroupJobSkip = 0;
+
+    for (int i = 0; i < group->member_count; i++) {
+        const int idx = group->member_indices[i];
+        if (idx < 0 || idx >= cfg.device_count) {
+            continue;
+        }
+        if (!mijiaDeviceIsGroupActuator(cfg.devices[idx])) {
+            strncpy(mijiaOverviewUi[idx].status, "skip", sizeof(mijiaOverviewUi[idx].status));
+            queueMijiaGridCellRefresh(idx);
+            continue;
+        }
+        mijiaGroupJobQueue[mijiaGroupJobQueueLen++] = idx;
+        strncpy(mijiaOverviewUi[idx].status, on ? "turn on..." : "turn off...",
+                sizeof(mijiaOverviewUi[idx].status));
+        queueMijiaGridCellRefresh(idx);
+    }
+    flushMijiaGridCellUpdates();
+
+    if (mijiaGroupJobQueueLen == 0) {
+        strncpy(mijiaGroupStatus, "no actuator", sizeof(mijiaGroupStatus));
+        mijiaNeedRedraw = true;
+        return;
+    }
+    updateMijiaGroupStatusSummary();
+    scheduleMijiaGroupJob();
+}
+
+// 编组切换：全开→全关，否则→全开（混合时一键全开）
+static void toggleMijiaGroupPower() {
+    const MijiaDeviceGroup* group = getCurrentMijiaGroup();
+    if (group == nullptr) {
+        return;
+    }
+    const AppConfig& cfg = getAppConfig();
+    bool any_known = false;
+    bool all_on = true;
+    for (int i = 0; i < group->member_count; i++) {
+        const int idx = group->member_indices[i];
+        if (idx < 0 || idx >= cfg.device_count || !mijiaDeviceIsGroupActuator(cfg.devices[idx])) {
+            continue;
+        }
+        const MijiaUiState& st = mijiaOverviewUi[idx];
+        if (!st.power_known) {
+            all_on = false;
+            continue;
+        }
+        any_known = true;
+        if (!st.power_on) {
+            all_on = false;
+        }
+    }
+    const bool turn_on = !(any_known && all_on);
+    requestMijiaGroupPower(turn_on);
+}
+
+static void enterMijiaGroupMode() {
+    if (mijiaOverviewMode) {
+        exitMijiaOverview();
+    }
+    mijiaHelpVisible = false;
+    mijiaGroupMode = true;
+    const AppConfig& cfg = getAppConfig();
+    if (mijiaGroupIdx < 0 || mijiaGroupIdx >= cfg.device_group_count) {
+        mijiaGroupIdx = 0;
+    }
+    mijiaGroupScrollIdx = 0;
+    mijiaGroupStatus[0] = '\0';
+    requestMijiaGroupPageRefresh();
+}
+
+static void exitMijiaGroupMode() {
+    if (!mijiaGroupMode) {
+        return;
+    }
+    cancelMijiaPendingJobs();
+    mijiaGroupMode = false;
+    mijiaGroupJobQueueLen = 0;
+    mijiaGroupJobQueuePos = 0;
+    mijiaGroupStatus[0] = '\0';
+}
+
+// 切换编组（,/.）
+static void switchMijiaGroup(const int delta) {
+    const AppConfig& cfg = getAppConfig();
+    if (!cfg.loaded || cfg.device_group_count <= 0) {
+        return;
+    }
+    cancelMijiaPendingJobs();
+    mijiaGroupIdx = (mijiaGroupIdx + delta + cfg.device_group_count) % cfg.device_group_count;
+    mijiaGroupScrollIdx = 0;
+    mijiaGroupStatus[0] = '\0';
+    requestMijiaGroupPageRefresh();
+    redrawMijiaScreen();
+}
+
+// 编组内成员翻页
+static void switchMijiaGroupPage(const int delta) {
+    const MijiaDeviceGroup* group = getCurrentMijiaGroup();
+    if (group == nullptr || group->member_count <= MIJIA_GRID_PAGE_SIZE) {
+        return;
+    }
+    const int page_count = (group->member_count + MIJIA_GRID_PAGE_SIZE - 1) / MIJIA_GRID_PAGE_SIZE;
+    int page = mijiaGroupScrollIdx / MIJIA_GRID_PAGE_SIZE;
+    page = (page + delta + page_count) % page_count;
+    mijiaGroupScrollIdx = page * MIJIA_GRID_PAGE_SIZE;
+    redrawMijiaScreen();
 }
 
 // 概览每页设备数：列表 3 / 宫格 9
@@ -1534,6 +1923,22 @@ static void drawMijiaGridDividers(const MijiaGridLayout& layout) {
 
 // 设备索引转当前页宫格 slot，不在当前页返回 -1
 static int mijiaGridSlotForIdx(const int device_idx) {
+    if (mijiaGroupMode) {
+        const MijiaDeviceGroup* group = getCurrentMijiaGroup();
+        if (group == nullptr) {
+            return -1;
+        }
+        for (int i = 0; i < MIJIA_GRID_PAGE_SIZE; i++) {
+            const int mi = mijiaGroupScrollIdx + i;
+            if (mi >= group->member_count) {
+                break;
+            }
+            if (group->member_indices[mi] == device_idx) {
+                return i;
+            }
+        }
+        return -1;
+    }
     if (device_idx < mijiaOverviewScrollIdx ||
         device_idx >= mijiaOverviewScrollIdx + MIJIA_GRID_PAGE_SIZE) {
         return -1;
@@ -1563,7 +1968,7 @@ static void refreshMijiaGridCell(const int device_idx) {
     const int cy = layout.grid_y + row * (layout.cell_h + layout.gap);
     M5Cardputer.Display.fillRect(cx, cy, layout.cell_w, layout.cell_h, BLACK);
     drawMijiaOverviewGridCell(cfg.devices[device_idx], device_idx, cx, cy, layout.cell_w, layout.cell_h,
-                              device_idx == mijiaDeviceIdx);
+                              mijiaGroupMode ? false : (device_idx == mijiaDeviceIdx));
     drawMijiaGridDividers(layout);
     drawMijiaGridBottomDivider(layout);
 }
@@ -1648,6 +2053,106 @@ static void drawMijiaOverviewGrid() {
     }
 
     drawMijiaOverviewHints(cfg);
+}
+
+// 编组底栏：组序号 / 名称 + o/i/t
+static void drawMijiaGroupBottomHints(const AppConfig& cfg) {
+    const int hint_y = M5Cardputer.Display.height() - MIJIA_GRID_HINT_H;
+    const int screen_w = M5Cardputer.Display.width();
+    M5Cardputer.Display.fillRect(APP_CONTENT_X, hint_y, screen_w - APP_CONTENT_X * 2,
+                                 MIJIA_GRID_HINT_H, BLACK);
+
+    int cx = APP_CONTENT_X;
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+
+    if (cfg.loaded && cfg.device_group_count > 0) {
+        const MijiaDeviceGroup* group = getCurrentMijiaGroup();
+        char pos_buf[28];
+        const char* gname = (group != nullptr && group->name[0] != '\0') ? group->name : "group";
+        snprintf(pos_buf, sizeof(pos_buf), "%d/%d %s", mijiaGroupIdx + 1, cfg.device_group_count,
+                 gname);
+        // 截断避免挤掉按键提示
+        while (pos_buf[0] != '\0' && M5Cardputer.Display.textWidth(pos_buf) > 88) {
+            pos_buf[strlen(pos_buf) - 1] = '\0';
+        }
+        M5Cardputer.Display.setCursor(cx, hint_y);
+        M5Cardputer.Display.print(pos_buf);
+        cx += M5Cardputer.Display.textWidth(pos_buf) + 4;
+    }
+
+    if (mijiaGroupStatus[0] != '\0') {
+        M5Cardputer.Display.setTextColor(APP_COLOR_VALUE, BLACK);
+        M5Cardputer.Display.setCursor(cx, hint_y);
+        // 状态过长则跳过，优先显示按键
+        if (cx + M5Cardputer.Display.textWidth(mijiaGroupStatus) + 70 < screen_w - APP_CONTENT_X) {
+            M5Cardputer.Display.print(mijiaGroupStatus);
+            cx += M5Cardputer.Display.textWidth(mijiaGroupStatus) + 4;
+        }
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    }
+
+    cx += drawKeyBadge(cx, hint_y, 'o', 1);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(cx, hint_y);
+    M5Cardputer.Display.print("on ");
+    cx += M5Cardputer.Display.textWidth("on ");
+    cx += drawKeyBadge(cx, hint_y, 'i', 1);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(cx, hint_y);
+    M5Cardputer.Display.print("off");
+
+    drawHelpHintRight("help");
+}
+
+// 编组页：宫格展示当前组员
+static void drawMijiaGroupView() {
+    const AppConfig& cfg = getAppConfig();
+    if (!cfg.loaded || cfg.device_group_count <= 0) {
+        int y = APP_CONTENT_Y;
+        drawInfoLine(APP_CONTENT_X, y, "hint", "no groups");
+        y += infoLineHeight(1) + 4;
+        drawInfoLine(APP_CONTENT_X, y, "hint", "add in web /advanced");
+        return;
+    }
+
+    const MijiaDeviceGroup* group = getCurrentMijiaGroup();
+    if (group == nullptr || group->member_count <= 0) {
+        int y = APP_CONTENT_Y;
+        drawInfoLine(APP_CONTENT_X, y, "hint", "empty group");
+        drawMijiaGroupBottomHints(cfg);
+        return;
+    }
+
+    if (mijiaGroupScrollIdx >= group->member_count) {
+        mijiaGroupScrollIdx = 0;
+    }
+
+    const MijiaGridLayout layout = getMijiaGridLayout();
+    drawMijiaGridDividers(layout);
+    drawMijiaGridBottomDivider(layout);
+
+    for (int row = 0; row < MIJIA_GRID_ROWS; row++) {
+        for (int col = 0; col < MIJIA_GRID_COLS; col++) {
+            const int slot = row * MIJIA_GRID_COLS + col;
+            const int mi = mijiaGroupScrollIdx + slot;
+            if (mi >= group->member_count) {
+                continue;
+            }
+            const int idx = group->member_indices[mi];
+            if (idx < 0 || idx >= cfg.device_count) {
+                continue;
+            }
+            const int cx = APP_CONTENT_X + col * (layout.cell_w + layout.gap);
+            const int cy = layout.grid_y + row * (layout.cell_h + layout.gap);
+            drawMijiaOverviewGridCell(cfg.devices[idx], idx, cx, cy, layout.cell_w, layout.cell_h,
+                                      false);
+        }
+    }
+
+    drawMijiaGroupBottomHints(cfg);
 }
 
 // 绘制单项：序号 + 左图标（缩放）+ 右名称/型号
@@ -1778,6 +2283,35 @@ static void drawMijiaOverview(int& y) {
 }
 
 bool handleMijiaOverviewPageNav(const Keyboard_Class::KeysState& status) {
+    if (mijiaGroupMode) {
+        if (mijiaHelpVisible) {
+            return false;
+        }
+        // 回车退出编组
+        if (status.enter) {
+            exitMijiaGroupMode();
+            redrawMijiaScreen();
+            return true;
+        }
+        // 左右翻组成员页；上下切组
+        const int bracket = getMijiaOverviewBracketDelta(status);
+        if (bracket != 0) {
+            switchMijiaGroupPage(bracket);
+            return true;
+        }
+        const int hdelta = getOverviewHorizontalDelta(status);
+        if (hdelta != 0) {
+            switchMijiaGroupPage(hdelta);
+            return true;
+        }
+        const int vdelta = getMenuNavDelta(status);
+        if (vdelta != 0) {
+            // 垂直：切编组
+            switchMijiaGroup(vdelta);
+            return true;
+        }
+        return false;
+    }
     if (!mijiaOverviewMode || mijiaHelpVisible) {
         return false;
     }
@@ -1803,7 +2337,7 @@ bool handleMijiaOverviewPageNav(const Keyboard_Class::KeysState& status) {
 
 // 控制页切换设备
 bool handleMijiaDeviceNav(const Keyboard_Class::KeysState& status) {
-    if (mijiaOverviewMode || mijiaHelpVisible) {
+    if (mijiaOverviewMode || mijiaGroupMode || mijiaHelpVisible) {
         return false;
     }
 
@@ -1950,12 +2484,12 @@ static int mijiaCountHelpRows(const MijiaDevice* dev, const int max_w, const int
         {'r', "refresh"},
         {'h', "help"},
     };
-    static const KeyHintItem nav_items[] = {{'l', "list"}};
+    static const KeyHintItem nav_items[] = {{'l', "list"}, {'g', "grid"}, {'d', "groups"}};
 
     int rows = 1; // common section header
     rows += mijiaCountWrappedRows(common_items, 5, text_size, max_w);
     rows += 1; // navigation section header
-    rows += mijiaCountWrappedRows(nav_items, 1, text_size, max_w);
+    rows += mijiaCountWrappedRows(nav_items, 3, text_size, max_w);
     rows += 1; // arrow switch row
 
     const int special_rows = mijiaCountSpecialHelpRows(dev, max_w, text_size);
@@ -2160,7 +2694,7 @@ static void drawMijiaHelpContent(const MijiaDevice* dev, const int text_size) {
         {'r', "refresh"},
         {'h', "help"},
     };
-    static const KeyHintItem nav_items[] = {{'l', "list"}};
+    static const KeyHintItem nav_items[] = {{'l', "list"}, {'g', "grid"}, {'d', "groups"}};
 
     const int common_x = 0;
     const int nav_x = col_w + col_gap;
@@ -2174,7 +2708,7 @@ static void drawMijiaHelpContent(const MijiaDevice* dev, const int text_size) {
     drawKeyHintsWrappedInColumn(common_x + 2, y, col_w - 4, common_items, 5, APP_COLOR_HINT);
 
     y = drawMijiaHelpColumnHeader(nav_x, col_y, col_w, "navigation");
-    y = drawKeyHintsWrappedInColumn(nav_x + 2, y, col_w - 4, nav_items, 1, APP_COLOR_HINT);
+    y = drawKeyHintsWrappedInColumn(nav_x + 2, y, col_w - 4, nav_items, 3, APP_COLOR_HINT);
     drawMijiaSwitchHelpInColumn(nav_x + 2, y);
 
     y = drawMijiaHelpColumnHeader(special_x, col_y, screen_w - special_x, "special");
@@ -2302,6 +2836,36 @@ static void drawMijiaGridHelpPage() {
     drawHelpHintRight("close help");
 }
 
+// 编组帮助页
+static void drawMijiaGroupHelpPage() {
+    beginAppScreen("Help");
+    const KeyHintItem items[] = {
+        {',', "prev group"},
+        {'.', "next group"},
+        {'o', "all on"},
+        {'i', "all off"},
+        {'t', "toggle"},
+        {'r', "refresh"},
+        {'[', "page"},
+        {']', "page"},
+        {'d', "back"},
+        {'h', "help"},
+    };
+    constexpr int n = sizeof(items) / sizeof(items[0]);
+    int y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
+    M5Cardputer.Display.setTextSize(1);
+    for (int i = 0; i < n; i++) {
+        int cx = APP_CONTENT_X;
+        cx += drawKeyBadge(cx, y, items[i].key, 1);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(cx, y);
+        M5Cardputer.Display.print(items[i].text);
+        y += INFO_LINE_H + 2;
+    }
+    drawHelpHintRight("close help");
+}
+
 // 按 H 切换显示的帮助页
 static void drawMijiaHelpPage() {
     beginAppScreen("Help");
@@ -2312,6 +2876,11 @@ static void drawMijiaHelpPage() {
 }
 
 void drawMijiaApp() {
+    if (mijiaGroupMode) {
+        beginAppScreen("Groups");
+        drawMijiaGroupView();
+        return;
+    }
     if (mijiaOverviewMode) {
         beginAppScreen("Mijia");
         M5Cardputer.Display.setTextSize(1);
@@ -2326,10 +2895,16 @@ void enterMijiaApp() {
     mijiaDeviceIdx = 0;
     mijiaOverviewMode = false;
     mijiaOverviewGridMode = false;
+    mijiaGroupMode = false;
     mijiaHelpVisible = false;
     mijiaOverviewScrollIdx = 0;
+    mijiaGroupIdx = 0;
+    mijiaGroupScrollIdx = 0;
+    mijiaGroupStatus[0] = '\0';
     mijiaOverviewRefreshQueueLen = 0;
     mijiaOverviewRefreshQueuePos = 0;
+    mijiaGroupJobQueueLen = 0;
+    mijiaGroupJobQueuePos = 0;
     mijiaBleScanPending = false;
     mijiaBleFocusActive = false;
     mijiaBleBgEnabled = true;
@@ -2408,7 +2983,7 @@ void updateMijiaApp() {
                 storeBleCache(device_idx, reading);
                 applyBleReadingToUi(mijiaOverviewUi[device_idx], reading, "ok");
                 queueMijiaGridCellRefresh(device_idx);
-                if (device_idx == mijiaDeviceIdx && !mijiaOverviewMode) {
+                if (device_idx == mijiaDeviceIdx && !mijiaOverviewMode && !mijiaGroupMode) {
                     applyBleReadingToUi(mijiaUi, reading, "ok");
                     applyMijiaControlRefresh(false);
                 }
@@ -2433,7 +3008,7 @@ void updateMijiaApp() {
     }
 
     // 控制页 BLE：刷新「Xs ago」年龄文案
-    if (!mijiaOverviewMode && !mijiaHelpVisible && !mijiaBleFocusActive) {
+    if (!mijiaOverviewMode && !mijiaGroupMode && !mijiaHelpVisible && !mijiaBleFocusActive) {
         const MijiaDevice* dev = getCurrentMijiaDevice();
         if (dev != nullptr && mijiaDeviceUsesBle(*dev) && mijiaBleCache[mijiaDeviceIdx].valid) {
             const char* st = mijiaUi.status;
@@ -2455,12 +3030,17 @@ void updateMijiaApp() {
     }
 }
 
-// BtnA：控制页与 Grid 切换当前设备开关（wasPressed 仅单帧有效）
+// BtnA：控制页 / Grid 切换当前设备；编组页切换整组
 void pollMijiaBtnA() {
     if (!M5Cardputer.BtnA.wasPressed()) {
         return;
     }
     if (mijiaHelpVisible) {
+        return;
+    }
+
+    if (mijiaGroupMode) {
+        toggleMijiaGroupPower();
         return;
     }
 
@@ -2491,7 +3071,9 @@ static void dismissMijiaHelp() {
     }
     mijiaHelpVisible = false;
     // 关闭 Help：继续查本页尚未拿到状态的设备
-    if (mijiaOverviewMode && mijiaOverviewGridMode) {
+    if (mijiaGroupMode) {
+        requestMijiaGroupPageRefresh();
+    } else if (mijiaOverviewMode && mijiaOverviewGridMode) {
         requestMijiaOverviewPageRefresh();
     }
     redrawMijiaScreen();
@@ -2499,15 +3081,15 @@ static void dismissMijiaHelp() {
 
 void handleMijiaApp(const String& key) {
     if (key == "h") {
-        if (mijiaOverviewGridMode || !mijiaOverviewMode) {
+        if (mijiaGroupMode || mijiaOverviewGridMode || !mijiaOverviewMode) {
             const bool opening = !mijiaHelpVisible;
             if (!opening) {
                 dismissMijiaHelp();
                 return;
             }
             mijiaHelpVisible = true;
-            // 打开 Help：取消宫格状态查询，避免返回结果盖住帮助页
-            if (mijiaOverviewGridMode) {
+            // 打开 Help：取消查询，避免返回结果盖住帮助页
+            if (mijiaGroupMode || mijiaOverviewGridMode) {
                 cancelMijiaPendingJobs();
             }
             redrawMijiaScreen();
@@ -2515,6 +3097,77 @@ void handleMijiaApp(const String& key) {
         return;
     }
     if (mijiaHelpVisible) {
+        return;
+    }
+
+    // d：进入/退出编组模式
+    if (key == "d") {
+        if (mijiaGroupMode) {
+            exitMijiaGroupMode();
+            redrawMijiaScreen();
+        } else {
+            enterMijiaGroupMode();
+            redrawMijiaScreen();
+        }
+        return;
+    }
+
+    if (mijiaGroupMode) {
+        if (key == "o") {
+            requestMijiaGroupPower(true);
+            return;
+        }
+        if (key == "i") {
+            requestMijiaGroupPower(false);
+            return;
+        }
+        if (key == "t") {
+            toggleMijiaGroupPower();
+            return;
+        }
+        if (key == "r") {
+            // 强制重查：清已知状态
+            const MijiaDeviceGroup* group = getCurrentMijiaGroup();
+            if (group != nullptr) {
+                for (int i = 0; i < group->member_count; i++) {
+                    const int idx = group->member_indices[i];
+                    if (idx >= 0 && idx < MIJIA_DEVICE_MAX) {
+                        mijiaOverviewUi[idx].power_known = false;
+                    }
+                }
+            }
+            requestMijiaGroupPageRefresh();
+            redrawMijiaScreen();
+            return;
+        }
+        if (key == "," || key == ";") {
+            switchMijiaGroup(-1);
+            return;
+        }
+        if (key == "." || key == "/") {
+            switchMijiaGroup(1);
+            return;
+        }
+        if (key == "[") {
+            switchMijiaGroupPage(-1);
+            return;
+        }
+        if (key == "]") {
+            switchMijiaGroupPage(1);
+            return;
+        }
+        if (key == "l") {
+            exitMijiaGroupMode();
+            enterMijiaOverview(false);
+            redrawMijiaScreen();
+            return;
+        }
+        if (key == "g") {
+            exitMijiaGroupMode();
+            enterMijiaOverview(true);
+            redrawMijiaScreen();
+            return;
+        }
         return;
     }
 
