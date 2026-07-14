@@ -127,9 +127,14 @@ static void noteCursorActivity() {
   g_periodic_refresh_active = false;
 }
 
-// 拉取结束后不立刻断 WiFi：留在 Cursor 会话内复用，避免 chart 拉取中途掉线
+// 拉取结束断开 WiFi 省电；下次请求再 ensureConfigWifi。
+// 后台 task 不调 Display 回调，仅关射频；header 由主循环 redraw 刷新。
 static void finishCursorWifi() {
-  // intentionally empty — 见 leaveCursorApp / releaseCursorWifi
+  g_chart_http_active = false;
+  g_chart_http_target = nullptr;
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  g_need_redraw = true;
 }
 
 static void releaseCursorWifi() {
@@ -1000,7 +1005,6 @@ static void drawCursorSummaryPage(const int y) {
   const int auto_w = M5Cardputer.Display.textWidth("Auto");
   const int api_w = M5Cardputer.Display.textWidth("API");
   const int label_w = (auto_w > api_w ? auto_w : api_w) + label_gap;
-  const int pct_reserve = M5Cardputer.Display.textWidth("100%") + label_gap;
 
   const bool has_reset = g_usage.reset_date[0] != '\0';
   const int row_count = g_usage.limit_cents > 0 ? (has_reset ? 4 : 3) : 2;
@@ -1012,10 +1016,13 @@ static void drawCursorSummaryPage(const int y) {
     M5Cardputer.Display.setTextColor(INFO_LABEL_COLOR, BLACK);
     M5Cardputer.Display.setCursor(APP_CONTENT_X, bar_y);
     M5Cardputer.Display.print(label);
-    snprintf(buf, sizeof(buf), "%.0f%%", pct);
-    drawPctBar(APP_CONTENT_X + label_w, bar_y, content_w - label_w - pct_reserve, bar_h, pct, color);
+    snprintf(buf, sizeof(buf), "%.2f%%", pct);
+    // 进度条按本行百分比实际宽度占满剩余空间
+    const int pct_w = M5Cardputer.Display.textWidth(buf);
+    const int bar_w = content_w - label_w - pct_w - label_gap;
+    drawPctBar(APP_CONTENT_X + label_w, bar_y, bar_w > 0 ? bar_w : 0, bar_h, pct, color);
     M5Cardputer.Display.setTextColor(INFO_VALUE_COLOR, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X + content_w - pct_reserve + label_gap, bar_y);
+    M5Cardputer.Display.setCursor(APP_CONTENT_X + content_w - pct_w, bar_y);
     M5Cardputer.Display.print(buf);
   };
 
@@ -1048,7 +1055,7 @@ static void drawCursorSummaryPage(const int y) {
     }
   } else {
     const int text_y = y + row_h * 2 + (row_h - INFO_LINE_H_2X) / 2;
-    snprintf(buf, sizeof(buf), "%.0f%%", 100.0f - g_usage.api_pct);
+    snprintf(buf, sizeof(buf), "%.2f%%", 100.0f - g_usage.api_pct);
     drawInfoLineAt(APP_CONTENT_X, text_y, "api left", buf, text_sz);
   }
 }
@@ -1359,11 +1366,6 @@ static void cursorFetchTaskFn(void* /*arg*/) {
   }
   if (!ensureConfigWifi(CURSOR_WIFI_TIMEOUT_MS)) {
     finish_fail("wifi fail");
-    // 后台 task 不断/关 WiFi 的 Display 回调，仅断开射频
-    if (!aborted()) {
-      WiFi.disconnect(true);
-      WiFi.mode(WIFI_OFF);
-    }
     g_task_running = false;
     vTaskDelete(nullptr);
     return;
