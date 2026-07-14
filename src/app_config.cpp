@@ -54,6 +54,8 @@ bool loadAppConfig() {
     g_config.brightness = 30; // 默认 30%
     g_config.time_key_sound = true; // 默认开
     g_config.mijia_on_off_sound = true;
+    g_config.time_default_mode = TimeDefaultMode::Up;
+    g_config.time_pure = false;
     copyField(g_config.timezone, sizeof(g_config.timezone), APP_TIMEZONE_DEFAULT);
 
     if (!LittleFS.exists(CONFIG_PATH)) {
@@ -111,6 +113,15 @@ bool loadAppConfig() {
     const char* tz = doc["timezone"];
     if (tz != nullptr && tz[0] != '\0') {
         copyField(g_config.timezone, sizeof(g_config.timezone), tz);
+    }
+
+    // Time：time.default / time.pure
+    g_config.time_default_mode = TimeDefaultMode::Up;
+    g_config.time_pure = false;
+    JsonObject time_obj = doc["time"];
+    if (!time_obj.isNull()) {
+        g_config.time_default_mode = parseTimeDefaultMode(time_obj["default"]);
+        g_config.time_pure = time_obj["pure"] | false;
     }
 
     JsonArray devices = doc["devices"].as<JsonArray>();
@@ -432,6 +443,122 @@ bool saveAppConfigTimezone(const char* timezone) {
     serializeJsonPretty(doc, out);
     out.close();
     return loadAppConfig();
+}
+
+const char* timeDefaultModeName(const TimeDefaultMode mode) {
+    switch (mode) {
+        case TimeDefaultMode::Ntp:
+            return "ntp";
+        case TimeDefaultMode::Countdown:
+            return "countdown";
+        case TimeDefaultMode::Stopwatch:
+            return "stopwatch";
+        case TimeDefaultMode::Up:
+        default:
+            return "up";
+    }
+}
+
+TimeDefaultMode parseTimeDefaultMode(const char* s) {
+    if (s == nullptr || s[0] == '\0') {
+        return TimeDefaultMode::Up;
+    }
+    if (strcmp(s, "ntp") == 0 || strcmp(s, "clock") == 0 || strcmp(s, "clk") == 0) {
+        return TimeDefaultMode::Ntp;
+    }
+    if (strcmp(s, "countdown") == 0 || strcmp(s, "cd") == 0) {
+        return TimeDefaultMode::Countdown;
+    }
+    if (strcmp(s, "stopwatch") == 0 || strcmp(s, "sw") == 0) {
+        return TimeDefaultMode::Stopwatch;
+    }
+    return TimeDefaultMode::Up;
+}
+
+bool saveAppConfigTimeDefaultMode(const TimeDefaultMode mode) {
+    JsonDocument doc;
+    if (LittleFS.exists(CONFIG_PATH)) {
+        File in = LittleFS.open(CONFIG_PATH, "r");
+        if (in) {
+            const DeserializationError err = deserializeJson(doc, in);
+            in.close();
+            if (err) {
+                doc.clear();
+            }
+        }
+    }
+
+    JsonObject time_obj = doc["time"].as<JsonObject>();
+    if (time_obj.isNull()) {
+        time_obj = doc["time"].to<JsonObject>();
+    }
+    time_obj["default"] = timeDefaultModeName(mode);
+
+    if (doc["devices"].isNull()) {
+        doc["devices"].to<JsonArray>();
+    }
+
+    File out = LittleFS.open(CONFIG_PATH, "w");
+    if (!out) {
+        return false;
+    }
+    serializeJsonPretty(doc, out);
+    out.close();
+    return loadAppConfig();
+}
+
+bool saveAppConfigTimePure(const bool enabled) {
+    JsonDocument doc;
+    if (LittleFS.exists(CONFIG_PATH)) {
+        File in = LittleFS.open(CONFIG_PATH, "r");
+        if (in) {
+            const DeserializationError err = deserializeJson(doc, in);
+            in.close();
+            if (err) {
+                doc.clear();
+            }
+        }
+    }
+
+    JsonObject time_obj = doc["time"].as<JsonObject>();
+    if (time_obj.isNull()) {
+        time_obj = doc["time"].to<JsonObject>();
+    }
+    time_obj["pure"] = enabled;
+
+    if (doc["devices"].isNull()) {
+        doc["devices"].to<JsonArray>();
+    }
+
+    File out = LittleFS.open(CONFIG_PATH, "w");
+    if (!out) {
+        return false;
+    }
+    serializeJsonPretty(doc, out);
+    out.close();
+    return loadAppConfig();
+}
+
+const char* cycleAppTimezonePreset(const char* current, const int delta) {
+    static const char* kPresets[] = {
+        "CST-8", "JST-9", "KST-9", "UTC", "GMT0", "CET-1", "EST5", "PST8",
+    };
+    constexpr int n = static_cast<int>(sizeof(kPresets) / sizeof(kPresets[0]));
+    int idx = 0;
+    if (current != nullptr && current[0] != '\0') {
+        for (int i = 0; i < n; i++) {
+            if (strcmp(current, kPresets[i]) == 0) {
+                idx = i;
+                break;
+            }
+        }
+    }
+    const int d = delta == 0 ? 1 : delta;
+    idx = (idx + d) % n;
+    if (idx < 0) {
+        idx += n;
+    }
+    return kPresets[idx];
 }
 
 uint8_t brightnessPercentToHw(const uint8_t percent) {

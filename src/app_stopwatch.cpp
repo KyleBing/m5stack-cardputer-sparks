@@ -161,9 +161,7 @@ void redrawStopwatchApp() {
 }
 
 void enterStopwatchApp() {
-    swRunning = false;
-    swAccumMs = 0;
-    swStartMs = 0;
+    // 保留运行态：离开后再进入按 millis 还原已计时长
     swScreenReady = false;
     swTimeState = BigTimeState{};
     if (isTimeKeySoundEnabled()) {

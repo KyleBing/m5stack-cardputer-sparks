@@ -251,7 +251,10 @@ static void drawTimeHelpScreen() {
 
 static void redrawCurrentTimeMode() {
     timeHelpVisible = false;
-    timePureVisible = false;
+    if (timePureVisible) {
+        drawTimePureApp(true);
+        return;
+    }
     switch (timeMode) {
         case TimeMode::UPTIME:
             drawUptimeApp(true);
@@ -549,25 +552,34 @@ static void drawUptimeApp(const bool full_init) {
 
 static void enterClockMode(const bool force_sync) {
     timeMode = TimeMode::CLOCK;
-    timePureVisible = false;
     rtcScreenReady = false;
     uptimeScreenReady = false;
     rtcLastTime[0] = '\0';
     rtcLastDate[0] = '\0';
     rtcLastSrc[0] = '\0';
     syncClockTimeIfNeeded(force_sync);
-    drawRtcApp(true);
+    if (timePureVisible) {
+        drawRtcPureApp(true);
+    } else {
+        drawRtcApp(true);
+    }
 }
 
 static void enterTimeMode(const TimeMode mode) {
     timeHelpVisible = false;
-    timePureVisible = false;
-    // 切走 countdown 时停掉闹钟
-    if (timeMode == TimeMode::COUNTDOWN && mode != TimeMode::COUNTDOWN) {
-        leaveCountdownApp();
-    }
     if (mode == TimeMode::CLOCK) {
-        enterClockMode(false);
+        timeMode = TimeMode::CLOCK;
+        rtcScreenReady = false;
+        uptimeScreenReady = false;
+        rtcLastTime[0] = '\0';
+        rtcLastDate[0] = '\0';
+        rtcLastSrc[0] = '\0';
+        syncClockTimeIfNeeded(false);
+        if (timePureVisible) {
+            drawRtcPureApp(true);
+        } else {
+            drawRtcApp(true);
+        }
         return;
     }
 
@@ -575,7 +587,11 @@ static void enterTimeMode(const TimeMode mode) {
     if (mode == TimeMode::UPTIME) {
         uptimeScreenReady = false;
         uptimeTimeState = BigTimeState{};
-        drawUptimeApp(true);
+        if (timePureVisible) {
+            drawUptimePureApp(true);
+        } else {
+            drawUptimeApp(true);
+        }
     } else if (mode == TimeMode::COUNTDOWN) {
         enterCountdownApp();
     } else if (mode == TimeMode::STOPWATCH) {
@@ -584,12 +600,27 @@ static void enterTimeMode(const TimeMode mode) {
 }
 
 void enterRtcApp() {
-    timeMode = TimeMode::UPTIME;
-    timePureVisible = false;
+    timePureVisible = getAppConfig().time_pure;
     uptimeScreenReady = false;
     uptimeTimeState = BigTimeState{};
     rtcScreenReady = false;
-    drawUptimeApp(true);
+
+    // 按配置进入默认模块
+    switch (getAppConfig().time_default_mode) {
+        case TimeDefaultMode::Ntp:
+            enterTimeMode(TimeMode::CLOCK);
+            break;
+        case TimeDefaultMode::Countdown:
+            enterTimeMode(TimeMode::COUNTDOWN);
+            break;
+        case TimeDefaultMode::Stopwatch:
+            enterTimeMode(TimeMode::STOPWATCH);
+            break;
+        case TimeDefaultMode::Up:
+        default:
+            enterTimeMode(TimeMode::UPTIME);
+            break;
+    }
 }
 
 void updateRtcApp() {
@@ -667,6 +698,7 @@ void handleTimeApp(const Keyboard_Class::KeysState& status) {
     if (timePureVisible) {
         if (key == 'p') {
             timePureVisible = false;
+            saveAppConfigTimePure(false);
             redrawCurrentTimeMode();
             return;
         }
@@ -746,6 +778,7 @@ void handleTimeApp(const Keyboard_Class::KeysState& status) {
     }
     if (key == 'p') {
         timePureVisible = true;
+        saveAppConfigTimePure(true);
         drawTimePureApp(true);
         return;
     }
@@ -759,4 +792,16 @@ void handleTimeApp(const Keyboard_Class::KeysState& status) {
 
 bool isTimePureMode() {
     return timePureVisible;
+}
+
+void presentCountdownAlarmUi() {
+    timeHelpVisible = false;
+    timeMode = TimeMode::COUNTDOWN;
+    // 到期页需看到取消提示；跟随已保存的 pure 偏好
+    timePureVisible = getAppConfig().time_pure;
+    enterCountdownApp();
+}
+
+bool isTimeCountdownUiActive() {
+    return timeMode == TimeMode::COUNTDOWN && !timeHelpVisible;
 }

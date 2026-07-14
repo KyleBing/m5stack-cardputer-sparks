@@ -211,7 +211,7 @@ void mijiaFormatGridStatusTag(const MijiaUiState& ui, MijiaGridStatusTag& tag) {
         return;
     }
     if (ui.humidity_known) {
-        snprintf(tag.text, sizeof(tag.text), "%d%%", static_cast<int>(ui.humidity + 0.5f));
+        snprintf(tag.text, sizeof(tag.text), "%.1f%%", ui.humidity);
         tag.active = true;
         tag.bg = CYAN;
         return;
@@ -912,19 +912,22 @@ int drawMijiaDeviceControls(const MijiaDevice* dev, const MijiaDevKind kind,
             // 温湿度常分开发；两行固定占位，后到的字段补齐
             int cy = y;
             char buf[16];
+            // 值用白字；温度末尾空格与湿度 % 同宽对齐（默认字库无单宽 ℃）
             if (ui.temp_known) {
-                snprintf(buf, sizeof(buf), "%.1f", ui.temperature);
+                snprintf(buf, sizeof(buf), "%.1f ", ui.temperature);
             } else {
-                strncpy(buf, "--", sizeof(buf));
+                strncpy(buf, "--  ", sizeof(buf));
+                buf[sizeof(buf) - 1] = '\0';
             }
-            cy = drawMijiaKvRow(x, cy, w, "temp", buf, CYAN, 2);
+            cy = drawMijiaKvRow(x, cy, w, "temp", buf, APP_COLOR_VALUE, 2);
 
             if (ui.humidity_known) {
-                snprintf(buf, sizeof(buf), "%.0f%%", ui.humidity);
+                snprintf(buf, sizeof(buf), "%.1f%%", ui.humidity);
             } else {
-                strncpy(buf, "--", sizeof(buf));
+                strncpy(buf, "--  ", sizeof(buf));
+                buf[sizeof(buf) - 1] = '\0';
             }
-            cy = drawMijiaKvRow(x, cy, w, "hum", buf, CYAN, 2);
+            cy = drawMijiaKvRow(x, cy, w, "hum", buf, APP_COLOR_VALUE, 2);
 
             if (ui.battery_known) {
                 snprintf(buf, sizeof(buf), "%d%%", ui.battery);

@@ -70,5 +70,9 @@
   "sound": {
     "time_key": true,
     "mijia_on_off": true
+  },
+  "time": {
+    "default": "up",
+    "pure": false
   }
 }

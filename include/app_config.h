@@ -30,6 +30,14 @@ static constexpr int CURSOR_TOKEN_MAX = 1024;
 // POSIX TZ 默认东八区（NTP 为 UTC，显示靠此字段）
 static constexpr const char* APP_TIMEZONE_DEFAULT = "CST-8";
 
+// Time 入口默认模块（config: time.default）
+enum class TimeDefaultMode : uint8_t {
+    Up = 0,
+    Ntp = 1,
+    Countdown = 2,
+    Stopwatch = 3,
+};
+
 struct AppConfig {
     char wifi_ssid[33];
     char wifi_password[65];
@@ -38,6 +46,8 @@ struct AppConfig {
     uint8_t brightness;      // 配置存 0~100；setBrightness 时再转 0~255
     bool time_key_sound;     // Time 内按键声（countdown 到点闹钟不受影响）
     bool mijia_on_off_sound; // 米家开/关提示音
+    TimeDefaultMode time_default_mode; // 按 T 进入 Time 时的默认模块
+    bool time_pure;                    // Time 是否默认 pure 全屏
     MijiaDevice devices[MIJIA_DEVICE_MAX];
     int device_count;
     MijiaDeviceGroup device_groups[MIJIA_GROUP_MAX];
@@ -68,6 +78,19 @@ bool saveAppConfigMijiaOnOffSound(bool enabled);
 
 // 更新时区（POSIX TZ）并写回
 bool saveAppConfigTimezone(const char* timezone);
+
+// 更新 Time 默认模块并写回
+bool saveAppConfigTimeDefaultMode(TimeDefaultMode mode);
+
+// 更新 Time pure 偏好并写回
+bool saveAppConfigTimePure(bool enabled);
+
+// Time 默认模块 ↔ 配置字符串
+const char* timeDefaultModeName(TimeDefaultMode mode);
+TimeDefaultMode parseTimeDefaultMode(const char* s);
+
+// 常用时区预设（Settings 里 -= 循环）
+const char* cycleAppTimezonePreset(const char* current, int delta);
 
 // 亮度：配置 0~100 ↔ 硬件 0~255
 uint8_t brightnessPercentToHw(uint8_t percent);

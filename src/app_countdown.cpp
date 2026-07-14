@@ -620,45 +620,56 @@ void redrawCountdownApp() {
 }
 
 void enterCountdownApp() {
-    cdStopAlarm();
-    cdPhase = CountdownPhase::SETUP;
-    cdHours = 0;
-    cdMinutes = 5;
-    cdSeconds = 0;
-    cdField = 0;
-    cdRemainMs = 0;
+    // 保留 phase / endMs / 编辑值；仅重绘
     cdScreenReady = false;
     cdInvalidateTimeCache();
-    if (isTimeKeySoundEnabled()) {
+    if (isTimeKeySoundEnabled() || cdAlarmActive) {
         warmUpSpeakerIfNeeded();
     }
     drawCountdownApp(true);
 }
 
 void leaveCountdownApp() {
-    cdStopAlarm();
+    // 后台继续跑：不改 phase / endMs；响铃由 dismiss 或 reset 停
 }
 
-void updateCountdownApp() {
-    cdUpdateAlarm();
-
+// 检测 RUNNING 到期；返回是否刚进入 FINISHED（并启动闹钟）
+bool pollCountdownBackground() {
+    bool just_expired = false;
     if (cdPhase == CountdownPhase::RUNNING) {
         const int32_t left = static_cast<int32_t>(cdEndMs - millis());
         if (left <= 0) {
             cdRemainMs = 0;
             cdPhase = CountdownPhase::FINISHED;
-            cdStartAlarm();
-            cdInvalidateTimeCache();
-            drawCountdownApp(true);
-            return;
+            if (!cdAlarmActive) {
+                cdStartAlarm();
+            }
+            just_expired = true;
         }
+    }
 
+    // 不在 CD 页时也要推进滴滴
+    if (cdAlarmActive) {
+        cdUpdateAlarm();
+    }
+    return just_expired;
+}
+
+bool isCountdownAlarmRinging() {
+    return cdPhase == CountdownPhase::FINISHED && cdAlarmActive;
+}
+
+void updateCountdownApp() {
+    // 到期由 main 里 pollCountdownBackground 统一处理；此处只刷新剩余时间
+    if (cdPhase == CountdownPhase::RUNNING) {
         static uint32_t last_tick_ms = 0;
         if (millis() - last_tick_ms >= 200) {
             last_tick_ms = millis();
             drawCountdownApp(false);
         }
     }
+
+    cdUpdateAlarm();
 }
 
 void pollCountdownBtnA() {

@@ -6,6 +6,22 @@
 
 ---
 
+## 2026-07-14
+
+### 新增
+
+- **Infrared**：TV 改为遥控器垫 UI（对齐 AC）；顶部 **TV / AC** tab 切换（`t`）
+- **Time**：秒表 / 倒计时可后台运行（按 `millis` 记起止点，本次上电有效）；倒计时到点强制切入 CD 界面并响铃
+- **Settings**：**clock** 面板 — `default` / `tz`（常用时区预设）/ `pure`；`time.pure` 写入 `config.json`；Time 内 `p` 同步保存
+- **Web 配网**：系统页可配置 Time 默认模块（`time.default`）
+- **Cursor**：用量图表分页拉取改走 FreeRTOS 后台 task，主循环可取消；拉取中可复用 WiFi 会话
+
+### 改进
+
+- **Mijia** 温湿度：湿度宫格/控制页显示一位小数；温度/湿度数值改白字并对齐占位
+
+---
+
 ## 2026-07-13
 
 ### 新增
