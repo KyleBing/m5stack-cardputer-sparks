@@ -29,6 +29,15 @@ void updateMenuScreenBattery(int page_count);
 
 // 清屏并绘制子界面 header
 void beginAppScreen(const char* title, bool draw_divider = true);
+// 清屏并绘制带电池的子界面 header（如 Cursor）
+void beginAppScreenWithBattery(const char* title, bool draw_divider = true);
+// 清屏并绘制带电池 + 次要色后缀的 header
+void beginAppScreenAccentWithBattery(const char* title, const char* accent, uint16_t accent_color,
+                                     bool draw_divider = true);
+// 仅重绘带电池的 header（不清屏，用于翻页改副标题）
+void drawAppScreenHeaderWithBattery(const char* title, bool draw_divider = true);
+void drawAppScreenHeaderAccentWithBattery(const char* title, const char* accent,
+                                          uint16_t accent_color, bool draw_divider = true);
 // 清屏并绘制带次要色后缀的 header
 void beginAppScreenAccent(const char* title, const char* accent, uint16_t accent_color,
                           bool draw_divider = true);

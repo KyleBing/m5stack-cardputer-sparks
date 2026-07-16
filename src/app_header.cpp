@@ -9,6 +9,7 @@ static constexpr int HEADER_STATUS_GAP = 5;
 static constexpr int APP_BACK_BTN_W = ICON_BACK_W;
 static constexpr int HEADER_STATUS_CLEAR_PAD = 2;
 static bool s_app_header_draw_divider = true;
+static bool s_app_header_include_battery = false;
 
 static int headerStatusIconY(const int icon_h) {
     return (APP_HEADER_H - icon_h) / 2;
@@ -121,7 +122,7 @@ void drawAppScreenHeaderAccent(const char* title, const char* accent, const uint
     }
 
     const int status_right = screen_w - 2 - APP_BACK_BTN_W - 4;
-    drawHeaderStatusIcons(status_right, false);
+    drawHeaderStatusIcons(status_right, s_app_header_include_battery);
     drawBackButton(screen_w);
     if (draw_divider) {
         drawHeaderDivider(screen_w);
@@ -185,7 +186,9 @@ void updateAppHeaderStatus() {
     const int status_right = screen_w - 2 - APP_BACK_BTN_W - 4;
     const bool wifi = isWifiStaConnected();
     const bool ble = isBleStackReady();
-    const int left_x = headerStatusLeftX(status_right, false, wifi, ble, false);
+    const bool charging = isBatteryCharging();
+    const int left_x =
+        headerStatusLeftX(status_right, s_app_header_include_battery, wifi, ble, charging);
     int clear_left = left_x - HEADER_STATUS_CLEAR_PAD;
     if (clear_left < 0) {
         clear_left = 0;
@@ -194,7 +197,7 @@ void updateAppHeaderStatus() {
         clear_left = prev_clear_left;
     }
     clearHeaderStatusArea(clear_left, status_right);
-    drawHeaderStatusIcons(status_right, false);
+    drawHeaderStatusIcons(status_right, s_app_header_include_battery);
     if (s_app_header_draw_divider) {
         drawHeaderDivider(screen_w);
     }
@@ -209,14 +212,44 @@ void updateMenuScreenBattery(const int page_count) {
 }
 
 void beginAppScreen(const char* title, const bool draw_divider) {
+    s_app_header_include_battery = false;
     M5Cardputer.Display.clear();
     drawAppScreenHeader(title, draw_divider);
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(WHITE, BLACK);
 }
 
+void beginAppScreenWithBattery(const char* title, const bool draw_divider) {
+    s_app_header_include_battery = true;
+    M5Cardputer.Display.clear();
+    drawAppScreenHeader(title, draw_divider);
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setTextColor(WHITE, BLACK);
+}
+
+void beginAppScreenAccentWithBattery(const char* title, const char* accent,
+                                     const uint16_t accent_color, const bool draw_divider) {
+    s_app_header_include_battery = true;
+    M5Cardputer.Display.clear();
+    drawAppScreenHeaderAccent(title, accent, accent_color, draw_divider);
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setTextColor(WHITE, BLACK);
+}
+
+void drawAppScreenHeaderWithBattery(const char* title, const bool draw_divider) {
+    s_app_header_include_battery = true;
+    drawAppScreenHeader(title, draw_divider);
+}
+
+void drawAppScreenHeaderAccentWithBattery(const char* title, const char* accent,
+                                          const uint16_t accent_color, const bool draw_divider) {
+    s_app_header_include_battery = true;
+    drawAppScreenHeaderAccent(title, accent, accent_color, draw_divider);
+}
+
 void beginAppScreenAccent(const char* title, const char* accent, const uint16_t accent_color,
                           const bool draw_divider) {
+    s_app_header_include_battery = false;
     M5Cardputer.Display.clear();
     drawAppScreenHeaderAccent(title, accent, accent_color, draw_divider);
     M5Cardputer.Display.setTextSize(2);

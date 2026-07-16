@@ -67,12 +67,12 @@ void getTimePureDisplayArea(int& area_y, int& area_h) {
     area_h = M5Cardputer.Display.height();
 }
 
-void splitTimeMs(const uint32_t elapsed_ms, int& hours, int& minutes, int& seconds, int& frac) {
-    frac = static_cast<int>(elapsed_ms % 1000u);
-    const uint32_t total_sec = elapsed_ms / 1000u;
-    seconds = static_cast<int>(total_sec % 60u);
-    minutes = static_cast<int>((total_sec / 60u) % 60u);
-    hours = static_cast<int>((total_sec / 3600u) % 100u);
+void splitTimeMs(const uint64_t elapsed_ms, int& hours, int& minutes, int& seconds, int& frac) {
+    frac = static_cast<int>(elapsed_ms % 1000ULL);
+    const uint64_t total_sec = elapsed_ms / 1000ULL;
+    seconds = static_cast<int>(total_sec % 60ULL);
+    minutes = static_cast<int>((total_sec / 60ULL) % 60ULL);
+    hours = static_cast<int>((total_sec / 3600ULL) % 100ULL);
 }
 
 static int calcTextSizeForWidth(const char* text, const int max_w) {

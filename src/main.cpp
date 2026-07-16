@@ -20,6 +20,7 @@
 #include "app_mic.h"
 #include <WiFi.h>
 #include <esp_sleep.h>
+#include <esp_timer.h>
 #include <driver/rtc_io.h>
 #include <esp_chip_info.h>
 #include <esp_system.h>
@@ -875,20 +876,20 @@ static void formatInfoFeatures(char* out, const size_t out_size, const uint32_t 
     }
 }
 
-// 运行时长
+// 运行时长（上电起算；light sleep 期间 esp_timer 不停）
 static void formatInfoUptime(char* out, const size_t out_size) {
-    const uint32_t sec = millis() / 1000UL;
-    const uint32_t h = sec / 3600UL;
-    const uint32_t m = (sec % 3600UL) / 60UL;
-    const uint32_t s = sec % 60UL;
+    const uint64_t sec = static_cast<uint64_t>(esp_timer_get_time() / 1000000LL);
+    const uint64_t h = sec / 3600ULL;
+    const uint64_t m = (sec % 3600ULL) / 60ULL;
+    const uint64_t s = sec % 60ULL;
     if (h > 0) {
-        snprintf(out, out_size, "%luh %lum %lus", static_cast<unsigned long>(h),
-                 static_cast<unsigned long>(m), static_cast<unsigned long>(s));
+        snprintf(out, out_size, "%lluh %llum %llus", static_cast<unsigned long long>(h),
+                 static_cast<unsigned long long>(m), static_cast<unsigned long long>(s));
     } else if (m > 0) {
-        snprintf(out, out_size, "%lum %lus", static_cast<unsigned long>(m),
-                 static_cast<unsigned long>(s));
+        snprintf(out, out_size, "%llum %llus", static_cast<unsigned long long>(m),
+                 static_cast<unsigned long long>(s));
     } else {
-        snprintf(out, out_size, "%lus", static_cast<unsigned long>(s));
+        snprintf(out, out_size, "%llus", static_cast<unsigned long long>(s));
     }
 }
 
@@ -2770,9 +2771,11 @@ void loop() {
         }
     }
 
-    // 实时 app 不休眠；其它状态 yield 10ms
-    if (currentState != AppState::BMI && currentState != AppState::MIC &&
-        currentState != AppState::RTC) {
+    // 实时 app 不休眠；Cursor 无操作 5 分钟后 1s 一拍，否则 10ms；其它状态 yield 10ms
+    if (currentState == AppState::CURSOR && isCursorIdleSlowLoop()) {
+        delay(1000);
+    } else if (currentState != AppState::BMI && currentState != AppState::MIC &&
+               currentState != AppState::RTC) {
         delay(10);
     }
 }

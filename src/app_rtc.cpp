@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <esp_timer.h>
 #include <time.h>
 
 enum class TimeMode {
@@ -410,7 +411,9 @@ static void drawUptimePureApp(const bool full_init) {
     int minutes = 0;
     int seconds = 0;
     int frac = 0;
-    splitTimeMs(millis(), hours, minutes, seconds, frac);
+    // esp_timer 在 light sleep 期间继续计时，millis() 会停表
+    splitTimeMs(static_cast<uint64_t>(esp_timer_get_time() / 1000LL), hours, minutes, seconds,
+                frac);
 
     int area_y = 0;
     int area_h = 0;
@@ -533,7 +536,9 @@ static void drawUptimeApp(const bool full_init) {
     int minutes = 0;
     int seconds = 0;
     int frac = 0;
-    splitTimeMs(millis(), hours, minutes, seconds, frac);
+    // esp_timer 在 light sleep 期间继续计时，millis() 会停表
+    splitTimeMs(static_cast<uint64_t>(esp_timer_get_time() / 1000LL), hours, minutes, seconds,
+                frac);
 
     if (full_init || !uptimeScreenReady) {
         beginAppScreenAccent("Time ", "UP", APP_COLOR_LABEL);
@@ -695,9 +700,10 @@ void handleTimeApp(const Keyboard_Class::KeysState& status) {
 
     if (timePureVisible) {
         if (key == 'p') {
+            // 先退出 Pure 界面，再异步写配置，避免卡在保存上
             timePureVisible = false;
-            saveAppConfigTimePure(false);
             redrawCurrentTimeMode();
+            saveAppConfigTimePure(false);
             return;
         }
         if (key == 'h') {
@@ -775,9 +781,10 @@ void handleTimeApp(const Keyboard_Class::KeysState& status) {
         return;
     }
     if (key == 'p') {
+        // 先进入 Pure 界面，再写配置，避免 FS 保存拖慢切换
         timePureVisible = true;
-        saveAppConfigTimePure(true);
         drawTimePureApp(true);
+        saveAppConfigTimePure(true);
         return;
     }
 

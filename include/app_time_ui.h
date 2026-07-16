@@ -2,6 +2,7 @@
 
 #include "M5Cardputer.h"
 #include "app_common.h"
+#include <cstdint>
 
 static constexpr int TIME_TAG_H = 12;
 static constexpr int TIME_HINT_ROW_H = 12;
@@ -42,5 +43,5 @@ struct BigTimeState {
 void drawBigTimeDisplay(BigTimeState& state, int area_y, int area_h, int hours, int minutes,
                         int seconds, int frac_ms, bool show_ms, bool force);
 
-// 毫秒时间戳转时分秒
-void splitTimeMs(uint32_t elapsed_ms, int& hours, int& minutes, int& seconds, int& frac);
+// 毫秒时间戳转时分秒（支持 power-on uptime 的 64 位毫秒）
+void splitTimeMs(uint64_t elapsed_ms, int& hours, int& minutes, int& seconds, int& frac);

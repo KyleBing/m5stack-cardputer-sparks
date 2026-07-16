@@ -19,12 +19,16 @@
 
 static constexpr const char* CURSOR_HOST = "https://cursor.com";
 static constexpr int CURSOR_DAYS_MAX = 31;
+static constexpr int CURSOR_HOURS = 24;
+static constexpr int CURSOR_CHART_PAGE_SIZE = 500; // 7d/30d/24h 每页条数
 static constexpr uint32_t CURSOR_IDLE_TRIGGER_MS = 60000;
 static constexpr uint32_t CURSOR_REFRESH_INTERVAL_MS = 300000;
+static constexpr uint32_t CURSOR_SLOW_LOOP_IDLE_MS = 300000; // 无操作 5 分钟后主循环 1s 一拍
 static constexpr uint32_t CURSOR_WIFI_TIMEOUT_MS = 5000;
 static constexpr int CURSOR_BAR_MARGIN_X = 5;
 static constexpr int CURSOR_SUMMARY_PAD_X = 10; // 摘要页进度条左右 padding
-static constexpr int CURSOR_CHART_ETA_7_SEC = 14;  // 图表 7 天预计加载时间
+static constexpr int CURSOR_CHART_ETA_24_SEC = 5;   // 当天 24h 预计加载时间
+static constexpr int CURSOR_CHART_ETA_7_SEC = 14;   // 图表 7 天预计加载时间
 static constexpr int CURSOR_CHART_ETA_30_SEC = 30;  // 图表 30 天预计加载时间
 
 enum class CursorPhase {
@@ -37,8 +41,9 @@ enum class CursorPhase {
 
 enum class CursorPage {
     SUMMARY = 0,
-    CHART_7 = 1,
-    CHART_30 = 2,
+    CHART_24 = 1,
+    CHART_7 = 2,
+    CHART_30 = 3,
 };
 
 enum class CursorFetchMode {
@@ -71,12 +76,16 @@ static char g_cookie[CURSOR_TOKEN_MAX + 64] = "";
 static int g_user_id = 0;
 static CursorUsageData g_usage{};
 static uint32_t g_last_period_fetch_ms = 0;
+static uint32_t g_last_chart_24_fetch_ms = 0;
 static uint32_t g_last_chart_7_fetch_ms = 0;
 static uint32_t g_last_chart_30_fetch_ms = 0;
+static float g_chart_24_cents[CURSOR_HOURS]{};
 static float g_chart_7_cents[7]{};
 static float g_chart_30_cents[30]{};
+static bool g_chart_24_ready = false;
 static bool g_chart_7_ready = false;
 static bool g_chart_30_ready = false;
+static char g_chart_24_error[32] = "";
 static char g_chart_7_error[32] = "";
 static char g_chart_30_error[32] = "";
 static int g_chart_fetch_days = 7;
@@ -170,6 +179,8 @@ static void triggerCursorIdleRefresh() {
 
   if (g_page == CursorPage::SUMMARY) {
     beginCursorFetch(CursorFetchMode::PERIOD);
+  } else if (g_page == CursorPage::CHART_24 && g_chart_24_ready) {
+    beginCursorChartFetch(24, true);
   } else if (g_page == CursorPage::CHART_7 && g_chart_7_ready) {
     beginCursorChartFetch(7, true);
   } else if (g_page == CursorPage::CHART_30 && g_chart_30_ready) {
@@ -177,13 +188,33 @@ static void triggerCursorIdleRefresh() {
   }
 }
 
-// 仅刷新内容区
+// 仅刷新内容区；图表页 header 带 24h/7d/30d 副标题
 static void redrawCursorContent() {
-    if (g_screen_ready) {
-        clearAppContentArea();
-    } else {
-        beginAppScreen("Cursor");
+    const char* accent = nullptr;
+    if (g_page == CursorPage::CHART_24) {
+        accent = "24h";
+    } else if (g_page == CursorPage::CHART_7) {
+        accent = "7d";
+    } else if (g_page == CursorPage::CHART_30) {
+        accent = "30d";
+    }
+
+    if (!g_screen_ready) {
+        if (accent != nullptr) {
+            beginAppScreenAccentWithBattery("Cursor ", accent, APP_COLOR_LABEL);
+        } else {
+            beginAppScreenWithBattery("Cursor");
+        }
         g_screen_ready = true;
+        return;
+    }
+
+    clearAppContentArea();
+    // 翻页时同步 header 副标题
+    if (accent != nullptr) {
+        drawAppScreenHeaderAccentWithBattery("Cursor ", accent, APP_COLOR_LABEL);
+    } else {
+        drawAppScreenHeaderWithBattery("Cursor");
     }
 }
 
@@ -437,9 +468,34 @@ static void accumulateEventDay(const int64_t ts_ms, const float cents, const int
   }
 }
 
+// 将事件累计到当天 24 小时桶（index = 本地小时 0..23）
+static void accumulateEventHour(const int64_t ts_ms, const float cents, float* hourly_out) {
+  if (ts_ms <= 0 || hourly_out == nullptr) {
+    return;
+  }
+  const time_t today_start = dayStartEpoch(0);
+  if (today_start <= 0) {
+    return;
+  }
+  const time_t event_sec = static_cast<time_t>(ts_ms / 1000);
+  if (event_sec < today_start || event_sec >= today_start + 86400) {
+    return;
+  }
+  const int hour = static_cast<int>((event_sec - today_start) / 3600);
+  if (hour >= 0 && hour < CURSOR_HOURS) {
+    hourly_out[hour] += cents;
+  }
+}
+
 // 拉取每日用量：启动分页状态（不阻塞）
 static char* chartErrorBuf(const int days) {
-  return (days == 30) ? g_chart_30_error : g_chart_7_error;
+  if (days == 30) {
+    return g_chart_30_error;
+  }
+  if (days == 24) {
+    return g_chart_24_error;
+  }
+  return g_chart_7_error;
 }
 
 static bool beginChartPagedFetch(const int range_days, float* daily_out) {
@@ -447,14 +503,17 @@ static bool beginChartPagedFetch(const int range_days, float* daily_out) {
     return false;
   }
   const int64_t end_ms = static_cast<int64_t>(time(nullptr)) * 1000LL;
-  const time_t start_sec = dayStartEpoch(range_days - 1);
+  // 24h：只请求当天；7/30：从 range 起点到现在
+  const time_t start_sec =
+      (range_days == 24) ? dayStartEpoch(0) : dayStartEpoch(range_days - 1);
   if (start_sec <= 0) {
     strncpy(chartErrorBuf(range_days), "time sync", 32);
     chartErrorBuf(range_days)[31] = '\0';
     return false;
   }
 
-  memset(daily_out, 0, sizeof(float) * static_cast<size_t>(range_days));
+  const int bucket_count = (range_days == 24) ? CURSOR_HOURS : range_days;
+  memset(daily_out, 0, sizeof(float) * static_cast<size_t>(bucket_count));
   chartErrorBuf(range_days)[0] = '\0';
 
   g_chart_http_target = daily_out;
@@ -490,9 +549,10 @@ static int stepChartPagedFetch() {
   char body[160];
   snprintf(body, sizeof(body),
            "{\"teamId\":0,\"startDate\":\"%lld\",\"endDate\":\"%lld\",\"userId\":%d,"
-           "\"page\":%d,\"pageSize\":100}",
+           "\"page\":%d,\"pageSize\":%d}",
            static_cast<long long>(g_chart_http_start_ms),
-           static_cast<long long>(g_chart_http_end_ms), g_user_id, g_chart_http_page);
+           static_cast<long long>(g_chart_http_end_ms), g_user_id, g_chart_http_page,
+           CURSOR_CHART_PAGE_SIZE);
 
   String response;
   int code = 0;
@@ -546,11 +606,16 @@ static int stepChartPagedFetch() {
     if (cents <= 0.0f) {
       cents = ev["chargedCents"] | 0.0f;
     }
-    accumulateEventDay(ts, cents, g_chart_fetch_days, g_chart_http_target);
+    if (g_chart_fetch_days == 24) {
+      accumulateEventHour(ts, cents, g_chart_http_target);
+    } else {
+      accumulateEventDay(ts, cents, g_chart_fetch_days, g_chart_http_target);
+    }
     g_chart_http_fetched++;
   }
 
-  if (g_chart_http_fetched >= g_chart_http_total || events.size() < 100) {
+  if (g_chart_http_fetched >= g_chart_http_total ||
+      static_cast<int>(events.size()) < CURSOR_CHART_PAGE_SIZE) {
     g_chart_http_active = false;
     return 1;
   }
@@ -690,8 +755,11 @@ static void drawPctBar(const int x, const int y, const int w, const int h, const
 static constexpr int CURSOR_BAR_LABEL_PAD = 3;
 static constexpr int CURSOR_BAR_LABEL_H = CURSOR_BAR_LABEL_PAD + 8 + CURSOR_BAR_LABEL_PAD;
 
-// 空间不足时稀疏显示日期（如 1 5 10 15 20 25 30）
+// 空间不足时稀疏显示日期（如 1 5 10 15 20 25 30）；24h 每 3 小时一个 label
 static bool shouldShowBarDayLabel(const int i, const int days, const int bar_w) {
+  if (days == 24) {
+    return (i % 3) == 0;
+  }
   if (days <= 7 || bar_w >= 10) {
     return true;
   }
@@ -763,15 +831,18 @@ static void drawDailyBars(const int x, const int y, const int w, const int bar_h
       continue;
     }
 
-    const time_t day_ts = dayStartEpoch(days - 1 - i);
-    int mday = i + 1;
-    struct tm local_tm;
-    if (day_ts > 0 && localtime_r(&day_ts, &local_tm) != nullptr) {
-      mday = local_tm.tm_mday;
-    }
-
     char lbl[4];
-    snprintf(lbl, sizeof(lbl), "%d", mday);
+    if (days == 24) {
+      snprintf(lbl, sizeof(lbl), "%d", i);
+    } else {
+      const time_t day_ts = dayStartEpoch(days - 1 - i);
+      int mday = i + 1;
+      struct tm local_tm;
+      if (day_ts > 0 && localtime_r(&day_ts, &local_tm) != nullptr) {
+        mday = local_tm.tm_mday;
+      }
+      snprintf(lbl, sizeof(lbl), "%d", mday);
+    }
     const int tw = M5Cardputer.Display.textWidth(lbl);
     const int tx = bar_x + (bar_w - tw) / 2;
     M5Cardputer.Display.setCursor(tx, label_y);
@@ -782,7 +853,13 @@ static void drawDailyBars(const int x, const int y, const int w, const int bar_h
 // 记录图表拉取倒计时起点
 static void startChartFetchTimer(const int days) {
   g_chart_fetch_start_ms = millis();
-  g_chart_fetch_eta_sec = (days == 30) ? CURSOR_CHART_ETA_30_SEC : CURSOR_CHART_ETA_7_SEC;
+  if (days == 30) {
+    g_chart_fetch_eta_sec = CURSOR_CHART_ETA_30_SEC;
+  } else if (days == 24) {
+    g_chart_fetch_eta_sec = CURSOR_CHART_ETA_24_SEC;
+  } else {
+    g_chart_fetch_eta_sec = CURSOR_CHART_ETA_7_SEC;
+  }
   g_last_countdown_sec = -1;
 }
 
@@ -856,7 +933,9 @@ static void refreshChartLoadingFrame() {
   }
   // 仅当正在看「正在拉取」的那一页时更新 ETA
   int page_days = 0;
-  if (g_page == CursorPage::CHART_7) {
+  if (g_page == CursorPage::CHART_24) {
+    page_days = 24;
+  } else if (g_page == CursorPage::CHART_7) {
     page_days = 7;
   } else if (g_page == CursorPage::CHART_30) {
     page_days = 30;
@@ -898,12 +977,6 @@ static void formatMoney(const int cents, char* buf, const size_t buf_size) {
 static void drawCursorHints() {
   const int hint_y = M5Cardputer.Display.height() - 12;
   M5Cardputer.Display.fillRect(APP_CONTENT_X, hint_y, 236, 12, BLACK);
-  const char* page_text = "usage";
-  if (g_page == CursorPage::CHART_7) {
-    page_text = "7d";
-  } else if (g_page == CursorPage::CHART_30) {
-    page_text = "30d";
-  }
   int cx = APP_CONTENT_X;
   cx += drawArrowBadge(cx, hint_y, 1);
   M5Cardputer.Display.setTextSize(1);
@@ -927,11 +1000,7 @@ static void drawCursorHints() {
   M5Cardputer.Display.setTextSize(1);
   M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
   M5Cardputer.Display.setCursor(cx, hint_y);
-  M5Cardputer.Display.print("off ");
-  cx += M5Cardputer.Display.textWidth("off ");
-  M5Cardputer.Display.setTextColor(APP_COLOR_MUTED, BLACK);
-  M5Cardputer.Display.setCursor(cx, hint_y);
-  M5Cardputer.Display.print(page_text);
+  M5Cardputer.Display.print("off");
   drawHelpHintRight("help");
 }
 
@@ -1006,7 +1075,7 @@ static void drawCursorHelpPage() {
 
   if (g_help_page == 0) {
     y = drawCursorHelpTitle(y, "Keys");
-    y = drawCursorHelpArrows(y, "usage / 7d / 30d");
+    y = drawCursorHelpArrows(y, "usage / 24h / 7d / 30d");
     y = drawCursorHelpKey(y, 'r', "refresh now");
     y = drawCursorHelpBadge(y, "BtnA", "screen off");
     y = drawCursorHelpText(y, "any key wakes");
@@ -1050,20 +1119,23 @@ static void drawCursorSummaryPage(const int y) {
   char buf[24];
 
   M5Cardputer.Display.setTextSize(text_sz);
-  // 以最长标签宽度对齐百分比；中间空两个字符
-  const int label_col_w = M5Cardputer.Display.textWidth("AUTO");
+  // First Party 较长：标签用 1 号字对齐百分比列
+  M5Cardputer.Display.setTextSize(1);
+  const int label_col_w = M5Cardputer.Display.textWidth("First Party");
+  M5Cardputer.Display.setTextSize(text_sz);
   const int value_gap = M5Cardputer.Display.textWidth("  ");
   const int value_x = pad_x + label_col_w + value_gap;
 
   auto drawUsageBlock = [&](int& cy, const char* label, const float pct, const uint16_t color) {
-    M5Cardputer.Display.setTextSize(text_sz);
-    // 标签：与进度条同色
+    // 标签：与进度条同色（1 号字以容纳 First Party）
+    M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(color, BLACK);
-    M5Cardputer.Display.setCursor(pad_x, cy);
+    M5Cardputer.Display.setCursor(pad_x, cy + 4);
     M5Cardputer.Display.print(label);
 
     snprintf(buf, sizeof(buf), "%.2f%%", pct);
-    // 百分比：白色，与 AUTO/API 同一列起点
+    // 百分比：白色大字
+    M5Cardputer.Display.setTextSize(text_sz);
     M5Cardputer.Display.setTextColor(WHITE, BLACK);
     M5Cardputer.Display.setCursor(value_x, cy);
     M5Cardputer.Display.print(buf);
@@ -1075,7 +1147,7 @@ static void drawCursorSummaryPage(const int y) {
 
   // 从上往下紧凑排布，多出的垂直空间留给底栏
   int cy = y;
-  drawUsageBlock(cy, "AUTO", 100.0f - g_usage.auto_pct, APP_COLOR_OK);
+  drawUsageBlock(cy, "First Party", 100.0f - g_usage.auto_pct, APP_COLOR_OK);
   drawUsageBlock(cy, "API", 100.0f - g_usage.api_pct, ORANGE);
 
   // 底栏：used / reset；标签 hint，数值界面蓝
@@ -1204,6 +1276,12 @@ void drawCursorApp() {
     return;
   }
 
+  if (g_page == CursorPage::CHART_24) {
+    drawCursorChartPage(24, g_chart_24_cents, g_chart_24_ready);
+    updateAppHeaderStatus();
+    return;
+  }
+
   if (g_page == CursorPage::CHART_7) {
     drawCursorChartPage(7, g_chart_7_cents, g_chart_7_ready);
     updateAppHeaderStatus();
@@ -1227,8 +1305,10 @@ static void beginCursorFetch(const CursorFetchMode mode) {
   if (mode == CursorFetchMode::FULL) {
     g_phase = CursorPhase::WIFI;
     g_usage.valid = false;
+    g_chart_24_ready = false;
     g_chart_7_ready = false;
     g_chart_30_ready = false;
+    g_chart_24_error[0] = '\0';
     g_chart_7_error[0] = '\0';
     g_chart_30_error[0] = '\0';
     drawCursorApp();
@@ -1240,13 +1320,20 @@ static void beginCursorFetch(const CursorFetchMode mode) {
   }
 
   if (mode == CursorFetchMode::CHART) {
-    g_chart_fetch_days = (g_page == CursorPage::CHART_30) ? 30 : 7;
+    if (g_page == CursorPage::CHART_30) {
+      g_chart_fetch_days = 30;
+    } else if (g_page == CursorPage::CHART_24) {
+      g_chart_fetch_days = 24;
+    } else {
+      g_chart_fetch_days = 7;
+    }
   }
 }
 
 static void beginCursorChartFetch(const int days, const bool silent) {
   // 已有缓存则直接展示
-  if ((days == 7 && g_chart_7_ready) || (days == 30 && g_chart_30_ready)) {
+  if ((days == 7 && g_chart_7_ready) || (days == 30 && g_chart_30_ready) ||
+      (days == 24 && g_chart_24_ready)) {
     drawCursorApp();
     return;
   }
@@ -1266,8 +1353,10 @@ static void beginCursorChartFetch(const int days, const bool silent) {
   if (!silent) {
     if (days == 7) {
       g_chart_7_ready = false;
-    } else {
+    } else if (days == 30) {
       g_chart_30_ready = false;
+    } else {
+      g_chart_24_ready = false;
     }
     invalidateCursorFetch();
     g_fetch_mode = CursorFetchMode::CHART;
@@ -1286,8 +1375,8 @@ static void cursorPageNav(const int delta) {
     return;
   }
   int next = static_cast<int>(g_page) + delta;
-  // Tab 下一页循环
-  if (next > 2) {
+  // Tab 下一页循环：usage / 24h / 7d / 30d
+  if (next > 3) {
     next = 0;
   }
   if (next < 0) {
@@ -1296,6 +1385,16 @@ static void cursorPageNav(const int delta) {
   g_page = static_cast<CursorPage>(next);
 
   // 翻页不取消后台拉取；有缓存直接画，进行中显示 ETA，否则才发起
+  if (g_page == CursorPage::CHART_24) {
+    if (g_chart_24_ready || isChartFetchInProgressFor(24) || isChartFetchInProgress()) {
+      drawCursorApp();
+      return;
+    }
+    if (g_user_id > 0 && (g_phase == CursorPhase::READY || g_usage.valid)) {
+      beginCursorChartFetch(24, false);
+      return;
+    }
+  }
   if (g_page == CursorPage::CHART_7) {
     if (g_chart_7_ready || isChartFetchInProgressFor(7) || isChartFetchInProgress()) {
       drawCursorApp();
@@ -1354,11 +1453,17 @@ bool isCursorDisplayBlanked() {
   return g_display_blanked;
 }
 
+// 无操作满 5 分钟后主循环可降到 1s 一拍
+bool isCursorIdleSlowLoop() {
+  return (millis() - g_last_activity_ms) >= CURSOR_SLOW_LOOP_IDLE_MS;
+}
+
 // BtnA：亮屏时灭屏，灭屏时亮屏（wasPressed 仅单帧有效）
 void pollCursorBtnA() {
   if (!M5Cardputer.BtnA.wasPressed()) {
     return;
   }
+  noteCursorActivity();
   if (g_display_blanked) {
     wakeCursorDisplay(true);
   } else {
@@ -1493,7 +1598,12 @@ static void cursorFetchTaskFn(void* /*arg*/) {
 
   // --- Chart 分页（整段在 task 内跑完，页间检查取消）---
   if (mode == CursorFetchMode::CHART) {
-    float* target = (chart_days == 30) ? g_chart_30_cents : g_chart_7_cents;
+    float* target = g_chart_7_cents;
+    if (chart_days == 30) {
+      target = g_chart_30_cents;
+    } else if (chart_days == 24) {
+      target = g_chart_24_cents;
+    }
     if (!silent) {
       startChartFetchTimer(chart_days);
       strncpy(g_status_msg, "chart...", sizeof(g_status_msg));
@@ -1538,6 +1648,10 @@ static void cursorFetchTaskFn(void* /*arg*/) {
         g_chart_30_ready = true;
         g_chart_30_error[0] = '\0';
         g_last_chart_30_fetch_ms = millis();
+      } else if (chart_days == 24) {
+        g_chart_24_ready = true;
+        g_chart_24_error[0] = '\0';
+        g_last_chart_24_fetch_ms = millis();
       } else {
         g_chart_7_ready = true;
         g_chart_7_error[0] = '\0';
@@ -1579,7 +1693,9 @@ void updateCursorApp() {
   // 上一段图表结束后：若当前页是另一段未就绪图表，排队拉取
   if (g_queue_other_chart && !g_task_running && !g_fetch_pending) {
     g_queue_other_chart = false;
-    if (g_page == CursorPage::CHART_7 && !g_chart_7_ready) {
+    if (g_page == CursorPage::CHART_24 && !g_chart_24_ready) {
+      beginCursorChartFetch(24, false);
+    } else if (g_page == CursorPage::CHART_7 && !g_chart_7_ready) {
       beginCursorChartFetch(7, false);
     } else if (g_page == CursorPage::CHART_30 && !g_chart_30_ready) {
       beginCursorChartFetch(30, false);

@@ -11,12 +11,16 @@
 ### 新增
 
 - **Mic**：独立模块（`app_mic`）；示波器折线波形 + 分段 VU + 手动增益（`-`/`=`）；`r` / **BtnA** 开始/停止录音；有 SD 时写入 `/audioRecord/*.wav`（16 kHz 单声道）；进 App 后台 WiFi/NTP 校时（状态行 `WiFi` 标识）；无卡提示 `no SD`；`h` Help
+- **Cursor**：当天 **24h** 小时柱状图（只拉当天事件）；翻页顺序 usage → 24h → 7d → 30d
 
 ### 改进
 
 - **Mic**：离屏双缓冲减少网格闪烁；状态行展示 LIVE/REC、时长、电平、增益
 - **Time / Mijia / Sleep**：Header 改为主标题 + 次要色模式后缀（如 `Time CD`、`Mijia Grid`、`Sleep Light`）
 - **Mijia**：榨汁机设备图标 PNG 资源更新
+- **Time Pure**：按 `p` 先切界面再写 `config.json`，避免 FS 保存拖慢进入/退出
+- **Time Uptime**：改用 `esp_timer` 从上电起算（light sleep 期间不停表）；Settings Info 同步
+- **Cursor**：摘要标签改为 First Party / API；图表分页 `pageSize=500`；Header 显示电池与 `24h`/`7d`/`30d` 副标题；底栏 tip 去掉页名；24h 每 3 小时一个 label；无操作 5 分钟后主循环改为 1s 一拍
 
 ---
 
