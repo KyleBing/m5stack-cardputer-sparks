@@ -2475,561 +2475,180 @@ bool handleMijiaDeviceNav(const Keyboard_Class::KeysState& status) {
     return true;
 }
 
-static int mijiaHintLineStep(const int text_size) {
-    return text_size == 2 ? INFO_LINE_H_2X : INFO_LINE_H;
-}
-
-// 帮助页：靠上排列，返回第 row 行 y
-static int mijiaHelpRowY(const int row, const int total_rows, const int text_size) {
-    (void)total_rows;
-    const int line_h = mijiaHintLineStep(text_size);
-    const int gap = text_size == 2 ? 2 : 1;
-    return APP_CONTENT_Y_NO_TAP_TO_HEADER + row * (line_h + gap);
-}
-
-// 估算按键徽章 + 文案占用宽度
-static int mijiaMeasureKeyHintItem(const KeyHintItem& item, const int text_size) {
-    const int size = (text_size == 2) ? 2 : 1;
-    const char letter = static_cast<char>(toupper(static_cast<unsigned char>(item.key)));
-    const char str[2] = {letter, '\0'};
-    M5Cardputer.Display.setTextSize(size);
-    const int badge_w = M5Cardputer.Display.textWidth(str) + 4 + 3;
-    M5Cardputer.Display.setTextSize(text_size);
-    return badge_w + M5Cardputer.Display.textWidth(item.text);
-}
-
-// 估算换行后的行数
-static int mijiaCountWrappedRows(const KeyHintItem* items, const int item_count,
-                                 const int text_size, const int max_w) {
-    if (items == nullptr || item_count <= 0) {
-        return 0;
-    }
-
-    int rows = 1;
-    int cx = 0;
-    M5Cardputer.Display.setTextSize(text_size);
-    const int space_w = M5Cardputer.Display.textWidth(" ");
-    for (int i = 0; i < item_count; i++) {
-        const int item_w = mijiaMeasureKeyHintItem(items[i], text_size);
-        if (cx > 0 && cx + item_w > max_w) {
-            rows++;
-            cx = item_w;
-        } else {
-            if (cx > 0) {
-                cx += space_w;
-            }
-            cx += item_w;
-        }
-    }
-    return rows;
-}
-
-static int mijiaCountSpecialHelpRows(const MijiaDevice* dev, const int max_w,
-                                     const int text_size) {
-    const MijiaDevKind kind =
-        dev != nullptr ? mijiaClassifyModel(dev->model) : MijiaDevKind::GENERIC;
-
-    int rows = 0;
-    switch (kind) {
-        case MijiaDevKind::LIGHT: {
-            static const KeyHintItem bright_items[] = {{'-', "bright-"}, {'=', "bright+"}};
-            static const KeyHintItem percent_items[] = {{'1', "10%"}, {'9', "90%"}, {'0', "100%"}};
-            static const KeyHintItem ct_items[] = {{'[', "ct-"}, {']', "ct+"}};
-            static const KeyHintItem hue_items[] = {{'j', "hue-"}, {'k', "hue+"}};
-            rows += mijiaCountWrappedRows(bright_items, 2, text_size, max_w);
-            rows += mijiaCountWrappedRows(percent_items, 3, text_size, max_w);
-            if (dev != nullptr && mijiaLightSupportsCt(dev->model)) {
-                rows += mijiaCountWrappedRows(ct_items, 2, text_size, max_w);
-            }
-            if (dev != nullptr && mijiaLightSupportsHue(dev->model)) {
-                rows += mijiaCountWrappedRows(hue_items, 2, text_size, max_w);
-            }
-            break;
-        }
-        case MijiaDevKind::FAN_P5: {
-            static const KeyHintItem fan_items[] = {
-                {'-', "spd-"},
-                {'=', "spd+"},
-                {'w', "roll"},
-                {'m', "mode"},
-                {'a', "angle"},
-            };
-            static const KeyHintItem percent_items[] = {{'1', "10%"}, {'9', "90%"}, {'0', "100%"}};
-            rows += mijiaCountWrappedRows(fan_items, 5, text_size, max_w);
-            rows += mijiaCountWrappedRows(percent_items, 3, text_size, max_w);
-            break;
-        }
-        case MijiaDevKind::FAN_GENERIC: {
-            static const KeyHintItem speed_items[] = {
-                {'1', "lv1"},
-                {'2', "lv2"},
-                {'3', "lv3"},
-                {'4', "lv4"},
-            };
-            rows += mijiaCountWrappedRows(speed_items, 4, text_size, max_w);
-            break;
-        }
-        case MijiaDevKind::AIR_PURIFIER_F20: {
-            static const KeyHintItem mode_items[] = {
-                {'1', "mode1"},
-                {'2', "mode2"},
-                {'3', "mode3"},
-                {'4', "mode4"},
-                {'5', "mode5"},
-            };
-            static const KeyHintItem fan_items[] = {{'-', "fan-"}, {'=', "fan+"}};
-            rows += mijiaCountWrappedRows(mode_items, 5, text_size, max_w);
-            rows += mijiaCountWrappedRows(fan_items, 2, text_size, max_w);
-            break;
-        }
-        case MijiaDevKind::AIR_FRYER: {
-            static const KeyHintItem fryer_items[] = {
-                {'-', "temp-"},
-                {'=', "temp+"},
-                {'[', "time-"},
-                {']', "time+"},
-            };
-            rows += mijiaCountWrappedRows(fryer_items, 4, text_size, max_w);
-            break;
-        }
-        default:
-            break;
-    }
-    return rows;
-}
-
-static int mijiaCountHelpRows(const MijiaDevice* dev, const int max_w, const int text_size) {
-    static const KeyHintItem common_items[] = {
-        {'o', "on"},
-        {'i', "off"},
-        {'t', "tog/BtnA"},
-        {'r', "refresh"},
-        {'h', "help"},
-    };
-    static const KeyHintItem nav_items[] = {{'l', "list"}, {'g', "grid"}, {'d', "groups"}};
-
-    int rows = 1; // common section header
-    rows += mijiaCountWrappedRows(common_items, 5, text_size, max_w);
-    rows += 1; // navigation section header
-    rows += mijiaCountWrappedRows(nav_items, 3, text_size, max_w);
-    rows += 1; // arrow switch row
-
-    const int special_rows = mijiaCountSpecialHelpRows(dev, max_w, text_size);
-    if (special_rows > 0) {
-        rows += 1; // special section header
-        rows += special_rows;
-    }
-    return rows;
-}
-
-// 能排开用 2x，否则 1x；风扇 / 炸锅按键多，固定 1x
-static int mijiaPickHelpTextSize(const MijiaDevice* dev) {
-    const MijiaDevKind kind =
-        dev != nullptr ? mijiaClassifyModel(dev->model) : MijiaDevKind::GENERIC;
-    if (kind == MijiaDevKind::FAN_P5 || kind == MijiaDevKind::FAN_GENERIC ||
-        kind == MijiaDevKind::AIR_FRYER) {
-        return 1;
-    }
-
-    const int max_w = M5Cardputer.Display.width() - APP_CONTENT_X * 2;
-    const int content_h = M5Cardputer.Display.height() - APP_CONTENT_Y_NO_TAP_TO_HEADER - 2;
-    for (int size = 2; size >= 1; size--) {
-        const int rows = mijiaCountHelpRows(dev, max_w, size);
-        const int line_h = mijiaHintLineStep(size);
-        const int gap = size == 2 ? 2 : 1;
-        const int need = rows > 0 ? rows * line_h + (rows - 1) * gap : 0;
-        if (need <= content_h) {
-            return size;
-        }
-    }
-    return 1;
-}
-
-// 绘制单个按键提示，返回占用宽度
-static int mijiaDrawKeyHintItem(const int x, const int y, const KeyHintItem& item,
-                                const int text_size, const uint16_t color) {
-    int cx = x + drawKeyBadge(x, y, item.key, text_size);
-    M5Cardputer.Display.setTextSize(text_size);
-    M5Cardputer.Display.setTextColor(color, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(item.text);
-    return cx + M5Cardputer.Display.textWidth(item.text) - x;
-}
-
-// 按屏宽换行绘制按键提示，返回下一行索引
-static int drawKeyHintsWrapped(const int x, const int start_row, const int total_rows,
-                               const KeyHintItem* items, const int item_count,
-                               const int text_size, const uint16_t color, const int max_w) {
-    if (items == nullptr || item_count <= 0) {
-        return start_row;
-    }
-
-    int row = start_row;
-    int y = mijiaHelpRowY(row, total_rows, text_size);
-    int cx = x;
-    M5Cardputer.Display.setTextSize(text_size);
-    const int space_w = M5Cardputer.Display.textWidth(" ");
-
-    for (int i = 0; i < item_count; i++) {
-        const int item_w = mijiaMeasureKeyHintItem(items[i], text_size);
-        if (cx > x && cx + item_w > x + max_w) {
-            row++;
-            y = mijiaHelpRowY(row, total_rows, text_size);
-            cx = x;
-        }
-        cx += mijiaDrawKeyHintItem(cx, y, items[i], text_size, color);
-        if (i != item_count - 1) {
-            M5Cardputer.Display.setCursor(cx, y);
-            M5Cardputer.Display.print(" ");
-            cx += space_w;
-        }
-    }
-    return row + 1;
-}
-
-static int drawMijiaHelpSectionHeader(const int row, const int total_rows, const int text_size,
-                                      const char* title) {
-    const int y = mijiaHelpRowY(row, total_rows, text_size);
-    const int line_h = mijiaHintLineStep(text_size);
-    M5Cardputer.Display.fillRect(0, y, M5Cardputer.Display.width(), line_h, APP_COLOR_MUTED);
+// Help 分栏标题（蓝底黑字，与其它 App 一致）
+static int drawMijiaHelpColHeader(const int x, const int y, const int w, const char* title) {
+    M5Cardputer.Display.fillRect(x, y, w, 11, APP_COLOR_LABEL);
     M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_TEXT, APP_COLOR_MUTED);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, y + max(0, (line_h - 8) / 2));
-    M5Cardputer.Display.print(title);
-    return row + 1;
-}
-
-// 方向键切换设备
-static int drawMijiaSwitchHelpRow(const int x, const int row, const int total_rows,
-                                  const int text_size) {
-    const int y = mijiaHelpRowY(row, total_rows, text_size);
-    int cx = x + drawArrowBadge(x, y, text_size);
-    M5Cardputer.Display.setTextSize(text_size);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print("switch");
-    return row + 1;
-}
-
-static int drawMijiaHelpColumnHeader(const int x, const int y, const int w, const char* title) {
-    M5Cardputer.Display.fillRect(x, y, w, INFO_LINE_H, APP_COLOR_MUTED);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_TEXT, APP_COLOR_MUTED);
+    M5Cardputer.Display.setTextColor(BLACK, APP_COLOR_LABEL);
     M5Cardputer.Display.setCursor(x + 2, y + 1);
     M5Cardputer.Display.print(title);
-    return y + INFO_LINE_H + 2;
+    return y + 13;
 }
 
-// 三列 help 内部换行，返回下一行 y
-static int drawKeyHintsWrappedInColumn(const int x, int y, const int w,
-                                       const KeyHintItem* items, const int item_count,
-                                       const uint16_t color) {
-    if (items == nullptr || item_count <= 0) {
-        return y;
-    }
-
-    constexpr int text_size = 1;
-    constexpr int line_h = INFO_LINE_H;
-    constexpr int gap = 1;
-    int cx = x;
-    M5Cardputer.Display.setTextSize(text_size);
-    const int space_w = M5Cardputer.Display.textWidth(" ");
-
-    for (int i = 0; i < item_count; i++) {
-        const int item_w = mijiaMeasureKeyHintItem(items[i], text_size);
-        if (cx > x && cx + item_w > x + w) {
-            y += line_h + gap;
-            cx = x;
-        }
-        cx += mijiaDrawKeyHintItem(cx, y, items[i], text_size, color);
-        if (i != item_count - 1) {
-            M5Cardputer.Display.setCursor(cx, y);
-            M5Cardputer.Display.print(" ");
-            cx += space_w;
-        }
-    }
-    return y + line_h + gap;
-}
-
-static int drawMijiaSwitchHelpInColumn(const int x, const int y) {
-    int cx = x + drawArrowBadge(x, y, 1);
+// Help 按键说明；徽章后恢复说明文字颜色
+static int drawMijiaHelpKey(const int x, const int y, const char key, const char* text) {
+    const int cx = x + drawKeyBadge(x, y, key, 1);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print("switch");
-    return y + INFO_LINE_H + 1;
+    M5Cardputer.Display.print(text);
+    return y + 11;
 }
 
-static int drawMijiaLightHelpInColumn(const MijiaDevice* dev, const int x, int y, const int w) {
-    static const KeyHintItem bright_items[] = {{'-', "bright-"}, {'=', "bright+"}};
-    static const KeyHintItem percent_items[] = {{'1', "10%"}, {'9', "90%"}, {'0', "100%"}};
-    static const KeyHintItem ct_items[] = {{'[', "ct-"}, {']', "ct+"}};
-    static const KeyHintItem hue_items[] = {{'j', "hue-"}, {'k', "hue+"}};
-    y = drawKeyHintsWrappedInColumn(x, y, w, bright_items, 2, APP_COLOR_HINT);
-    y = drawKeyHintsWrappedInColumn(x, y, w, percent_items, 3, APP_COLOR_HINT);
-    if (dev != nullptr && mijiaLightSupportsCt(dev->model)) {
-        y = drawKeyHintsWrappedInColumn(x, y, w, ct_items, 2, APP_COLOR_HINT);
-    }
-    if (dev != nullptr && mijiaLightSupportsHue(dev->model)) {
-        y = drawKeyHintsWrappedInColumn(x, y, w, hue_items, 2, APP_COLOR_HINT);
+static int drawMijiaHelpBadge(const int x, const int y, const char* badge, const char* text) {
+    const int cx = x + drawTextBadge(x, y, badge, 1);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(cx, y);
+    M5Cardputer.Display.print(text);
+    return y + 11;
+}
+
+static int drawMijiaHelpArrows(const int x, const int y, const char* text) {
+    const int cx = x + drawArrowBadge(x, y, 1);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(cx, y);
+    M5Cardputer.Display.print(text);
+    return y + 11;
+}
+
+// Help 功能说明
+static int drawMijiaHelpText(const int x, const int y, const char* text) {
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(x, y);
+    M5Cardputer.Display.print(text);
+    return y + 11;
+}
+
+// 按设备类型追加专用按键说明（尽量压成 1~2 行）
+static int drawMijiaDeviceSpecialKeys(const MijiaDevice* dev, const int x, int y) {
+    const MijiaDevKind kind =
+        dev != nullptr ? mijiaClassifyModel(dev->model) : MijiaDevKind::GENERIC;
+    switch (kind) {
+        case MijiaDevKind::LIGHT:
+            y = drawMijiaHelpBadge(x, y, "-/= 1-0", "bright");
+            if (dev != nullptr &&
+                (mijiaLightSupportsCt(dev->model) || mijiaLightSupportsHue(dev->model))) {
+                y = drawMijiaHelpBadge(x, y, "[]/jk", "ct/hue");
+            }
+            break;
+        case MijiaDevKind::FAN_P5:
+            y = drawMijiaHelpBadge(x, y, "-/= wma", "fan");
+            y = drawMijiaHelpBadge(x, y, "1-0", "percent");
+            break;
+        case MijiaDevKind::FAN_GENERIC:
+            y = drawMijiaHelpBadge(x, y, "1-4", "level");
+            break;
+        case MijiaDevKind::AIR_PURIFIER_F20:
+            y = drawMijiaHelpBadge(x, y, "1-5 -/=", "mode/fan");
+            break;
+        case MijiaDevKind::AIR_FRYER:
+            y = drawMijiaHelpBadge(x, y, "-/= []", "temp/time");
+            break;
+        case MijiaDevKind::SENSOR_HT:
+        case MijiaDevKind::BLE_EVENT:
+            y = drawMijiaHelpKey(x, y, 'r', "scan BLE");
+            break;
+        default:
+            break;
     }
     return y;
 }
 
-// 灯：亮度 + 色温 + 色相调节说明
-static int drawMijiaLightHelpRows(const MijiaDevice* dev, const int start_row, const int total_rows,
-                                  const int text_size, const int max_w) {
-    static const KeyHintItem bright_items[] = {{'-', "bright-"}, {'=', "bright+"}};
-    static const KeyHintItem percent_items[] = {{'1', "10%"}, {'9', "90%"}, {'0', "100%"}};
-    static const KeyHintItem ct_items[] = {{'[', "ct-"}, {']', "ct+"}};
-    static const KeyHintItem hue_items[] = {{'j', "hue-"}, {'k', "hue+"}};
-    int row = drawKeyHintsWrapped(APP_CONTENT_X, start_row, total_rows, bright_items, 2, text_size,
-                                  APP_COLOR_HINT, max_w);
-    row = drawKeyHintsWrapped(APP_CONTENT_X, row, total_rows, percent_items, 3, text_size,
-                              APP_COLOR_HINT, max_w);
-    if (dev != nullptr && mijiaLightSupportsCt(dev->model)) {
-        row = drawKeyHintsWrapped(APP_CONTENT_X, row, total_rows, ct_items, 2, text_size,
-                                  APP_COLOR_HINT, max_w);
-    }
-    if (dev != nullptr && mijiaLightSupportsHue(dev->model)) {
-        row = drawKeyHintsWrapped(APP_CONTENT_X, row, total_rows, hue_items, 2, text_size,
-                                  APP_COLOR_HINT, max_w);
-    }
-    return row;
-}
-
-// 按设备类型绘制操作帮助（三列均分）
-static void drawMijiaHelpContent(const MijiaDevice* dev, const int text_size) {
-    (void)text_size;
-    const MijiaDevKind kind =
-        dev != nullptr ? mijiaClassifyModel(dev->model) : MijiaDevKind::GENERIC;
-    const int screen_w = M5Cardputer.Display.width();
-    constexpr int col_count = 3;
-    constexpr int col_gap = 2;
-    const int col_w = (screen_w - col_gap * (col_count - 1)) / col_count;
-    const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
-
-    static const KeyHintItem common_items[] = {
-        {'o', "on"},
-        {'i', "off"},
-        {'t', "tog/BtnA"},
-        {'r', "refresh"},
-        {'h', "help"},
-    };
-    static const KeyHintItem nav_items[] = {{'l', "list"}, {'g', "grid"}, {'d', "groups"}};
-
-    const int common_x = 0;
-    const int nav_x = col_w + col_gap;
-    const int special_x = (col_w + col_gap) * 2;
-    const int content_h = M5Cardputer.Display.height() - col_y;
-    // 列分隔线沿用 header 底部分隔线颜色
-    M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y, content_h, DARKGREY);
-    M5Cardputer.Display.drawFastVLine(special_x - col_gap / 2, col_y, content_h, DARKGREY);
-
-    int y = drawMijiaHelpColumnHeader(common_x, col_y, col_w, "common");
-    drawKeyHintsWrappedInColumn(common_x + 2, y, col_w - 4, common_items, 5, APP_COLOR_HINT);
-
-    y = drawMijiaHelpColumnHeader(nav_x, col_y, col_w, "navigation");
-    y = drawKeyHintsWrappedInColumn(nav_x + 2, y, col_w - 4, nav_items, 3, APP_COLOR_HINT);
-    drawMijiaSwitchHelpInColumn(nav_x + 2, y);
-
-    y = drawMijiaHelpColumnHeader(special_x, col_y, screen_w - special_x, "special");
-    const int special_content_x = special_x + 2;
-    const int special_content_w = screen_w - special_x - 4;
-    switch (kind) {
-        case MijiaDevKind::LIGHT:
-            drawMijiaLightHelpInColumn(dev, special_content_x, y, special_content_w);
-            break;
-        case MijiaDevKind::FAN_P5: {
-            static const KeyHintItem fan_items[] = {
-                {'-', "spd-"},
-                {'=', "spd+"},
-                {'w', "roll"},
-                {'m', "mode"},
-                {'a', "angle"},
-            };
-            static const KeyHintItem percent_items[] = {{'1', "10%"}, {'9', "90%"}, {'0', "100%"}};
-            y = drawKeyHintsWrappedInColumn(special_content_x, y, special_content_w, fan_items, 5,
-                                            APP_COLOR_HINT);
-            drawKeyHintsWrappedInColumn(special_content_x, y, special_content_w, percent_items, 3,
-                                        APP_COLOR_HINT);
-            break;
-        }
-        case MijiaDevKind::FAN_GENERIC: {
-            static const KeyHintItem speed_items[] = {
-                {'1', "lv1"},
-                {'2', "lv2"},
-                {'3', "lv3"},
-                {'4', "lv4"},
-            };
-            drawKeyHintsWrappedInColumn(special_content_x, y, special_content_w, speed_items, 4,
-                                        APP_COLOR_HINT);
-            break;
-        }
-        case MijiaDevKind::AIR_PURIFIER_F20: {
-            static const KeyHintItem mode_items[] = {
-                {'1', "mode1"},
-                {'2', "mode2"},
-                {'3', "mode3"},
-                {'4', "mode4"},
-                {'5', "mode5"},
-            };
-            static const KeyHintItem fan_items[] = {{'-', "fan-"}, {'=', "fan+"}};
-            y = drawKeyHintsWrappedInColumn(special_content_x, y, special_content_w, mode_items, 5,
-                                            APP_COLOR_HINT);
-            drawKeyHintsWrappedInColumn(special_content_x, y, special_content_w, fan_items, 2,
-                                        APP_COLOR_HINT);
-            break;
-        }
-        case MijiaDevKind::AIR_FRYER: {
-            static const KeyHintItem fryer_items[] = {
-                {'-', "temp-"},
-                {'=', "temp+"},
-                {'[', "time-"},
-                {']', "time+"},
-            };
-            drawKeyHintsWrappedInColumn(special_content_x, y, special_content_w, fryer_items, 4,
-                                        APP_COLOR_HINT);
-            break;
-        }
-        case MijiaDevKind::SENSOR_HT:
-        case MijiaDevKind::BLE_EVENT: {
-            static const KeyHintItem ble_items[] = {
-                {'r', "scan ble"},
-            };
-            drawKeyHintsWrappedInColumn(special_content_x, y, special_content_w, ble_items, 1,
-                                        APP_COLOR_HINT);
-            break;
-        }
-        default:
-            break;
-    }
-}
-
-// 宫格概览操作帮助（须覆盖底栏 tip 全部键，且更全）
-static void drawMijiaGridHelpContent(const int text_size) {
-    const int max_w = M5Cardputer.Display.width() - APP_CONTENT_X * 2;
-    static const KeyHintItem power_items[] = {
-        {'o', "on"},
-        {'i', "off"},
-        {'t', "toggle"},
-    };
-    static const KeyHintItem action_items[] = {
-        {'g', "back"},
-        {'l', "list"},
-        {'d', "group"},
-        {'h', "help"},
-    };
-
-    // 固定行：方向 / 翻页 / 1-9 / BtnA；其余按换行估算
-    const int total_rows =
-        4 + mijiaCountWrappedRows(power_items, 3, text_size, max_w) +
-        mijiaCountWrappedRows(action_items, 4, text_size, max_w);
-
-    int row = 0;
-
-    // 方向键选中（只显示左右箭头，省横向空间）
-    {
-        const int y = mijiaHelpRowY(row++, total_rows, text_size);
-        int cx = APP_CONTENT_X + drawArrowBadge(APP_CONTENT_X, y, text_size);
-        M5Cardputer.Display.setTextSize(text_size);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(cx, y);
-        M5Cardputer.Display.print("sel");
-    }
-
-    // [ ] 翻页
-    {
-        const int y = mijiaHelpRowY(row++, total_rows, text_size);
-        int cx = APP_CONTENT_X + drawKeyBadge(APP_CONTENT_X, y, '[', text_size);
-        cx += drawKeyBadge(cx, y, ']', text_size);
-        M5Cardputer.Display.setTextSize(text_size);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(cx, y);
-        M5Cardputer.Display.print("page");
-    }
-
-    // 1~9 选中当前页格子
-    {
-        const int y = mijiaHelpRowY(row++, total_rows, text_size);
-        int cx = APP_CONTENT_X + drawKeyBadge(APP_CONTENT_X, y, '1', text_size);
-        cx += drawKeyBadge(cx, y, '9', text_size);
-        M5Cardputer.Display.setTextSize(text_size);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(cx, y);
-        M5Cardputer.Display.print("pick");
-    }
-
-    // o/i/t 开关（底栏 tip 有）
-    row = drawKeyHintsWrapped(APP_CONTENT_X, row, total_rows, power_items, 3, text_size,
-                              APP_COLOR_HINT, max_w);
-
-    // BtnA 切换（底栏 tip 有）
-    {
-        const int y = mijiaHelpRowY(row++, total_rows, text_size);
-        int cx = APP_CONTENT_X + drawTextBadge(APP_CONTENT_X, y, "BtnA", text_size);
-        M5Cardputer.Display.setTextSize(text_size);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(cx, y);
-        M5Cardputer.Display.print("toggle");
-    }
-
-    drawKeyHintsWrapped(APP_CONTENT_X, row, total_rows, action_items, 4, text_size, APP_COLOR_HINT,
-                        max_w);
-}
-
-// 宫格概览帮助页
-static void drawMijiaGridHelpPage() {
-    beginAppScreen("Help");
-    // 条目较多，用 1x 保证一页排开
-    drawMijiaGridHelpContent(1);
-    drawHelpHintRight("close help");
-}
-
-// 编组帮助页（最全；底栏 tip 可只显示子集）
-static void drawMijiaGroupHelpPage() {
-    beginAppScreen("Help");
-    KeyHintItem items[16];
-    int n = 0;
-    items[n++] = {',', "prev group"};
-    items[n++] = {'.', "next group"};
-    items[n++] = {'o', "all on"};
-    items[n++] = {'i', "all off"};
-    items[n++] = {'t', "tog/BtnA"}; // 底栏 tip 有 t；Help 写全含 BtnA
-    if (mijiaGroupAllLights()) {
-        items[n++] = {'-', "bright-"};
-        items[n++] = {'=', "bright+"};
-        items[n++] = {'1', "10%"};
-        items[n++] = {'0', "100%"};
-    }
-    items[n++] = {'r', "refresh"};
-    items[n++] = {'[', "page"};
-    items[n++] = {']', "page"};
-    items[n++] = {'l', "list"};
-    items[n++] = {'g', "grid"};
-    items[n++] = {'d', "back"};
-    items[n++] = {'h', "help"};
-    int y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
-    M5Cardputer.Display.setTextSize(1);
-    for (int i = 0; i < n; i++) {
-        int cx = APP_CONTENT_X;
-        cx += drawKeyBadge(cx, y, items[i].key, 1);
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(cx, y + 1);
-        M5Cardputer.Display.print(items[i].text);
-        y += INFO_LINE_H + 2;
-    }
-    drawHelpHintRight("close help");
-}
-
-// 按 H 切换显示的帮助页
+// 设备详情帮助：keymap / manual
 static void drawMijiaHelpPage() {
     beginAppScreen("Help");
+    constexpr int col_gap = 4;
+    const int screen_w = M5Cardputer.Display.width();
+    const int col_w = (screen_w - col_gap) / 2;
+    const int manual_x = col_w + col_gap;
+    const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
+    M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y,
+                                     M5Cardputer.Display.height() - col_y, DARKGREY);
+
     const MijiaDevice* dev = getCurrentMijiaDevice();
-    // 能排开用 2x，否则 1x；内容靠上显示
-    drawMijiaHelpContent(dev, mijiaPickHelpTextSize(dev));
-    drawHelpHintRight("close help");
+    int y = drawMijiaHelpColHeader(0, col_y, col_w, "keymap");
+    y = drawMijiaHelpBadge(2, y, "o/i", "on/off");
+    y = drawMijiaHelpBadge(2, y, "t/BtnA", "toggle");
+    y = drawMijiaHelpKey(2, y, 'r', "refresh");
+    y = drawMijiaHelpArrows(2, y, "switch");
+    y = drawMijiaHelpBadge(2, y, "l/g/d", "views");
+    drawMijiaDeviceSpecialKeys(dev, 2, y);
+
+    y = drawMijiaHelpColHeader(manual_x, col_y, screen_w - manual_x, "manual");
+    y = drawMijiaHelpText(manual_x + 2, y, "control devices");
+    y = drawMijiaHelpText(manual_x + 2, y, "WiFi LAN / BLE");
+    y = drawMijiaHelpText(manual_x + 2, y, "list / grid / group");
+    y = drawMijiaHelpText(manual_x + 2, y, "keys by device type");
+    y = drawMijiaHelpText(manual_x + 2, y, "config via web U");
+    y = drawMijiaHelpText(manual_x + 2, y, "h help / close");
+
+    drawHelpHintRight("close");
+    updateAppHeaderStatus();
+}
+
+// 宫格概览帮助
+static void drawMijiaGridHelpPage() {
+    beginAppScreen("Help");
+    constexpr int col_gap = 4;
+    const int screen_w = M5Cardputer.Display.width();
+    const int col_w = (screen_w - col_gap) / 2;
+    const int manual_x = col_w + col_gap;
+    const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
+    M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y,
+                                     M5Cardputer.Display.height() - col_y, DARKGREY);
+
+    int y = drawMijiaHelpColHeader(0, col_y, col_w, "keymap");
+    y = drawMijiaHelpArrows(2, y, "select");
+    y = drawMijiaHelpBadge(2, y, "[ ]", "page");
+    y = drawMijiaHelpBadge(2, y, "1-9", "pick cell");
+    y = drawMijiaHelpBadge(2, y, "o/i/t", "power");
+    y = drawMijiaHelpBadge(2, y, "BtnA", "toggle");
+    y = drawMijiaHelpBadge(2, y, "l/g/d", "views");
+
+    y = drawMijiaHelpColHeader(manual_x, col_y, screen_w - manual_x, "manual");
+    y = drawMijiaHelpText(manual_x + 2, y, "device grid view");
+    y = drawMijiaHelpText(manual_x + 2, y, "quick on / off");
+    y = drawMijiaHelpText(manual_x + 2, y, "pick cell then act");
+    y = drawMijiaHelpText(manual_x + 2, y, "g back to detail");
+    y = drawMijiaHelpText(manual_x + 2, y, "l list  d groups");
+
+    drawHelpHintRight("close");
+    updateAppHeaderStatus();
+}
+
+// 编组帮助
+static void drawMijiaGroupHelpPage() {
+    beginAppScreen("Help");
+    constexpr int col_gap = 4;
+    const int screen_w = M5Cardputer.Display.width();
+    const int col_w = (screen_w - col_gap) / 2;
+    const int manual_x = col_w + col_gap;
+    const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
+    M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y,
+                                     M5Cardputer.Display.height() - col_y, DARKGREY);
+
+    int y = drawMijiaHelpColHeader(0, col_y, col_w, "keymap");
+    y = drawMijiaHelpBadge(2, y, ", .", "group");
+    y = drawMijiaHelpBadge(2, y, "o/i/t", "power");
+    if (mijiaGroupAllLights()) {
+        y = drawMijiaHelpBadge(2, y, "-/= 1/0", "bright");
+    }
+    y = drawMijiaHelpKey(2, y, 'r', "refresh");
+    y = drawMijiaHelpBadge(2, y, "[ ]", "page");
+    y = drawMijiaHelpBadge(2, y, "l/g/d", "views");
+
+    y = drawMijiaHelpColHeader(manual_x, col_y, screen_w - manual_x, "manual");
+    y = drawMijiaHelpText(manual_x + 2, y, "control a group");
+    y = drawMijiaHelpText(manual_x + 2, y, "members act together");
+    y = drawMijiaHelpText(manual_x + 2, y, "lights can dim");
+    y = drawMijiaHelpText(manual_x + 2, y, "d back / groups");
+    y = drawMijiaHelpText(manual_x + 2, y, "config via web U");
+
+    drawHelpHintRight("close");
+    updateAppHeaderStatus();
 }
 
 void drawMijiaApp() {

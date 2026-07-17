@@ -89,10 +89,9 @@ static const MenuItem MENU_ITEMS[] = {
     {'v', "Ver", "Version", AppState::VERSION},
     {'j', "Mor", "Morse", AppState::MORSE},
     {'x', "IR", "Infrared", AppState::IR},
-    {'h', "Hid", "HID Keyboard", AppState::HID_KB},
 
     // 系统功能测试
-    {'k', "Key", "Keyboard", AppState::KEYBOARD},
+    {'k', "KB", "HID Keyboard", AppState::HID_KB},
     {'g', "BMI", "BMI", AppState::BMI},
     {'l', "LED", "RGB LED", AppState::LED},
     {'r', "Mic", "Mic", AppState::MIC},
@@ -1609,11 +1608,78 @@ void handleSettingsApp(const Keyboard_Class::KeysState& status) {
 
 static constexpr int LED_PIN_FALLBACK = 21;
 static bool g_led_app_active = false;
+static bool g_led_help_visible = false;
 static bool g_led_on = false;
 static uint8_t g_led_r = 255;
 static uint8_t g_led_g = 255;
 static uint8_t g_led_b = 255;
 static uint8_t g_led_saved_brightness = 30;
+static bool g_i2c_help_visible = false;
+
+// 简单 Help 页的分栏标题
+static int drawSimpleHelpColHeader(const int x, const int y, const int w, const char* title) {
+    M5Cardputer.Display.fillRect(x, y, w, 11, APP_COLOR_LABEL);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(BLACK, APP_COLOR_LABEL);
+    M5Cardputer.Display.setCursor(x + 2, y + 1);
+    M5Cardputer.Display.print(title);
+    return y + 13;
+}
+
+// 简单 Help 页的按键说明；徽章后恢复说明文字颜色
+static int drawSimpleHelpKey(const int x, const int y, const char key, const char* text) {
+    const int cx = x + drawKeyBadge(x, y, key, 1);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(cx, y);
+    M5Cardputer.Display.print(text);
+    return y + 11;
+}
+
+static int drawSimpleHelpBadge(const int x, const int y, const char* badge, const char* text) {
+    const int cx = x + drawTextBadge(x, y, badge, 1);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(cx, y);
+    M5Cardputer.Display.print(text);
+    return y + 11;
+}
+
+// 简单 Help 页的功能说明
+static int drawSimpleHelpText(const int x, const int y, const char* text) {
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(x, y);
+    M5Cardputer.Display.print(text);
+    return y + 11;
+}
+
+static void drawLedHelpPage() {
+    beginAppScreen("Help");
+    constexpr int col_gap = 4;
+    const int screen_w = M5Cardputer.Display.width();
+    const int col_w = (screen_w - col_gap) / 2;
+    const int manual_x = col_w + col_gap;
+    const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
+    M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y,
+                                     M5Cardputer.Display.height() - col_y, DARKGREY);
+
+    int y = drawSimpleHelpColHeader(0, col_y, col_w, "keymap");
+    y = drawSimpleHelpKey(2, y, 't', "toggle");
+    y = drawSimpleHelpKey(2, y, '0', "off");
+    y = drawSimpleHelpBadge(2, y, "1-7", "select color");
+
+    y = drawSimpleHelpColHeader(manual_x, col_y, screen_w - manual_x, "manual");
+    y = drawSimpleHelpText(manual_x + 2, y, "test onboard RGB");
+    y = drawSimpleHelpText(manual_x + 2, y, "1-7: R G B Y C M W");
+    y = drawSimpleHelpText(manual_x + 2, y, "shares LCD power");
+    y = drawSimpleHelpText(manual_x + 2, y, "needs high brightness");
+    y = drawSimpleHelpText(manual_x + 2, y, "screen set to max");
+    y = drawSimpleHelpText(manual_x + 2, y, "exit restores level");
+
+    drawHelpHintRight("close");
+    updateAppHeaderStatus();
+}
 
 // 取板载 RGB 数据线脚位
 static int getRgbLedPin() {
@@ -1754,6 +1820,8 @@ void drawLedApp() {
         {'0', "off"},
     };
     drawKeyHintsRow(APP_CONTENT_X, hint_y, hints, 5, 1);
+    drawHelpHintRight("help");
+    updateAppHeaderStatus();
 }
 
 void enterLedApp() {
@@ -1761,6 +1829,7 @@ void enterLedApp() {
     g_led_saved_brightness = M5Cardputer.Display.getBrightness();
     M5Cardputer.Display.setBrightness(255);
     g_led_app_active = true;
+    g_led_help_visible = false;
     g_led_on = true;
     g_led_r = 255;
     g_led_g = 255;
@@ -1774,6 +1843,18 @@ void handleLedApp(const String& key) {
         return;
     }
     const char c = key[0];
+    if (c == 'h' || c == 'H') {
+        g_led_help_visible = !g_led_help_visible;
+        if (g_led_help_visible) {
+            drawLedHelpPage();
+        } else {
+            drawLedApp();
+        }
+        return;
+    }
+    if (g_led_help_visible) {
+        return;
+    }
     if (c == 't' || c == 'T') {
         g_led_on = !g_led_on;
     } else if (c == '0') {
@@ -1822,6 +1903,32 @@ void handleLedApp(const String& key) {
 
 // ===== IN I2C =====
 
+static void drawI2cHelpPage(const bool internal_bus) {
+    beginAppScreen("Help");
+    constexpr int col_gap = 4;
+    const int screen_w = M5Cardputer.Display.width();
+    const int col_w = (screen_w - col_gap) / 2;
+    const int manual_x = col_w + col_gap;
+    const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
+    M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y,
+                                     M5Cardputer.Display.height() - col_y, DARKGREY);
+
+    int y = drawSimpleHelpColHeader(0, col_y, col_w, "keymap");
+    y = drawSimpleHelpKey(2, y, 'h', "help / close");
+
+    y = drawSimpleHelpColHeader(manual_x, col_y, screen_w - manual_x, "manual");
+    y = drawSimpleHelpText(manual_x + 2, y,
+                           internal_bus ? "scan internal I2C" : "scan external I2C");
+    y = drawSimpleHelpText(manual_x + 2, y,
+                           internal_bus ? "internal bus debug" : "HY2.0 Port A bus");
+    y = drawSimpleHelpText(manual_x + 2, y, "show SDA/SCL pins");
+    y = drawSimpleHelpText(manual_x + 2, y, "scan address 1-119");
+    y = drawSimpleHelpText(manual_x + 2, y, "list found devices");
+
+    drawHelpHintRight("close");
+    updateAppHeaderStatus();
+}
+
 // 绘制 I2C 扫描结果（IN I2C / EX I2C 共用）
 void drawI2cScanApp(m5::I2C_Class& bus, const char* title) {
     bool found[120]{};
@@ -1836,6 +1943,8 @@ void drawI2cScanApp(m5::I2C_Class& bus, const char* title) {
 
     if (!bus.isEnabled()) {
         M5Cardputer.Display.println("bus disabled");
+        drawHelpHintRight("help");
+        updateAppHeaderStatus();
         return;
     }
 
@@ -1854,6 +1963,21 @@ void drawI2cScanApp(m5::I2C_Class& bus, const char* title) {
     }
     if (count == 0) {
         M5Cardputer.Display.println("no device");
+    }
+    drawHelpHintRight("help");
+    updateAppHeaderStatus();
+}
+
+static void handleI2cScanApp(const String& key, m5::I2C_Class& bus, const char* title,
+                             const bool internal_bus) {
+    if (key != "h" && key != "H") {
+        return;
+    }
+    g_i2c_help_visible = !g_i2c_help_visible;
+    if (g_i2c_help_visible) {
+        drawI2cHelpPage(internal_bus);
+    } else {
+        drawI2cScanApp(bus, title);
     }
 }
 
@@ -2256,9 +2380,11 @@ void enterApp(const AppState state) {
             enterRtcApp();
             break;
         case AppState::IN_I2C:
+            g_i2c_help_visible = false;
             drawI2cScanApp(M5Cardputer.In_I2C, "InI2");
             break;
         case AppState::EX_I2C:
+            g_i2c_help_visible = false;
             drawI2cScanApp(M5Cardputer.Ex_I2C, "ExI2");
             break;
         case AppState::WIFI:
@@ -2522,6 +2648,16 @@ void loop() {
             case AppState::ICONS:
                 if (M5Cardputer.Keyboard.isPressed()) {
                     handleIconDemoNav(M5Cardputer.Keyboard.keysState());
+                }
+                break;
+            case AppState::IN_I2C:
+                if (M5Cardputer.Keyboard.isPressed()) {
+                    handleI2cScanApp(getPressedKey(), M5Cardputer.In_I2C, "InI2", true);
+                }
+                break;
+            case AppState::EX_I2C:
+                if (M5Cardputer.Keyboard.isPressed()) {
+                    handleI2cScanApp(getPressedKey(), M5Cardputer.Ex_I2C, "ExI2", false);
                 }
                 break;
             case AppState::WEB:

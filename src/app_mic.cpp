@@ -330,12 +330,12 @@ static int micSampleToY(const int16_t sample, const int centerY, const int halfH
 }
 
 static int drawMicHelpColHeader(const int x, const int y, const int w, const char* title) {
-    M5Cardputer.Display.fillRect(x, y, w, 10, BLACK);
+    M5Cardputer.Display.fillRect(x, y, w, 11, APP_COLOR_LABEL);
     M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
+    M5Cardputer.Display.setTextColor(BLACK, APP_COLOR_LABEL);
     M5Cardputer.Display.setCursor(x + 2, y + 1);
     M5Cardputer.Display.print(title);
-    return y + 12;
+    return y + 13;
 }
 
 static int drawMicHelpKeyAt(const int x, int y, const char key, const char* text) {
@@ -377,7 +377,7 @@ static void drawMicHelpPage() {
     const int content_h = M5Cardputer.Display.height() - col_y;
     M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y, content_h, DARKGREY);
 
-    int y = drawMicHelpColHeader(keys_x, col_y, col_w, "keys");
+    int y = drawMicHelpColHeader(keys_x, col_y, col_w, "keymap");
     const int kx = keys_x + 2;
     y = drawMicHelpKeyAt(kx, y, 'r', "rec start/stop");
     y = drawMicHelpBadgeAt(kx, y, "BtnA", "rec start/stop");
@@ -385,7 +385,7 @@ static void drawMicHelpPage() {
     y = drawMicHelpKeyAt(kx, y, '=', "gain up");
     y = drawMicHelpKeyAt(kx, y, 'h', "help / close");
 
-    y = drawMicHelpColHeader(notes_x, col_y, screen_w - notes_x, "notes");
+    y = drawMicHelpColHeader(notes_x, col_y, screen_w - notes_x, "manual");
     const int nx = notes_x + 2;
     y = drawMicHelpTextAt(nx, y, "need microSD");
     y = drawMicHelpTextAt(nx, y, "save /audioRecord");

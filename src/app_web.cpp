@@ -39,6 +39,7 @@ static uint32_t g_connect_deadline_ms = 0;
 static bool g_wifi_begin_sent = false;
 static bool g_force_ap_mode = false;
 static bool g_web_screen_ready = false;
+static bool g_web_help_visible = false;
 
 static const char* DEFAULT_CONFIG = R"({
   "wifi": {
@@ -888,7 +889,67 @@ static const char* stripHttpPrefix(const char* url) {
     return url;
 }
 
+// Help 分栏标题
+static int drawWebHelpColHeader(const int x, const int y, const int w, const char* title) {
+    M5Cardputer.Display.fillRect(x, y, w, 11, APP_COLOR_LABEL);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(BLACK, APP_COLOR_LABEL);
+    M5Cardputer.Display.setCursor(x + 2, y + 1);
+    M5Cardputer.Display.print(title);
+    return y + 13;
+}
+
+// Help 按键说明；徽章后恢复说明文字颜色
+static int drawWebHelpKey(const int x, const int y, const char key, const char* text) {
+    const int cx = x + drawKeyBadge(x, y, key, 1);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(cx, y);
+    M5Cardputer.Display.print(text);
+    return y + 11;
+}
+
+// Help 功能说明
+static int drawWebHelpText(const int x, const int y, const char* text) {
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(x, y);
+    M5Cardputer.Display.print(text);
+    return y + 11;
+}
+
+static void drawWebHelpPage() {
+    beginAppScreen("Help");
+    constexpr int col_gap = 4;
+    const int screen_w = M5Cardputer.Display.width();
+    const int col_w = (screen_w - col_gap) / 2;
+    const int manual_x = col_w + col_gap;
+    const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
+    M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y,
+                                     M5Cardputer.Display.height() - col_y, DARKGREY);
+
+    int y = drawWebHelpColHeader(0, col_y, col_w, "keymap");
+    y = drawWebHelpKey(2, y, 'a', "switch to AP");
+    y = drawWebHelpKey(2, y, 'l', "retry LAN");
+
+    y = drawWebHelpColHeader(manual_x, col_y, screen_w - manual_x, "manual");
+    y = drawWebHelpText(manual_x + 2, y, "browser config");
+    y = drawWebHelpText(manual_x + 2, y, "LAN uses saved WiFi");
+    y = drawWebHelpText(manual_x + 2, y, "AP on LAN timeout");
+    y = drawWebHelpText(manual_x + 2, y, "edit WiFi/devices");
+    y = drawWebHelpText(manual_x + 2, y, "set Cursor/system");
+    y = drawWebHelpText(manual_x + 2, y, "save to config.json");
+
+    drawHelpHintRight("close");
+    updateAppHeaderStatus();
+}
+
 void drawWebApp() {
+    if (g_web_help_visible) {
+        drawWebHelpPage();
+        return;
+    }
+
     if (!g_web_screen_ready) {
         beginAppScreen("Config Setup");
         g_web_screen_ready = true;
@@ -954,6 +1015,7 @@ void drawWebApp() {
         }
 
         drawKeyHintAt(hint_y, 'a', "skip to AP mode");
+        drawHelpHintRight("help");
         return;
     }
 
@@ -961,12 +1023,14 @@ void drawWebApp() {
         drawLine1x("status", "failed");
         drawLine1x("state", g_web_status);
         drawKeyHintAt(hint_y, 'a', "for AP");
+        drawHelpHintRight("help");
         return;
     }
 
     if (!isConfigWebServerRunning()) {
         drawLine1x("status", "offline");
         drawTextHintAt(hint_y, "re-enter u");
+        drawHelpHintRight("help");
         return;
     }
 
@@ -985,9 +1049,21 @@ void drawWebApp() {
         drawTextHintAt(hint_y - INFO_LINE_H, "open url in browser");
         drawKeyHintAt(hint_y, 'l', "retry LAN mode");
     }
+    drawHelpHintRight("help");
 }
 
 void handleWebApp(const String& key) {
+    if (key == "h") {
+        g_web_help_visible = !g_web_help_visible;
+        if (!g_web_help_visible) {
+            g_web_screen_ready = false;
+        }
+        drawWebApp();
+        return;
+    }
+    if (g_web_help_visible) {
+        return;
+    }
     if (key == "a") {
         beginWebStartup(true);
         drawWebApp();
@@ -1001,6 +1077,7 @@ void handleWebApp(const String& key) {
 
 void enterWebApp() {
     g_web_screen_ready = false;
+    g_web_help_visible = false;
     beginWebStartup(false);
     drawWebApp();
 }

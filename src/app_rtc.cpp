@@ -131,124 +131,73 @@ static void drawClockBottomHints() {
     drawTimeBottomHints(items, 2);
 }
 
-// 估算按键提示项宽度
-static int timeMeasureKeyHintItem(const KeyHintItem& item, const int text_size) {
-    const int size = (text_size == 2) ? 2 : 1;
-    const char letter = static_cast<char>(toupper(static_cast<unsigned char>(item.key)));
-    const char str[2] = {letter, '\0'};
-    M5Cardputer.Display.setTextSize(size);
-    const int badge_w = M5Cardputer.Display.textWidth(str) + 4 + 3;
-    M5Cardputer.Display.setTextSize(text_size);
-    return badge_w + M5Cardputer.Display.textWidth(item.text);
+// Help 分栏标题
+static int drawTimeHelpColHeader(const int x, const int y, const int w, const char* title) {
+    M5Cardputer.Display.fillRect(x, y, w, 11, APP_COLOR_LABEL);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(BLACK, APP_COLOR_LABEL);
+    M5Cardputer.Display.setCursor(x + 2, y + 1);
+    M5Cardputer.Display.print(title);
+    return y + 13;
 }
 
-// 绘制单个按键提示，返回占用宽度
-static int timeDrawKeyHintItem(const int x, const int y, const KeyHintItem& item,
-                               const int text_size, const uint16_t color) {
-    int cx = x + drawKeyBadge(x, y, item.key, text_size);
-    M5Cardputer.Display.setTextSize(text_size);
-    M5Cardputer.Display.setTextColor(color, BLACK);
+// Help 按键说明；徽章后恢复说明文字颜色
+static int drawTimeHelpKey(const int x, const int y, const char key, const char* text) {
+    const int cx = x + drawKeyBadge(x, y, key, 1);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(item.text);
-    return cx + M5Cardputer.Display.textWidth(item.text) - x;
+    M5Cardputer.Display.print(text);
+    return y + 11;
 }
 
-// Help 页内容区高度
-static int timeHelpContentHeight() {
-    return M5Cardputer.Display.height() - TIME_HINT_ROW_H - APP_CONTENT_Y;
+static int drawTimeHelpBadge(const int x, const int y, const char* badge, const char* text) {
+    const int cx = x + drawTextBadge(x, y, badge, 1);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(cx, y);
+    M5Cardputer.Display.print(text);
+    return y + 11;
 }
 
-// x2 组：在上方区域均分行 y
-static int timeHelpX2RowY(const int row, const int total_x2_rows) {
-    constexpr int x1_rows = 2;
-    constexpr int x1_gap = 4;
-    constexpr int group_gap = 6;
-    const int x1_block_h = x1_rows * INFO_LINE_H + (x1_rows - 1) * x1_gap;
-    const int x2_block_h = timeHelpContentHeight() - x1_block_h - group_gap;
-    const int slot_h = x2_block_h / total_x2_rows;
-    return APP_CONTENT_Y + row * slot_h + (slot_h - INFO_LINE_H_2X) / 2;
-}
-
-// x1 组：在剩余区域紧凑排列
-static int timeHelpX1RowY(const int row) {
-    constexpr int x1_rows = 2;
-    constexpr int x1_gap = 4;
-    constexpr int group_gap = 6;
-    const int x1_block_h = x1_rows * INFO_LINE_H + (x1_rows - 1) * x1_gap;
-    const int x2_block_h = timeHelpContentHeight() - x1_block_h - group_gap;
-    const int x1_top = APP_CONTENT_Y + x2_block_h + group_gap;
-    return x1_top + row * (INFO_LINE_H + x1_gap);
-}
-
-// x2 组：按屏宽换行绘制按键提示，返回下一行索引
-static int drawTimeHelpX2KeyHints(const int x, int row, const int total_x2_rows,
-                                  const KeyHintItem* items, const int item_count,
-                                  const int text_size, const uint16_t color, const int max_w) {
-    if (items == nullptr || item_count <= 0) {
-        return row;
-    }
-
-    int cx = x;
-    int y = timeHelpX2RowY(row, total_x2_rows);
-    M5Cardputer.Display.setTextSize(text_size);
-    const int space_w = M5Cardputer.Display.textWidth(" ");
-
-    for (int i = 0; i < item_count; i++) {
-        const int item_w = timeMeasureKeyHintItem(items[i], text_size);
-        if (cx > x && cx + item_w > x + max_w) {
-            row++;
-            y = timeHelpX2RowY(row, total_x2_rows);
-            cx = x;
-        }
-        cx += timeDrawKeyHintItem(cx, y, items[i], text_size, color);
-        if (i != item_count - 1) {
-            M5Cardputer.Display.setCursor(cx, y);
-            M5Cardputer.Display.print(" ");
-            cx += space_w;
-        }
-    }
-    return row + 1;
+// Help 功能说明
+static int drawTimeHelpText(const int x, const int y, const char* text) {
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(x, y);
+    M5Cardputer.Display.print(text);
+    return y + 11;
 }
 
 static void drawTimeHelpScreen() {
     beginAppScreen("Help");
-    constexpr int ts = 2;
-    constexpr int x2_rows = 3;
-    const int max_w = M5Cardputer.Display.width() - APP_CONTENT_X * 2;
+    constexpr int col_gap = 4;
+    const int screen_w = M5Cardputer.Display.width();
+    const int col_w = (screen_w - col_gap) / 2;
+    const int manual_x = col_w + col_gap;
+    const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
+    M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y,
+                                     M5Cardputer.Display.height() - col_y, DARKGREY);
 
-    static const KeyHintItem modes[] = {
-        {'u', "uptime"},
-        {'t', "clock"},
-        {'c', "cd"},
-        {'s', "sw"},
-        {'r', "sync"},
-    };
-    int row = drawTimeHelpX2KeyHints(APP_CONTENT_X, 0, x2_rows, modes, 5, ts, APP_COLOR_HINT,
-                                     max_w);
+    int y = drawTimeHelpColHeader(0, col_y, col_w, "keymap");
+    y = drawTimeHelpKey(2, y, 'u', "uptime");
+    y = drawTimeHelpKey(2, y, 't', "clock");
+    y = drawTimeHelpKey(2, y, 'c', "countdown");
+    y = drawTimeHelpKey(2, y, 's', "stopwatch");
+    y = drawTimeHelpKey(2, y, 'p', "pure mode");
+    y = drawTimeHelpKey(2, y, 'r', "sync / reset");
+    y = drawTimeHelpBadge(2, y, "BtnA", "start / pause");
 
-    static const KeyHintItem pure_items[] = {{'p', "pure"}};
-    drawTimeHelpX2KeyHints(APP_CONTENT_X, row, x2_rows, pure_items, 1, ts, APP_COLOR_HINT,
-                           max_w);
+    y = drawTimeHelpColHeader(manual_x, col_y, screen_w - manual_x, "manual");
+    y = drawTimeHelpText(manual_x + 2, y, "uptime since boot");
+    y = drawTimeHelpText(manual_x + 2, y, "clock RTC / NTP");
+    y = drawTimeHelpText(manual_x + 2, y, "countdown + alarm");
+    y = drawTimeHelpText(manual_x + 2, y, "stopwatch 1 ms");
+    y = drawTimeHelpText(manual_x + 2, y, "CD/SW run in bg");
+    y = drawTimeHelpText(manual_x + 2, y, "while device awake");
 
-    constexpr int hint_ts = 1;
-    int y = timeHelpX1RowY(0);
-    int cx = APP_CONTENT_X;
-    M5Cardputer.Display.setTextSize(hint_ts);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print("cd/sw ");
-    cx += M5Cardputer.Display.textWidth("cd/sw ");
-    cx += drawTextBadge(cx, y, "BtnA", hint_ts);
-    cx += drawTextBadge(cx, y, "sp", hint_ts);
-    cx += drawTextBadge(cx, y, "ent", hint_ts);
-
-    y = timeHelpX1RowY(1);
-    M5Cardputer.Display.setTextSize(hint_ts);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
-    M5Cardputer.Display.print("start/pause");
-
-    drawTimeBottomHints(nullptr, 0, "back");
+    drawHelpHintRight("close");
+    updateAppHeaderStatus();
 }
 
 static void redrawCurrentTimeMode() {

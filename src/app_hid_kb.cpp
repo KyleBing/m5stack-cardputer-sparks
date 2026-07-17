@@ -44,7 +44,7 @@ static constexpr uint8_t kModRAlt = 0x40;
 static constexpr uint8_t kModRGui = 0x80;
 static constexpr uint8_t kHidCapsLock = 0x39;
 
-static constexpr int kHelpPageCount = 3;
+static constexpr int kHelpPageCount = 2;
 
 static bool g_screen_ready = false;
 static bool g_active = false;
@@ -754,24 +754,33 @@ static void drawHintBar() {
     drawHelpHintRight("help");
 }
 
-static constexpr int kHelpLineH = 11;
+// Help 分栏标题
+static int helpDrawColHeader(const int x, const int y, const int w, const char* title) {
+    M5Cardputer.Display.fillRect(x, y, w, 11, APP_COLOR_LABEL);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(BLACK, APP_COLOR_LABEL);
+    M5Cardputer.Display.setCursor(x + 2, y + 1);
+    M5Cardputer.Display.print(title);
+    return y + 13;
+}
 
-// 徽章后的说明文字（必须恢复 hint 色）
-static int helpDrawText(const int cx, const int y, const char* text) {
+// Help 文本徽章说明；徽章后恢复说明文字颜色
+static int helpDrawBadge(const int x, const int y, const char* badge, const char* text) {
+    const int cx = x + drawTextBadge(x, y, badge, 1);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y + 1);
+    M5Cardputer.Display.setCursor(cx, y);
     M5Cardputer.Display.print(text);
-    return cx + M5Cardputer.Display.textWidth(text);
+    return y + 11;
 }
 
-static int helpDrawGap(const int cx, const int y, const int px = 6) {
-    (void)y;
-    return cx + px;
-}
-
-static int helpNextLine(const int y) {
-    return y + kHelpLineH;
+// Help 功能说明
+static int helpDrawLine(const int x, const int y, const char* text) {
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(x, y);
+    M5Cardputer.Display.print(text);
+    return y + 11;
 }
 
 // 底栏：箭头徽章翻页 + 页码，右侧 h close
@@ -797,109 +806,44 @@ static void drawHelpPage() {
     g_screen_ready = true;
     clearAppContentArea();
 
-    int y = APP_CONTENT_Y_NO_TAP_TO_HEADER + 1;
-    int cx = APP_CONTENT_X;
+    constexpr int col_gap = 4;
+    const int screen_w = M5Cardputer.Display.width();
+    const int col_w = (screen_w - col_gap) / 2;
+    const int manual_x = col_w + col_gap;
+    const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
+    M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y,
+                                     M5Cardputer.Display.height() - col_y, DARKGREY);
 
     if (g_help_page == 0) {
-        // Fn+` Esc   Fn+Bksp Del
-        cx = APP_CONTENT_X;
-        cx += drawTextBadge(cx, y, "Fn", 1);
-        cx += drawKeyBadge(cx, y, '`', 1);
-        cx = helpDrawText(cx, y, "Esc");
-        cx = helpDrawGap(cx, y);
-        cx += drawTextBadge(cx, y, "Fn", 1);
-        cx += drawTextBadge(cx, y, "Bksp", 1);
-        helpDrawText(cx, y, "Del");
-        y = helpNextLine(y);
+        int y = helpDrawColHeader(0, col_y, col_w, "keymap");
+        y = helpDrawBadge(2, y, "BtnA", "exit app");
+        y = helpDrawBadge(2, y, "Fn+u", "USB");
+        y = helpDrawBadge(2, y, "Fn+b", "BLE");
+        y = helpDrawBadge(2, y, "Fn+p", "pair");
+        y = helpDrawBadge(2, y, "Fn+h", "help");
 
-        // Fn+; , . / → 方向键
-        cx = APP_CONTENT_X;
-        cx += drawTextBadge(cx, y, "Fn", 1);
-        cx += drawKeyBadge(cx, y, ';', 1);
-        cx += drawKeyBadge(cx, y, ',', 1);
-        cx += drawKeyBadge(cx, y, '.', 1);
-        cx += drawKeyBadge(cx, y, '/', 1);
-        cx = helpDrawText(cx, y, " ");
-        cx += drawArrowUpDownBadge(cx, y, 1);
-        cx += drawArrowBadge(cx, y, 1);
-        helpDrawText(cx, y, "arrows");
-        y = helpNextLine(y);
-
-        // Fn+1..0 F1-F10   Fn+-/= F11/F12
-        cx = APP_CONTENT_X;
-        cx += drawTextBadge(cx, y, "Fn", 1);
-        cx += drawKeyBadge(cx, y, '1', 1);
-        cx = helpDrawText(cx, y, "..");
-        cx += drawKeyBadge(cx, y, '0', 1);
-        cx = helpDrawText(cx, y, "F1-10");
-        cx = helpDrawGap(cx, y);
-        cx += drawTextBadge(cx, y, "Fn", 1);
-        cx += drawKeyBadge(cx, y, '-', 1);
-        cx += drawKeyBadge(cx, y, '=', 1);
-        helpDrawText(cx, y, "F11/12");
-        y = helpNextLine(y);
-
-        // Fn+Aa Caps
-        cx = APP_CONTENT_X;
-        cx += drawTextBadge(cx, y, "Fn", 1);
-        cx += drawTextBadge(cx, y, "Aa", 1);
-        helpDrawText(cx, y, "Caps Lock");
-        y = helpNextLine(y);
-
-        // Fn+Ctrl/Opt/Alt → Right
-        cx = APP_CONTENT_X;
-        cx += drawTextBadge(cx, y, "Fn", 1);
-        cx += drawTextBadge(cx, y, "Ctrl", 1);
-        cx += drawTextBadge(cx, y, "Opt", 1);
-        cx += drawTextBadge(cx, y, "Alt", 1);
-        helpDrawText(cx, y, "Right");
-        y = helpNextLine(y);
-
-        // Opt → Win/Cmd
-        cx = APP_CONTENT_X;
-        cx += drawTextBadge(cx, y, "Opt", 1);
-        helpDrawText(cx, y, "Win/Cmd (Left GUI)");
-    } else if (g_help_page == 1) {
-        cx = APP_CONTENT_X;
-        cx += drawTextBadge(cx, y, "BtnA", 1);
-        helpDrawText(cx, y, "exit app (keys go to host)");
-        y = helpNextLine(y);
-
-        cx = APP_CONTENT_X;
-        cx += drawTextBadge(cx, y, "Fn", 1);
-        cx += drawKeyBadge(cx, y, 'u', 1);
-        cx = helpDrawText(cx, y, "usb ");
-        cx += drawTextBadge(cx, y, "Fn", 1);
-        cx += drawKeyBadge(cx, y, 'b', 1);
-        cx = helpDrawText(cx, y, "ble ");
-        cx += drawTextBadge(cx, y, "Fn", 1);
-        cx += drawKeyBadge(cx, y, 'p', 1);
-        helpDrawText(cx, y, "pair");
-        y = helpNextLine(y);
-
-        cx = APP_CONTENT_X;
-        cx += drawTextBadge(cx, y, "Fn", 1);
-        cx += drawKeyBadge(cx, y, 'h', 1);
-        helpDrawText(cx, y, "this help");
-        y = helpNextLine(y);
-
-        helpDrawText(APP_CONTENT_X, y, "Default BLE keeps upload port free");
-        y = helpNextLine(y);
-        helpDrawText(APP_CONTENT_X, y, "Exit USB restores Serial/JTAG");
-        y = helpNextLine(y);
-        helpDrawText(APP_CONTENT_X, y, "BLE name: Cardputer KB");
+        y = helpDrawColHeader(manual_x, col_y, screen_w - manual_x, "manual");
+        y = helpDrawLine(manual_x + 2, y, "USB / BLE keyboard");
+        y = helpDrawLine(manual_x + 2, y, "all keys go to host");
+        y = helpDrawLine(manual_x + 2, y, "default uses BLE");
+        y = helpDrawLine(manual_x + 2, y, "name: Cardputer KB");
+        y = helpDrawLine(manual_x + 2, y, "USB blocks upload");
+        y = helpDrawLine(manual_x + 2, y, "exit restores JTAG");
     } else {
-        helpDrawText(APP_CONTENT_X, y, "All keys are sent to the host PC");
-        y = helpNextLine(y);
-        helpDrawText(APP_CONTENT_X, y, "so only side BtnA can exit this app");
-        y = helpNextLine(y);
-        helpDrawText(APP_CONTENT_X, y, "Fn layer: orange labels + listed combos");
-        y = helpNextLine(y);
-        helpDrawText(APP_CONTENT_X, y, "Unlisted Fn+key is ignored (not typed)");
-        y = helpNextLine(y);
-        helpDrawText(APP_CONTENT_X, y, "USB mode: exit app before pio upload");
-        y = helpNextLine(y);
-        helpDrawText(APP_CONTENT_X, y, "or the serial port may disappear");
+        int y = helpDrawColHeader(0, col_y, col_w, "keymap");
+        y = helpDrawBadge(2, y, "Fn+`", "Esc");
+        y = helpDrawBadge(2, y, "Fn+Bk", "Delete");
+        y = helpDrawBadge(2, y, "Fn+; , . /", "arrows");
+        y = helpDrawBadge(2, y, "Fn+1..0", "F1-10");
+        y = helpDrawBadge(2, y, "Fn+- =", "F11/12");
+        y = helpDrawBadge(2, y, "Fn+Aa", "Caps");
+        y = helpDrawBadge(2, y, "Fn+mods", "right");
+
+        y = helpDrawColHeader(manual_x, col_y, screen_w - manual_x, "manual");
+        y = helpDrawLine(manual_x + 2, y, "Opt = Win / Cmd");
+        y = helpDrawLine(manual_x + 2, y, "Fn uses orange keys");
+        y = helpDrawLine(manual_x + 2, y, "unknown Fn ignored");
+        y = helpDrawLine(manual_x + 2, y, "side BtnA exits");
     }
 
     drawHelpHintBar();

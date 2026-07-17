@@ -79,7 +79,7 @@ struct CursorLastRequest {
     char tokens_str[12];
 };
 
-static constexpr int CURSOR_LAST_MAX = 10;
+static constexpr int CURSOR_LAST_MAX = 5;
 static constexpr int CURSOR_LAST_PER_PAGE = 1; // usage 每页一条，方便阅读
 static constexpr int CURSOR_LAST_STATUS_H = 11;  // header 下分页/状态行
 
@@ -101,12 +101,14 @@ static bool g_last_refreshing = false; // r 软刷新中（保留旧列表）
 static bool g_want_last_fetch = false; // 切到 last 时若尚未就绪则排队拉取
 static uint32_t g_last_period_fetch_ms = 0;
 static bool g_was_slow_loop = false; // 1s 慢循环态，用于右上角蓝点
+static int64_t g_last_clock_minute = -1; // last 状态栏时钟的最近显示分钟
 static uint32_t g_last_chart_24_fetch_ms = 0;
 static uint32_t g_last_chart_7_fetch_ms = 0;
 static uint32_t g_last_chart_30_fetch_ms = 0;
 static float g_chart_24_cents[CURSOR_HOURS]{};
 static float g_chart_7_cents[7]{};
 static float g_chart_30_cents[30]{};
+static int g_chart_24_highlight_hour = -1; // 24h 图中当前高亮的本地小时
 static bool g_chart_24_ready = false;
 static bool g_chart_7_ready = false;
 static bool g_chart_30_ready = false;
@@ -131,11 +133,8 @@ static bool g_periodic_refresh_active = false;
 // 熄屏：关背光/面板，后台仍按 5 分钟刷新
 static bool g_display_blanked = false;
 static uint8_t g_saved_brightness = 30;
-// Help 页（方向键翻页）
+// Help 页
 static bool g_help_visible = false;
-static int g_help_page = 0;
-static constexpr int CURSOR_HELP_PAGE_COUNT = 5;
-static constexpr int CURSOR_HELP_LINE_H = 11;
 // FreeRTOS：网络请求与主循环键扫分离
 static constexpr uint32_t CURSOR_FETCH_STACK = 8192; // FreeRTOS 单位：字（≈32KB）
 static volatile bool g_task_running = false;
@@ -154,7 +153,6 @@ static char* chartErrorBuf(const int days);
 static void blankCursorDisplay();
 static void wakeCursorDisplay(bool redraw);
 static void drawCursorHelpPage();
-static void drawCursorHelpHints();
 static void scheduleCursorFetchTask();
 static void cursorFetchTaskFn(void* arg);
 static void waitCursorFetchTaskDone(uint32_t timeout_ms);
@@ -1055,6 +1053,16 @@ static void cursorBarLayout(const int x, const int w, const int days, const int 
   bar_w = next_x - bar_x;
 }
 
+// 获取当前本地小时，系统时间尚未同步时不高亮。
+static int currentLocalHour() {
+  const time_t now = time(nullptr);
+  if (now <= 1600000000) {
+    return -1;
+  }
+  struct tm local_tm;
+  return localtime_r(&now, &local_tm) != nullptr ? local_tm.tm_hour : -1;
+}
+
 // 绘制每日 bar 图；daily_cents 为 null 时仅画空框
 static void drawDailyBars(const int x, const int y, const int w, const int bar_h, const int days,
                           const float* daily_cents, const int gap, const bool draw_labels) {
@@ -1071,15 +1079,22 @@ static void drawDailyBars(const int x, const int y, const int w, const int bar_h
     }
   }
 
+  const int current_hour = days == 24 ? currentLocalHour() : -1;
+  if (days == 24) {
+    g_chart_24_highlight_hour = current_hour;
+  }
+
   for (int i = 0; i < days; i++) {
     int bar_x = 0;
     int bar_w = 0;
     cursorBarLayout(x, w, days, gap, i, bar_x, bar_w);
+    const bool is_current_hour = days == 24 && i == current_hour;
 
     if (daily_cents != nullptr) {
       const int fill_h = static_cast<int>(bar_h * (daily_cents[i] / max_val));
       const int by = y + bar_h - fill_h;
-      const uint16_t color = (i == days - 1) ? APP_COLOR_OK : CYAN;
+      const uint16_t color =
+          (is_current_hour || (days != 24 && i == days - 1)) ? APP_COLOR_OK : CYAN;
       if (fill_h > 0) {
         M5Cardputer.Display.fillRect(bar_x, by, bar_w, fill_h, color);
       }
@@ -1294,120 +1309,87 @@ static void drawCursorHints() {
   M5Cardputer.Display.setCursor(cx, hint_y);
   M5Cardputer.Display.print("rf ");
   cx += M5Cardputer.Display.textWidth("rf ");
-  cx += drawTextBadge(cx, hint_y, "BtnA", 1);
-  M5Cardputer.Display.setTextSize(1);
-  M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-  M5Cardputer.Display.setCursor(cx, hint_y);
-  M5Cardputer.Display.print("off");
   drawHelpHintRight("help");
 }
 
-// Help：x2 分区标题
-static int drawCursorHelpTitle(const int y, const char* title) {
-  M5Cardputer.Display.setTextSize(2);
-  M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-  M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
+// Help 分栏标题
+static int drawCursorHelpColHeader(const int x, const int y, const int w, const char* title) {
+  M5Cardputer.Display.fillRect(x, y, w, 11, APP_COLOR_LABEL);
+  M5Cardputer.Display.setTextSize(1);
+  M5Cardputer.Display.setTextColor(BLACK, APP_COLOR_LABEL);
+  M5Cardputer.Display.setCursor(x + 2, y + 1);
   M5Cardputer.Display.print(title);
-  return y + INFO_LINE_H_2X;
+  return y + 13;
 }
 
-// Help：x1 纯文本行
-static int drawCursorHelpText(const int y, const char* text) {
+// Help 功能说明
+static int drawCursorHelpText(const int x, const int y, const char* text) {
   M5Cardputer.Display.setTextSize(1);
   M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-  M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
+  M5Cardputer.Display.setCursor(x, y);
   M5Cardputer.Display.print(text);
-  return y + CURSOR_HELP_LINE_H;
+  return y + 11;
 }
 
 // Help：按键徽章 + 说明（徽章后恢复 hint 色）
-static int drawCursorHelpKey(const int y, const char key, const char* text) {
-  const int cx = APP_CONTENT_X + drawKeyBadge(APP_CONTENT_X, y, key, 1);
+static int drawCursorHelpKey(const int x, const int y, const char key, const char* text) {
+  const int cx = x + drawKeyBadge(x, y, key, 1);
   M5Cardputer.Display.setTextSize(1);
   M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-  M5Cardputer.Display.setCursor(cx, y + 1);
+  M5Cardputer.Display.setCursor(cx, y);
   M5Cardputer.Display.print(text);
-  return y + CURSOR_HELP_LINE_H;
+  return y + 11;
 }
 
-// Help：文本徽章（如 BtnA）+ 说明
-static int drawCursorHelpBadge(const int y, const char* badge, const char* text) {
-  const int cx = APP_CONTENT_X + drawTextBadge(APP_CONTENT_X, y, badge, 1);
+// Help：文本徽章 + 说明
+static int drawCursorHelpBadge(const int x, const int y, const char* badge, const char* text) {
+  const int cx = x + drawTextBadge(x, y, badge, 1);
   M5Cardputer.Display.setTextSize(1);
   M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-  M5Cardputer.Display.setCursor(cx, y + 1);
+  M5Cardputer.Display.setCursor(cx, y);
   M5Cardputer.Display.print(text);
-  return y + CURSOR_HELP_LINE_H;
+  return y + 11;
 }
 
 // Help：箭头徽章 + 说明
-static int drawCursorHelpArrows(const int y, const char* text) {
-  const int cx = APP_CONTENT_X + drawArrowBadge(APP_CONTENT_X, y, 1);
+static int drawCursorHelpArrows(const int x, const int y, const char* text) {
+  const int cx = x + drawArrowBadge(x, y, 1);
   M5Cardputer.Display.setTextSize(1);
   M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-  M5Cardputer.Display.setCursor(cx, y + 1);
+  M5Cardputer.Display.setCursor(cx, y);
   M5Cardputer.Display.print(text);
-  return y + CURSOR_HELP_LINE_H;
-}
-
-static void drawCursorHelpHints() {
-  const int hint_y = M5Cardputer.Display.height() - 12;
-  M5Cardputer.Display.fillRect(APP_CONTENT_X, hint_y, 236, 12, BLACK);
-  int cx = APP_CONTENT_X;
-  cx += drawArrowBadge(cx, hint_y, 1);
-  M5Cardputer.Display.setTextSize(1);
-  M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-  M5Cardputer.Display.setCursor(cx, hint_y);
-  M5Cardputer.Display.print("page ");
-  cx += M5Cardputer.Display.textWidth("page ");
-  char buf[8];
-  snprintf(buf, sizeof(buf), "%d/%d", g_help_page + 1, CURSOR_HELP_PAGE_COUNT);
-  M5Cardputer.Display.setCursor(cx, hint_y);
-  M5Cardputer.Display.print(buf);
-  drawHelpHintRight("close");
+  return y + 11;
 }
 
 static void drawCursorHelpPage() {
   beginAppScreen("Help");
-  int y = APP_CONTENT_Y;
+  constexpr int col_gap = 4;
+  const int screen_w = M5Cardputer.Display.width();
+  const int col_w = (screen_w - col_gap) / 2;
+  const int manual_x = col_w + col_gap;
+  const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
+  M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y,
+                                   M5Cardputer.Display.height() - col_y, DARKGREY);
 
-  if (g_help_page == 0) {
-    y = drawCursorHelpTitle(y, "Keys");
-    y = drawCursorHelpArrows(y, "switch views");
-    y = drawCursorHelpKey(y, '[', "last prev");
-    y = drawCursorHelpKey(y, ']', "last next");
-    y = drawCursorHelpKey(y, 'r', "refresh now");
-    y = drawCursorHelpBadge(y, "BtnA", "screen off");
-    y = drawCursorHelpKey(y, 'h', "help / close");
-  } else if (g_help_page == 1) {
-    y = drawCursorHelpTitle(y, "Jump");
-    y = drawCursorHelpKey(y, 's', "home / summary");
-    y = drawCursorHelpKey(y, 'u', "usage 1/page");
-    y = drawCursorHelpKey(y, 'd', "24h (day)");
-    y = drawCursorHelpKey(y, 'w', "7d (week)");
-    y = drawCursorHelpKey(y, 'm', "30d (month)");
-  } else if (g_help_page == 2) {
-    y = drawCursorHelpTitle(y, "Refresh");
-    y = drawCursorHelpText(y, "idle 1m: first auto");
-    y = drawCursorHelpText(y, "then every 5m");
-    y = drawCursorHelpText(y, "silent: no UI flash");
-    y = drawCursorHelpText(y, "blank: still refreshes");
-    y = drawCursorHelpText(y, "blue dot: 1s slow loop");
-  } else if (g_help_page == 3) {
-    y = drawCursorHelpTitle(y, "Usage");
-    y = drawCursorHelpText(y, "ond: On-Demand spend");
-    y = drawCursorHelpText(y, "L used / R limit");
-    y = drawCursorHelpText(y, "no limit: used only");
-    y = drawCursorHelpText(y, "Auto/API: remaining %");
-    y = drawCursorHelpText(y, "reset: days | MM-DD");
-  } else {
-    y = drawCursorHelpTitle(y, "WiFi");
-    y = drawCursorHelpText(y, "connect only to fetch");
-    y = drawCursorHelpText(y, "disconnect after done");
-    y = drawCursorHelpText(y, "token: web config");
-  }
+  int y = drawCursorHelpColHeader(0, col_y, col_w, "keymap");
+  y = drawCursorHelpArrows(2, y, "switch views");
+  y = drawCursorHelpKey(2, y, 's', "summary");
+  y = drawCursorHelpKey(2, y, 'u', "latest usage");
+  y = drawCursorHelpBadge(2, y, "d/w/m", "charts");
+  y = drawCursorHelpBadge(2, y, "[ ]", "records");
+  y = drawCursorHelpKey(2, y, 'r', "refresh");
+  y = drawCursorHelpBadge(2, y, "BtnA", "screen off");
 
-  drawCursorHelpHints();
+  y = drawCursorHelpColHeader(manual_x, col_y, screen_w - manual_x, "manual");
+  y = drawCursorHelpText(manual_x + 2, y, "Cursor usage viewer");
+  y = drawCursorHelpText(manual_x + 2, y, "Auto/API remaining");
+  y = drawCursorHelpText(manual_x + 2, y, "On-Demand spend");
+  y = drawCursorHelpText(manual_x + 2, y, "latest requests");
+  y = drawCursorHelpText(manual_x + 2, y, "24h/7d/30d charts");
+  y = drawCursorHelpText(manual_x + 2, y, "auto refresh idle");
+  y = drawCursorHelpText(manual_x + 2, y, "WiFi only on fetch");
+
+  drawHelpHintRight("close");
   updateAppHeaderStatus();
 }
 
@@ -1505,7 +1487,7 @@ static void drawCursorSummaryPage(const int y) {
   }
 }
 
-// usage 页 header 下方状态行：分页 + 载入（小字）
+// usage 页 header 下方状态行：分页、载入状态和当前时间（小字）
 static void drawCursorLastStatusBar(const int y) {
   const int pad_x = APP_CONTENT_X;
   const int screen_w = M5Cardputer.Display.width();
@@ -1516,19 +1498,38 @@ static void drawCursorLastStatusBar(const int y) {
       g_last_req_count > 0
           ? (g_last_req_count + CURSOR_LAST_PER_PAGE - 1) / CURSOR_LAST_PER_PAGE
           : 0;
-  char page_s[12] = "";
+  char current_page_s[6] = "";
+  char total_pages_s[8] = "";
   if (pages > 0) {
-    snprintf(page_s, sizeof(page_s), "%d/%d", g_last_page + 1, pages);
+    snprintf(current_page_s, sizeof(current_page_s), "%d", g_last_page + 1);
+    snprintf(total_pages_s, sizeof(total_pages_s), "/%d", pages);
   }
 
-  // 左：分页
-  if (page_s[0] != '\0') {
-    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
+  // 左：当前页橙色，总页数白色
+  if (current_page_s[0] != '\0') {
+    M5Cardputer.Display.setTextColor(APP_COLOR_WARN, BLACK);
     M5Cardputer.Display.setCursor(pad_x, y + 1);
-    M5Cardputer.Display.print(page_s);
+    M5Cardputer.Display.print(current_page_s);
+    M5Cardputer.Display.setTextColor(WHITE, BLACK);
+    M5Cardputer.Display.print(total_pages_s);
   }
 
-  // 右：载入/刷新状态（小字）
+  // 右：当前本地时间，仅显示时分
+  char clock_s[6] = "--:--";
+  const time_t now = time(nullptr);
+  if (now > 1600000000) {
+    struct tm local_tm;
+    if (localtime_r(&now, &local_tm) != nullptr) {
+      strftime(clock_s, sizeof(clock_s), "%H:%M", &local_tm);
+      g_last_clock_minute = static_cast<int64_t>(now) / 60;
+    }
+  }
+  M5Cardputer.Display.setTextColor(WHITE, BLACK);
+  const int clock_w = M5Cardputer.Display.textWidth(clock_s);
+  M5Cardputer.Display.setCursor(screen_w - pad_x - clock_w, y + 1);
+  M5Cardputer.Display.print(clock_s);
+
+  // 中间保留载入/空列表状态，避免覆盖右侧时间
   const char* st = nullptr;
   if (g_last_refreshing) {
     st = "loading...";
@@ -1538,8 +1539,11 @@ static void drawCursorLastStatusBar(const int y) {
   if (st != nullptr) {
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     const int sw = M5Cardputer.Display.textWidth(st);
-    M5Cardputer.Display.setCursor(screen_w - pad_x - sw, y + 1);
-    M5Cardputer.Display.print(st);
+    const int sx = screen_w - pad_x - clock_w - 6 - sw;
+    if (sx > pad_x + 24) {
+      M5Cardputer.Display.setCursor(sx, y + 1);
+      M5Cardputer.Display.print(st);
+    }
   }
 }
 
@@ -1615,14 +1619,16 @@ static void drawCursorLastPage(const int y) {
 
   const char* tok = req.tokens_str[0] != '\0' ? req.tokens_str : "-";
 
-  // 块高：日期 + 大时间 + 间距 + 模型 + 间距 + token(+Inc)
-  constexpr int date_h = 10;
+  // 块高：日期和时间间隔 2px，再显示模型与 token 状态
+  constexpr int date_h = 8;
+  constexpr int date_time_gap = 2;
   constexpr int time_h = INFO_LINE_H_2X;
   constexpr int model_h = 12;
   constexpr int token_h = INFO_LINE_H_2X;
   constexpr int gap1 = 4;
   constexpr int gap2 = 6;
-  const int block_h = date_h + time_h + gap1 + model_h + gap2 + token_h;
+  const int block_h =
+      date_h + date_time_gap + time_h + gap1 + model_h + gap2 + token_h;
   int cy = body_top + (body_h > block_h ? (body_h - block_h) / 2 : 0);
 
   // 日期（次要）
@@ -1630,7 +1636,7 @@ static void drawCursorLastPage(const int y) {
   M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
   M5Cardputer.Display.setCursor(pad_x, cy);
   M5Cardputer.Display.print(date_s[0] != '\0' ? date_s : "-");
-  cy += date_h;
+  cy += date_h + date_time_gap;
 
   // 时间（主时间，x2）
   M5Cardputer.Display.setTextSize(2);
@@ -1646,7 +1652,7 @@ static void drawCursorLastPage(const int y) {
   M5Cardputer.Display.print(model_line);
   cy += model_h + gap2;
 
-  // token 大字 + Included 标签
+  // token 大字 + Included 完整状态标签
   M5Cardputer.Display.setTextSize(2);
   M5Cardputer.Display.setTextColor(WHITE, BLACK);
   M5Cardputer.Display.setCursor(pad_x, cy);
@@ -1654,7 +1660,7 @@ static void drawCursorLastPage(const int y) {
   if (req.included) {
     const int tw = M5Cardputer.Display.textWidth(tok);
     // 绿底小徽章，比纯文字更醒目
-    const char* badge = "Inc";
+    const char* badge = "Included";
     M5Cardputer.Display.setTextSize(1);
     const int bw = M5Cardputer.Display.textWidth(badge) + 6;
     const int bh = 10;
@@ -1987,7 +1993,6 @@ void enterCursorApp() {
   g_want_last_fetch = false;
   g_display_blanked = false;
   g_help_visible = false;
-  g_help_page = 0;
   beginCursorFetch(CursorFetchMode::FULL);
 }
 
@@ -2273,6 +2278,17 @@ void updateCursorApp() {
     refreshChartLoadingFrame();
   }
 
+  // last 页右上角时钟跨分钟后刷新。
+  const time_t now = time(nullptr);
+  if (g_page == CursorPage::LAST && !g_display_blanked && !g_help_visible &&
+      now > 1600000000 && static_cast<int64_t>(now) / 60 != g_last_clock_minute) {
+    g_need_redraw = true;
+  }
+  if (g_page == CursorPage::CHART_24 && g_chart_24_ready && !g_display_blanked &&
+      !g_help_visible && currentLocalHour() != g_chart_24_highlight_hour) {
+    g_need_redraw = true;
+  }
+
   if (g_need_redraw) {
     g_need_redraw = false;
     drawCursorApp();
@@ -2331,12 +2347,6 @@ void handleCursorApp(const Keyboard_Class::KeysState& status) {
   const String key = getPressedKey();
   if (g_help_visible) {
     noteCursorActivity();
-    const int delta = getMenuNavDelta(status);
-    if (delta != 0) {
-      g_help_page = (g_help_page + delta + CURSOR_HELP_PAGE_COUNT) % CURSOR_HELP_PAGE_COUNT;
-      drawCursorHelpPage();
-      return;
-    }
     if (key == "h") {
       g_help_visible = false;
       g_screen_ready = false;
@@ -2348,7 +2358,6 @@ void handleCursorApp(const Keyboard_Class::KeysState& status) {
   noteCursorActivity();
   if (key == "h") {
     g_help_visible = true;
-    g_help_page = 0;
     drawCursorHelpPage();
     return;
   }

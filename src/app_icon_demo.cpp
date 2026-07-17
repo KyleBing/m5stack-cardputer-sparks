@@ -14,6 +14,7 @@ struct IconDemoItem {
 };
 
 static int iconDemoPage = 0;
+static bool iconDemoHelpVisible = false;
 static constexpr int ICON_DEMO_ITEMS_PER_PAGE = 1;
 static constexpr int ICON_DEMO_SIZE = 64;
 
@@ -161,6 +162,58 @@ static int getIconDemoPageCount() {
     return (total + ICON_DEMO_ITEMS_PER_PAGE - 1) / ICON_DEMO_ITEMS_PER_PAGE;
 }
 
+// Help 分栏标题
+static int drawIconHelpColHeader(const int x, const int y, const int w, const char* title) {
+    M5Cardputer.Display.fillRect(x, y, w, 11, APP_COLOR_LABEL);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(BLACK, APP_COLOR_LABEL);
+    M5Cardputer.Display.setCursor(x + 2, y + 1);
+    M5Cardputer.Display.print(title);
+    return y + 13;
+}
+
+// Help 箭头说明；徽章后恢复说明文字颜色
+static int drawIconHelpArrows(const int x, const int y, const char* text) {
+    const int cx = x + drawArrowBadge(x, y, 1);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(cx, y);
+    M5Cardputer.Display.print(text);
+    return y + 11;
+}
+
+// Help 功能说明
+static int drawIconHelpText(const int x, const int y, const char* text) {
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(x, y);
+    M5Cardputer.Display.print(text);
+    return y + 11;
+}
+
+static void drawIconHelpPage() {
+    beginAppScreen("Help");
+    constexpr int col_gap = 4;
+    const int screen_w = M5Cardputer.Display.width();
+    const int col_w = (screen_w - col_gap) / 2;
+    const int manual_x = col_w + col_gap;
+    const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
+    M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y,
+                                     M5Cardputer.Display.height() - col_y, DARKGREY);
+
+    int y = drawIconHelpColHeader(0, col_y, col_w, "keymap");
+    y = drawIconHelpArrows(2, y, "previous / next");
+
+    y = drawIconHelpColHeader(manual_x, col_y, screen_w - manual_x, "manual");
+    y = drawIconHelpText(manual_x + 2, y, "view icon resources");
+    y = drawIconHelpText(manual_x + 2, y, "used by firmware");
+    y = drawIconHelpText(manual_x + 2, y, "built-in UI icons");
+    y = drawIconHelpText(manual_x + 2, y, "device off/on PNG");
+
+    drawHelpHintRight("close");
+    updateAppHeaderStatus();
+}
+
 static void drawIconDemoApp() {
     beginAppScreen("Icons");
     const int page_count = getIconDemoPageCount();
@@ -222,14 +275,30 @@ static void drawIconDemoApp() {
 
         y += title_line_h + INFO_LINE_H + item.height + 12;
     }
+    drawHelpHintRight("help");
+    updateAppHeaderStatus();
 }
 
 void enterIconDemoApp() {
     iconDemoPage = 0;
+    iconDemoHelpVisible = false;
     drawIconDemoApp();
 }
 
 void handleIconDemoNav(const Keyboard_Class::KeysState& status) {
+    const String key = getPressedKey();
+    if (key == "h") {
+        iconDemoHelpVisible = !iconDemoHelpVisible;
+        if (iconDemoHelpVisible) {
+            drawIconHelpPage();
+        } else {
+            drawIconDemoApp();
+        }
+        return;
+    }
+    if (iconDemoHelpVisible) {
+        return;
+    }
     const int delta = getMenuNavDelta(status);
     if (delta == 0) {
         return;

@@ -10,8 +10,8 @@
 
 ### 新增
 
-- **HID Keyboard**（`h`）：USB / BLE 双模 HID 键盘（`app_hid_kb`）；默认 BLE（`Cardputer KB`）不占烧录口；`Fn+u/b` 切 USB/BLE，`Fn+p` 重新配对；侧边 **BtnA** 退出
-- **HID Keyboard** Fn 层：橙色功能键（Esc / Del / 方向 / F1–F12）；`Fn+Ctrl/Opt/Alt` → 右侧修饰键；`Opt` → Win/Cmd；`Fn+Aa` → Caps Lock；`Fn+h` 帮助（徽章 + 箭头翻页）
+- **HID Keyboard**（`k`）：USB / BLE 双模 HID 键盘（`app_hid_kb`）；默认 BLE（`Cardputer KB`）不占烧录口；`Fn+u/b` 切 USB/BLE，`Fn+p` 重新配对；侧边 **BtnA** 退出
+- **HID Keyboard** Fn 层：橙色功能键（Esc / Del / 方向 / F1–F12）；`Fn+Ctrl/Opt/Alt` → 右侧修饰键；`Opt` → Win/Cmd；`Fn+Aa` → Caps Lock；`Fn+h` 打开双页 `keymap / manual` 帮助
 - **Battery**（`p`）：独立电量页（`app_battery`）；实时电量 / 电压（可读时显示电流与 VBUS）；近 24h 柱状图；LittleFS 整点采样（最多 7 天）；深睡/浅睡缺口线性补全
 - **Settings Info**：原 Power 页迁出，改由 Battery App 承担
 - **Cursor last**：最近 10 条请求（切页再拉）；每页 1 条（日期 / 大时间 / 模型 / token）；`[]` 翻记录；`Inc` 绿徽章
@@ -20,7 +20,7 @@
 ### 改进
 
 - **USB**：`ARDUINO_USB_MODE=0` 且 `CDC_ON_BOOT=0`；HID USB 模式进出时 OTG ↔ Serial/JTAG 切换，退出后可继续 `pio upload`
-- **菜单**：删除 Speaker；RGB LED 入口改为 `l`；主页翻页改为局部刷新（内容区 + 分页圆点），避免整屏擦黑扫过电池时闪竖线
+- **菜单**：删除 Speaker 与旧 Key 演示；HID Keyboard 从 `h` 移至 `k`，释放 `h`；RGB LED 入口改为 `l`；主页翻页改为局部刷新（内容区 + 分页圆点），避免整屏擦黑扫过电池时闪竖线
 - **Mijia** 编组：成员全是灯时可组亮度（`-=` / `0`–`9`）；底栏开关/亮度进度局部刷新，不整页闪
 - **Cursor**：图表分页改为流式解析（`pageSize=200`），降低 OOM / 空响应对失败；柱体外框更暗；日聚合按索引累加
 - **Cursor**：底栏改为 On-Demand（`ond $used/$limit`）；reset 显示 `Nd | MM-DD`；字母快捷键 `s/u/d/w/m` 与方向键切页并存；空闲 1s 慢循环时内容区右上角 3×3 蓝点；`r` 软刷新 last
@@ -30,6 +30,8 @@
 - **底栏 tip**：徽章后说明文字下移 1px，与徽章视觉对齐；`drawHelpHintRight` 支持 `y_offset`
 - **Mijia**：空气净化器 / 榨汁机 active 图标 PNG 微调
 - **Web 配网**：编组文案改为「米家设备编组」；Cursor 配置只保留 `token`，去掉旧 `api_key` 兼容读写
+- **Help UI**：Config Setup、Time、Cursor、WiFi、HID Keyboard、RGB LED、Mic、Icons、内部/外部 I²C 与 Mijia 详情/宫格/编组统一为蓝色标题的 `keymap / manual` 双栏布局
+- **Help 文案**：Time 说明倒计时/秒表在设备保持唤醒时后台运行；LED 说明与屏幕共用电源及高亮度要求；Icons 说明固件图标资源用途；WiFi 提示不可用时按 `c` 扫描切换网络
 
 ---
 
