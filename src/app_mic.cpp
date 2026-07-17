@@ -598,10 +598,15 @@ static void drawMicScope() {
     constexpr int kSegGap = 1;
     const int segPitch = kSegH + kSegGap;
     const int segCount = max(1, waveH / segPitch);
+    // 常用 dBFS 对数表头：-60 dB 到 0 dB 映射到底部到顶部
+    const float rmsDb =
+        frameRms > 0 ? 20.0f * log10f(static_cast<float>(frameRms) / 32768.0f) : -60.0f;
+    const float peakDb =
+        framePeak > 0 ? 20.0f * log10f(static_cast<float>(framePeak) / 32768.0f) : -60.0f;
     const int rmsPx =
-        constrain(static_cast<int>(static_cast<int64_t>(frameRms) * waveH / 32768), 0, waveH);
+        constrain(static_cast<int>((rmsDb + 60.0f) * waveH / 60.0f + 0.5f), 0, waveH);
     const int peakPx =
-        constrain(static_cast<int>(static_cast<int64_t>(framePeak) * waveH / 32768), 0, waveH);
+        constrain(static_cast<int>((peakDb + 60.0f) * waveH / 60.0f + 0.5f), 0, waveH);
     if (peakPx > micPeakHoldPx) {
         micPeakHoldPx = peakPx;
     } else if (micPeakHoldPx > 0) {

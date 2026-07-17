@@ -81,7 +81,7 @@ struct CursorLastRequest {
 
 static constexpr int CURSOR_LAST_MAX = 5;
 static constexpr int CURSOR_LAST_PER_PAGE = 1; // usage 每页一条，方便阅读
-static constexpr int CURSOR_LAST_STATUS_H = 11;  // header 下分页/状态行
+static constexpr int CURSOR_LAST_STATUS_H = 12;  // header 下分页/状态行（含 [ ] tip）
 
 static CursorPhase g_phase = CursorPhase::IDLE;
 static CursorPage g_page = CursorPage::SUMMARY;
@@ -1293,16 +1293,7 @@ static void drawCursorHints() {
   M5Cardputer.Display.setCursor(cx, hint_y);
   M5Cardputer.Display.print("pg ");
   cx += M5Cardputer.Display.textWidth("pg ");
-  // last 列表用 [ ]
-  if (g_page == CursorPage::LAST && g_last_req_count > CURSOR_LAST_PER_PAGE) {
-    cx += drawKeyBadge(cx, hint_y, '[', 1);
-    cx += drawKeyBadge(cx, hint_y, ']', 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, hint_y);
-    M5Cardputer.Display.print("rec ");
-    cx += M5Cardputer.Display.textWidth("rec ");
-  }
+  // last 列表翻页 tip 已放在状态栏页码旁，底栏不再重复
   cx += drawKeyBadge(cx, hint_y, 'r', 1);
   M5Cardputer.Display.setTextSize(1);
   M5Cardputer.Display.setTextColor(APP_COLOR_OK, BLACK);
@@ -1505,13 +1496,22 @@ static void drawCursorLastStatusBar(const int y) {
     snprintf(total_pages_s, sizeof(total_pages_s), "/%d", pages);
   }
 
-  // 左：当前页橙色，总页数白色
+  // 左：当前页橙色，总页数白色；其后跟 [ ] 翻页 tip
+  int left_x = pad_x;
   if (current_page_s[0] != '\0') {
     M5Cardputer.Display.setTextColor(APP_COLOR_WARN, BLACK);
-    M5Cardputer.Display.setCursor(pad_x, y + 1);
+    M5Cardputer.Display.setCursor(left_x, y + 1);
     M5Cardputer.Display.print(current_page_s);
+    left_x += M5Cardputer.Display.textWidth(current_page_s);
     M5Cardputer.Display.setTextColor(WHITE, BLACK);
     M5Cardputer.Display.print(total_pages_s);
+    left_x += M5Cardputer.Display.textWidth(total_pages_s);
+    // 多页时：翻页 tip 紧挨页码右侧
+    if (pages > 1) {
+      left_x += 4;
+      left_x += drawKeyBadge(left_x, y, '[', 1);
+      left_x += drawKeyBadge(left_x, y, ']', 1);
+    }
   }
 
   // 右：当前本地时间，仅显示时分
@@ -1529,7 +1529,7 @@ static void drawCursorLastStatusBar(const int y) {
   M5Cardputer.Display.setCursor(screen_w - pad_x - clock_w, y + 1);
   M5Cardputer.Display.print(clock_s);
 
-  // 中间保留载入/空列表状态，避免覆盖右侧时间
+  // 中间保留载入/空列表状态，避免覆盖右侧时间与左侧 tip
   const char* st = nullptr;
   if (g_last_refreshing) {
     st = "loading...";
@@ -1540,7 +1540,7 @@ static void drawCursorLastStatusBar(const int y) {
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     const int sw = M5Cardputer.Display.textWidth(st);
     const int sx = screen_w - pad_x - clock_w - 6 - sw;
-    if (sx > pad_x + 24) {
+    if (sx > left_x + 4) {
       M5Cardputer.Display.setCursor(sx, y + 1);
       M5Cardputer.Display.print(st);
     }

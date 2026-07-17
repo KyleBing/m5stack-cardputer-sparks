@@ -1,6 +1,7 @@
 #include "app_ir.h"
 #include "app_colors.h"
 #include "app_common.h"
+#include "app_config.h"
 #include "app_header.h"
 
 #include <IRremoteESP8266.h>
@@ -753,6 +754,16 @@ void enterIrApp() {
     g_tx_status = "";
     g_press_ac = IrAcBtn::None;
     g_press_tv = IrTvBtn::None;
+
+    // 按配置应用默认功能块与品牌
+    const AppConfig& cfg = getAppConfig();
+    g_category =
+        cfg.infrared_default == IrDefaultCategory::Ac ? IrCategory::AC : IrCategory::TV;
+    g_tv_brand = constrain(static_cast<int>(cfg.infrared_tv_brand), 0,
+                           static_cast<int>(IrTvBrand::Count) - 1);
+    g_ac_brand = constrain(static_cast<int>(cfg.infrared_ac_brand), 0,
+                           static_cast<int>(IrAcBrand::Count) - 1);
+
     ensureIrReady();
     redrawIr();
 }

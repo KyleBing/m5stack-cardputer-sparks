@@ -3,6 +3,7 @@
 #include <FS.h>
 #include <LittleFS.h>
 #include <cstring>
+#include <strings.h>
 
 static constexpr const char* CONFIG_PATH = "/config.json";
 
@@ -56,6 +57,9 @@ bool loadAppConfig() {
     g_config.mijia_on_off_sound = true;
     g_config.time_default_mode = TimeDefaultMode::Up;
     g_config.time_pure = false;
+    g_config.infrared_default = IrDefaultCategory::Tv;
+    g_config.infrared_tv_brand = 0; // Samsung
+    g_config.infrared_ac_brand = 0; // Midea
     copyField(g_config.timezone, sizeof(g_config.timezone), APP_TIMEZONE_DEFAULT);
 
     if (!LittleFS.exists(CONFIG_PATH)) {
@@ -118,6 +122,20 @@ bool loadAppConfig() {
     if (!time_obj.isNull()) {
         g_config.time_default_mode = parseTimeDefaultMode(time_obj["default"]);
         g_config.time_pure = time_obj["pure"] | false;
+    }
+
+    // Infrared：default / tv_brand / ac_brand（兼容小写 infrared）
+    g_config.infrared_default = IrDefaultCategory::Tv;
+    g_config.infrared_tv_brand = 0;
+    g_config.infrared_ac_brand = 0;
+    JsonObject ir_obj = doc["Infrared"];
+    if (ir_obj.isNull()) {
+        ir_obj = doc["infrared"];
+    }
+    if (!ir_obj.isNull()) {
+        g_config.infrared_default = parseIrDefaultCategory(ir_obj["default"]);
+        g_config.infrared_tv_brand = parseIrTvBrand(ir_obj["tv_brand"]);
+        g_config.infrared_ac_brand = parseIrAcBrand(ir_obj["ac_brand"]);
     }
 
     JsonArray devices = doc["devices"].as<JsonArray>();
@@ -521,6 +539,132 @@ bool saveAppConfigTimePure(const bool enabled) {
         time_obj = doc["time"].to<JsonObject>();
     }
     time_obj["pure"] = enabled;
+
+    if (doc["devices"].isNull()) {
+        doc["devices"].to<JsonArray>();
+    }
+
+    File out = LittleFS.open(CONFIG_PATH, "w");
+    if (!out) {
+        return false;
+    }
+    serializeJsonPretty(doc, out);
+    out.close();
+    return loadAppConfig();
+}
+
+const char* irDefaultCategoryName(const IrDefaultCategory category) {
+    return category == IrDefaultCategory::Ac ? "ac" : "tv";
+}
+
+IrDefaultCategory parseIrDefaultCategory(const char* s) {
+    if (s == nullptr || s[0] == '\0') {
+        return IrDefaultCategory::Tv;
+    }
+    if (strcmp(s, "ac") == 0 || strcmp(s, "AC") == 0 || strcmp(s, "aircon") == 0) {
+        return IrDefaultCategory::Ac;
+    }
+    return IrDefaultCategory::Tv;
+}
+
+const char* irTvBrandConfigName(const uint8_t idx) {
+    static const char* names[] = {"samsung", "sony", "lg", "panasonic", "nec"};
+    if (idx >= IR_TV_BRAND_COUNT) {
+        return names[0];
+    }
+    return names[idx];
+}
+
+const char* irTvBrandDisplayName(const uint8_t idx) {
+    static const char* names[] = {"Samsung", "Sony", "LG", "Panasonic", "NEC"};
+    if (idx >= IR_TV_BRAND_COUNT) {
+        return names[0];
+    }
+    return names[idx];
+}
+
+uint8_t parseIrTvBrand(const char* s) {
+    if (s == nullptr || s[0] == '\0') {
+        return 0;
+    }
+    for (uint8_t i = 0; i < IR_TV_BRAND_COUNT; i++) {
+        if (strcasecmp(s, irTvBrandConfigName(i)) == 0 ||
+            strcasecmp(s, irTvBrandDisplayName(i)) == 0) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+const char* irAcBrandConfigName(const uint8_t idx) {
+    static const char* names[] = {"midea", "gree", "haier", "aux", "hisense", "xiaomi"};
+    if (idx >= IR_AC_BRAND_COUNT) {
+        return names[0];
+    }
+    return names[idx];
+}
+
+const char* irAcBrandDisplayName(const uint8_t idx) {
+    static const char* names[] = {"Midea", "Gree", "Haier", "AUX", "Hisense", "Xiaomi"};
+    if (idx >= IR_AC_BRAND_COUNT) {
+        return names[0];
+    }
+    return names[idx];
+}
+
+uint8_t parseIrAcBrand(const char* s) {
+    if (s == nullptr || s[0] == '\0') {
+        return 0;
+    }
+    for (uint8_t i = 0; i < IR_AC_BRAND_COUNT; i++) {
+        if (strcasecmp(s, irAcBrandConfigName(i)) == 0 ||
+            strcasecmp(s, irAcBrandDisplayName(i)) == 0) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+uint8_t cycleIrTvBrand(const uint8_t cur, const int delta) {
+    int idx = static_cast<int>(cur) + delta;
+    idx = (idx % IR_TV_BRAND_COUNT + IR_TV_BRAND_COUNT) % IR_TV_BRAND_COUNT;
+    return static_cast<uint8_t>(idx);
+}
+
+uint8_t cycleIrAcBrand(const uint8_t cur, const int delta) {
+    int idx = static_cast<int>(cur) + delta;
+    idx = (idx % IR_AC_BRAND_COUNT + IR_AC_BRAND_COUNT) % IR_AC_BRAND_COUNT;
+    return static_cast<uint8_t>(idx);
+}
+
+IrDefaultCategory cycleIrDefaultCategory(const IrDefaultCategory cur, const int delta) {
+    const int idx = (static_cast<int>(cur) + delta) & 1;
+    return static_cast<IrDefaultCategory>(idx);
+}
+
+bool saveAppConfigInfrared(const IrDefaultCategory category, const uint8_t tv_brand,
+                           const uint8_t ac_brand) {
+    JsonDocument doc;
+    if (LittleFS.exists(CONFIG_PATH)) {
+        File in = LittleFS.open(CONFIG_PATH, "r");
+        if (in) {
+            const DeserializationError err = deserializeJson(doc, in);
+            in.close();
+            if (err) {
+                doc.clear();
+            }
+        }
+    }
+
+    // 统一写 Infrared；去掉旧小写键避免重复
+    doc.remove("infrared");
+    JsonObject ir_obj = doc["Infrared"].as<JsonObject>();
+    if (ir_obj.isNull()) {
+        ir_obj = doc["Infrared"].to<JsonObject>();
+    }
+    ir_obj["default"] = irDefaultCategoryName(category);
+    ir_obj["tv_brand"] = irTvBrandConfigName(tv_brand);
+    ir_obj["ac_brand"] = irAcBrandConfigName(ac_brand);
 
     if (doc["devices"].isNull()) {
         doc["devices"].to<JsonArray>();

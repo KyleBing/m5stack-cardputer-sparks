@@ -92,6 +92,14 @@ static const char* DEFAULT_CONFIG = R"({
   "sound": {
     "time_key": true,
     "mijia_on_off": true
+  },
+  "time": {
+    "default": "up"
+  },
+  "Infrared": {
+    "default": "tv",
+    "tv_brand": "samsung",
+    "ac_brand": "midea"
   }
 })";
 
@@ -351,7 +359,7 @@ static void handleFormRoot() {
               "</div>"
               "<div id='panel-system' class='panel'>"
               "<h2>系统设置</h2>"
-              "<p class='hint'>时区、亮度与提示音。亮度配置为 0~100，"
+              "<p class='hint'>时区、亮度、提示音与红外默认。亮度配置为 0~100，"
               "设备端会换算为背光 0~255。</p>"
               "<div class='sys-grid'>"
               "<label>时区（POSIX TZ）"
@@ -369,10 +377,32 @@ static void handleFormRoot() {
               "<span>米家开/关提示音</span></label>"
               "<label>Time 默认模块"
               "<select id='sys-time-default'>"
-              "<option value='up'>UP（运行时长）</option>"
-              "<option value='ntp'>NTP（时钟）</option>"
+              "<option value='up'>Uptime</option>"
+              "<option value='ntp'>Clock</option>"
               "<option value='countdown'>Countdown</option>"
               "<option value='stopwatch'>Stopwatch</option>"
+              "</select></label>"
+              "<label>红外默认功能块"
+              "<select id='sys-ir-default'>"
+              "<option value='tv'>电视 TV</option>"
+              "<option value='ac'>空调 AC</option>"
+              "</select></label>"
+              "<label>红外默认电视品牌"
+              "<select id='sys-ir-tv-brand'>"
+              "<option value='samsung'>Samsung</option>"
+              "<option value='sony'>Sony</option>"
+              "<option value='lg'>LG</option>"
+              "<option value='panasonic'>Panasonic</option>"
+              "<option value='nec'>NEC</option>"
+              "</select></label>"
+              "<label>红外默认空调品牌"
+              "<select id='sys-ir-ac-brand'>"
+              "<option value='midea'>Midea</option>"
+              "<option value='gree'>Gree</option>"
+              "<option value='haier'>Haier</option>"
+              "<option value='aux'>AUX</option>"
+              "<option value='hisense'>Hisense</option>"
+              "<option value='xiaomi'>Xiaomi</option>"
               "</select></label>"
               "</div></div>"
               "<div class='save-bar'>"
@@ -399,7 +429,7 @@ static void handleFormRoot() {
     body += F(
         "let cfg={wifi:{ssid:'',password:''},devices:[],device_groups:[],cursor:{token:''},"
         "timezone:'CST-8',brightness:30,sound:{time_key:true,mijia_on_off:true},"
-        "time:{default:'up'}};"
+        "time:{default:'up'},Infrared:{default:'tv',tv_brand:'samsung',ac_brand:'midea'}};"
         "function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/\"/g,'&quot;')"
         ".replace(/</g,'&lt;');}"
         "function ta(f,v){return `<textarea data-f='${f}' rows='1'>${esc(v)}</textarea>`;}"
@@ -457,6 +487,11 @@ static void handleFormRoot() {
         "cfg.sound.mijia_on_off=document.getElementById('sys-sound-mijia').checked;"
         "if(!cfg.time)cfg.time={};"
         "cfg.time.default=document.getElementById('sys-time-default').value||'up';"
+        "delete cfg.infrared;"
+        "if(!cfg.Infrared)cfg.Infrared={};"
+        "cfg.Infrared.default=document.getElementById('sys-ir-default').value||'tv';"
+        "cfg.Infrared.tv_brand=document.getElementById('sys-ir-tv-brand').value||'samsung';"
+        "cfg.Infrared.ac_brand=document.getElementById('sys-ir-ac-brand').value||'midea';"
         "collectDevices();collectGroups();"
         "(cfg.device_groups||[]).forEach(syncGroupMembers);}"
         "function renderDevices(){const tb=document.getElementById('dev-tbody');tb.innerHTML='';"
@@ -524,7 +559,7 @@ static void handleFormRoot() {
         "function init(){try{cfg=JSON.parse(document.getElementById('cfg-data').textContent);}"
         "catch(e){cfg={wifi:{ssid:'',password:''},devices:[],device_groups:[],cursor:{token:''},"
         "timezone:'CST-8',brightness:30,sound:{time_key:true,mijia_on_off:true},"
-        "time:{default:'up'}};}"
+        "time:{default:'up'},Infrared:{default:'tv',tv_brand:'samsung',ac_brand:'midea'}};} "
         "if(!cfg.wifi)cfg.wifi={ssid:'',password:''};"
         "if(!cfg.devices)cfg.devices=[];"
         "if(!cfg.device_groups)cfg.device_groups=[];"
@@ -538,6 +573,11 @@ static void handleFormRoot() {
         "if(cfg.sound.mijia_on_off==null)cfg.sound.mijia_on_off=true;"
         "if(!cfg.time)cfg.time={};"
         "if(!cfg.time.default)cfg.time.default='up';"
+        "if(!cfg.Infrared&&cfg.infrared){cfg.Infrared=cfg.infrared;delete cfg.infrared;}"
+        "if(!cfg.Infrared)cfg.Infrared={};"
+        "if(!cfg.Infrared.default)cfg.Infrared.default='tv';"
+        "if(!cfg.Infrared.tv_brand)cfg.Infrared.tv_brand='samsung';"
+        "if(!cfg.Infrared.ac_brand)cfg.Infrared.ac_brand='midea';"
         "document.getElementById('wifi-ssid').value=cfg.wifi.ssid||'';"
         "document.getElementById('wifi-pass').value=cfg.wifi.password||'';"
         "document.getElementById('cursor-key').value=cfg.cursor.token||'';"
@@ -547,6 +587,9 @@ static void handleFormRoot() {
         "document.getElementById('sys-sound-time-key').checked=!!cfg.sound.time_key;"
         "document.getElementById('sys-sound-mijia').checked=!!cfg.sound.mijia_on_off;"
         "document.getElementById('sys-time-default').value=cfg.time.default||'up';"
+        "document.getElementById('sys-ir-default').value=cfg.Infrared.default||'tv';"
+        "document.getElementById('sys-ir-tv-brand').value=cfg.Infrared.tv_brand||'samsung';"
+        "document.getElementById('sys-ir-ac-brand').value=cfg.Infrared.ac_brand||'midea';"
         "document.getElementById('sys-brightness').oninput=e=>{"
         "document.getElementById('sys-brightness-val').textContent=e.target.value;};"
         "render();"
@@ -642,7 +685,7 @@ static void handleExample() {
     String body = F("<h1>示例 config.json</h1><p>WiFi 米家用 <code>ip</code> + <code>token</code>；"
                     "BLE 传感器用 <code>mac</code> + <code>ble.key</code>，可加 <code>name_zh</code>。"
                     "米家设备编组见 <code>device_groups</code>，成员用设备 <code>id</code> 引用。"
-                    "系统项见主页 <strong>系统设置</strong>（时区 / 亮度 0~100 / 提示音）。"
+                    "系统项见主页 <strong>系统设置</strong>（时区 / 亮度 / 提示音 / Infrared）。"
                     "Cursor 用量见主页 "
                     "<strong>Cursor</strong> 标签页。</p><pre>");
     body += DEFAULT_CONFIG;

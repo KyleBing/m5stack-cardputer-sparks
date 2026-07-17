@@ -14,3 +14,5 @@ void batteryLogAfterWake();
 void enterBatteryApp();
 void updateBatteryApp();
 void handleBatteryApp(const Keyboard_Class::KeysState& status);
+// 后台 NTP 进行中（可加快主循环轮询）
+bool batteryAppSyncBusy();

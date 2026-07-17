@@ -210,7 +210,10 @@ static void drawIconHelpPage() {
     y = drawIconHelpText(manual_x + 2, y, "built-in UI icons");
     y = drawIconHelpText(manual_x + 2, y, "device off/on PNG");
 
-    drawHelpHintRight("close");
+    // Help tip 放左下角
+    const int hint_y = M5Cardputer.Display.height() - 12;
+    const KeyHintItem close_item[] = {{'h', "close"}};
+    drawKeyHintsRow(APP_CONTENT_X, hint_y, close_item, 1, 1, APP_COLOR_HINT);
     updateAppHeaderStatus();
 }
 
@@ -275,7 +278,10 @@ static void drawIconDemoApp() {
 
         y += title_line_h + INFO_LINE_H + item.height + 12;
     }
-    drawHelpHintRight("help");
+    // Help tip 放左下角
+    const int hint_y = M5Cardputer.Display.height() - 12;
+    const KeyHintItem help_item[] = {{'h', "help"}};
+    drawKeyHintsRow(APP_CONTENT_X, hint_y, help_item, 1, 1, APP_COLOR_HINT);
     updateAppHeaderStatus();
 }
 

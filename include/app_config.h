@@ -38,6 +38,16 @@ enum class TimeDefaultMode : uint8_t {
     Stopwatch = 3,
 };
 
+// 红外入口默认功能块（config: Infrared.default）
+enum class IrDefaultCategory : uint8_t {
+    Tv = 0,
+    Ac = 1,
+};
+
+// 与 app_ir 品牌表一致
+static constexpr int IR_TV_BRAND_COUNT = 5;
+static constexpr int IR_AC_BRAND_COUNT = 6;
+
 struct AppConfig {
     char wifi_ssid[33];
     char wifi_password[65];
@@ -48,6 +58,9 @@ struct AppConfig {
     bool mijia_on_off_sound; // 米家开/关提示音
     TimeDefaultMode time_default_mode; // 按 T 进入 Time 时的默认模块
     bool time_pure;                    // Time 是否默认 pure 全屏
+    IrDefaultCategory infrared_default; // 进入红外时默认 TV / AC
+    uint8_t infrared_tv_brand;          // 0..IR_TV_BRAND_COUNT-1
+    uint8_t infrared_ac_brand;          // 0..IR_AC_BRAND_COUNT-1
     MijiaDevice devices[MIJIA_DEVICE_MAX];
     int device_count;
     MijiaDeviceGroup device_groups[MIJIA_GROUP_MAX];
@@ -88,6 +101,22 @@ bool saveAppConfigTimePure(bool enabled);
 // Time 默认模块 ↔ 配置字符串
 const char* timeDefaultModeName(TimeDefaultMode mode);
 TimeDefaultMode parseTimeDefaultMode(const char* s);
+
+// 红外默认：功能块 / 品牌 ↔ 配置字符串
+const char* irDefaultCategoryName(IrDefaultCategory category);
+IrDefaultCategory parseIrDefaultCategory(const char* s);
+const char* irTvBrandConfigName(uint8_t idx);
+const char* irTvBrandDisplayName(uint8_t idx);
+uint8_t parseIrTvBrand(const char* s);
+const char* irAcBrandConfigName(uint8_t idx);
+const char* irAcBrandDisplayName(uint8_t idx);
+uint8_t parseIrAcBrand(const char* s);
+uint8_t cycleIrTvBrand(uint8_t cur, int delta);
+uint8_t cycleIrAcBrand(uint8_t cur, int delta);
+IrDefaultCategory cycleIrDefaultCategory(IrDefaultCategory cur, int delta);
+
+// 更新红外默认并写回（Infrared 对象）
+bool saveAppConfigInfrared(IrDefaultCategory category, uint8_t tv_brand, uint8_t ac_brand);
 
 // 常用时区预设（Settings 里 -= 循环）
 const char* cycleAppTimezonePreset(const char* current, int delta);

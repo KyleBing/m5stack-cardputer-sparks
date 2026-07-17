@@ -6,6 +6,25 @@
 
 ---
 
+## 2026-07-18
+
+### 新增
+
+- **Infrared 配置**：Options 与 Web 配置页可设置红外默认 TV / AC 功能块及电视、空调品牌；进入 Infrared 时自动应用，并写入 `Infrared` 配置对象
+- **Battery 校时**：无有效时钟时在电池页后台连接 WiFi/NTP，不阻塞实时电量显示；校时完成后自动记录当前采样并显示历史图
+
+### 改进
+
+- **Settings**：应用更名为 **Options**；左侧栏加宽，`ir` 改为 `infrared`；Time 默认模块改用 Uptime / Clock / Countdown / Stopwatch 全称
+- **Mijia Help**：单设备帮助改为 common / navigation / special 三栏；按设备类型展开完整键位，栏标题统一为蓝底黑字
+- **Cursor last**：`[]` 翻记录提示从底栏移至页码右侧
+- **Mic**：右侧能量条由线性振幅改为 -60～0 dBFS 对数比例，正常说话时更易观察
+- **RGB LED**：显示并支持 `-` / `=` 调节共用背光亮度，退出后恢复原亮度
+- **Morse**：放大当前字母和点划图案，频率信息改为紧凑小字
+- **Icons**：Help 提示移至左下角
+
+---
+
 ## 2026-07-17
 
 ### 新增

@@ -2,10 +2,13 @@
 
 #include "app_colors.h"
 #include "app_common.h"
+#include "app_config.h"
+#include "app_connectivity.h"
 #include "app_header.h"
 
 #include <FS.h>
 #include <LittleFS.h>
+#include <WiFi.h>
 #include <cstdio>
 #include <cstring>
 #include <time.h>
@@ -49,13 +52,37 @@ static uint8_t g_chart_flags[24];
 static bool g_chart_valid[24];
 static bool g_chart_has_clock = false;
 
+// 后台 WiFi + NTP（不阻塞主循环 / 不挡电量显示）
+enum class BatTimeSync : uint8_t {
+    Idle = 0,
+    BeginWifi,
+    WaitWifi,
+    BeginNtp,
+    WaitNtp,
+    Done,
+};
+static constexpr uint32_t BAT_WIFI_TIMEOUT_MS = 10000;
+static constexpr uint32_t BAT_NTP_TIMEOUT_MS = 8000;
+static BatTimeSync g_sync_state = BatTimeSync::Idle;
+static uint32_t g_sync_deadline_ms = 0;
+static uint32_t g_sync_header_ms = 0;
+
 static constexpr int BAT_TEXT_SIZE = 2;
 static constexpr int BAT_CHART_GAP = 1;
 static constexpr uint16_t BAT_BAR_BORDER = DARKGREY;
 
-// 时钟是否可用（与 RTC 约定一致）
+// 时钟是否可用；必要时从硬件 RTC 拉系统时间
 static bool batClockValid(time_t* out_now = nullptr) {
-    const time_t now = time(nullptr);
+    applyLocalTimezone();
+    time_t now = time(nullptr);
+    if (now <= 1600000000 && M5.Rtc.isEnabled()) {
+        const m5::rtc_datetime_t dt = M5.Rtc.getDateTime();
+        if (dt.date.year >= 2020) {
+            M5.Rtc.setSystemTimeFromRtc();
+            applyLocalTimezone();
+            now = time(nullptr);
+        }
+    }
     if (now <= 1600000000) {
         return false;
     }
@@ -63,6 +90,82 @@ static bool batClockValid(time_t* out_now = nullptr) {
         *out_now = now;
     }
     return true;
+}
+
+static bool batSyncBusy() {
+    return g_sync_state == BatTimeSync::BeginWifi || g_sync_state == BatTimeSync::WaitWifi ||
+           g_sync_state == BatTimeSync::BeginNtp || g_sync_state == BatTimeSync::WaitNtp;
+}
+
+// 后台同步时钟；成功后由 update 刷新历史图
+static void batUpdateTimeSync() {
+    const AppConfig& cfg = getAppConfig();
+    switch (g_sync_state) {
+        case BatTimeSync::Idle:
+        case BatTimeSync::Done:
+            return;
+        case BatTimeSync::BeginWifi: {
+            if (!cfg.loaded || cfg.wifi_ssid[0] == '\0') {
+                g_sync_state = BatTimeSync::Done;
+                return;
+            }
+            if (batClockValid()) {
+                g_sync_state = BatTimeSync::Done;
+                return;
+            }
+            if (WiFi.status() == WL_CONNECTED && WiFi.SSID() == cfg.wifi_ssid) {
+                g_sync_state = BatTimeSync::BeginNtp;
+                return;
+            }
+            WiFi.mode(WIFI_STA);
+            applyWifiRadioSleepPolicy();
+            WiFi.begin(cfg.wifi_ssid, cfg.wifi_password);
+            g_sync_deadline_ms = millis() + BAT_WIFI_TIMEOUT_MS;
+            g_sync_state = BatTimeSync::WaitWifi;
+            break;
+        }
+        case BatTimeSync::WaitWifi:
+            if (WiFi.status() == WL_CONNECTED) {
+                g_sync_state = BatTimeSync::BeginNtp;
+            } else if (static_cast<int32_t>(millis() - g_sync_deadline_ms) >= 0) {
+                releaseConfigWifi();
+                g_sync_state = BatTimeSync::Done;
+            }
+            break;
+        case BatTimeSync::BeginNtp:
+            configTzTime(getAppTimezone(), "ntp.aliyun.com", "pool.ntp.org", "time.windows.com");
+            g_sync_deadline_ms = millis() + BAT_NTP_TIMEOUT_MS;
+            g_sync_state = BatTimeSync::WaitNtp;
+            break;
+        case BatTimeSync::WaitNtp: {
+            struct tm timeinfo{};
+            if (getLocalTime(&timeinfo, 0)) {
+                if (M5.Rtc.isEnabled()) {
+                    const time_t now = time(nullptr);
+                    struct tm utc{};
+                    gmtime_r(&now, &utc);
+                    M5.Rtc.setDateTime(&utc);
+                    M5.Rtc.setSystemTimeFromRtc();
+                    applyLocalTimezone();
+                }
+                saveAppConfigTimezone(getAppTimezone());
+                releaseConfigWifi();
+                g_sync_state = BatTimeSync::Done;
+            } else if (static_cast<int32_t>(millis() - g_sync_deadline_ms) >= 0) {
+                releaseConfigWifi();
+                g_sync_state = BatTimeSync::Done;
+            }
+            break;
+        }
+    }
+
+    // 联网期间刷新 header WiFi 图标
+    if (g_sync_state == BatTimeSync::WaitWifi || g_sync_state == BatTimeSync::WaitNtp) {
+        if (millis() - g_sync_header_ms >= 500) {
+            g_sync_header_ms = millis();
+            updateAppHeaderStatus();
+        }
+    }
 }
 
 static uint32_t batHourEpoch(const time_t now) {
@@ -314,7 +417,16 @@ static void batDrawChart(const int x, const int y, const int w, const int bar_h)
         M5Cardputer.Display.setTextSize(1);
         M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
         M5Cardputer.Display.setCursor(x, y + 4);
-        M5Cardputer.Display.print("need clock (Time sync)");
+        // 后台同步中：不挡上方电量行，只在图表区提示
+        if (batSyncBusy()) {
+            if (g_sync_state == BatTimeSync::WaitNtp || g_sync_state == BatTimeSync::BeginNtp) {
+                M5Cardputer.Display.print("syncing ntp...");
+            } else {
+                M5Cardputer.Display.print("syncing wifi...");
+            }
+        } else {
+            M5Cardputer.Display.print("need clock (Time sync)");
+        }
         return;
     }
 
@@ -378,18 +490,39 @@ static void batDrawHints() {
     M5Cardputer.Display.print("now");
 }
 
+static void batRedrawChart() {
+    if (g_chart_h <= 0) {
+        return;
+    }
+    batBuildChartCache();
+    const int chart_w = M5Cardputer.Display.width() - APP_CONTENT_X * 2;
+    batDrawChart(APP_CONTENT_X, g_chart_y, chart_w, g_chart_h);
+    batDrawHints();
+}
+
 void enterBatteryApp() {
     g_bat_ready = false;
     g_last_bat[0] = '\0';
     g_last_volt[0] = '\0';
     g_last_curr[0] = '\0';
     g_last_vbus[0] = '\0';
-    // 进入时先补一次，保证图有当前点
-    batRecordNow(true);
+    g_sync_state = BatTimeSync::Idle;
+    g_sync_header_ms = 0;
+    // 无时钟则后台 NTP；有时钟则立刻补采样画图
+    if (batClockValid()) {
+        batRecordNow(true);
+        g_sync_state = BatTimeSync::Done;
+    } else {
+        g_sync_state = BatTimeSync::BeginWifi;
+    }
     updateBatteryApp();
 }
 
 void updateBatteryApp() {
+    const bool had_clock = g_chart_has_clock;
+    const BatTimeSync prev_sync = g_sync_state;
+    batUpdateTimeSync();
+
     char bat[8];
     char volt[12];
     char curr[12];
@@ -433,10 +566,7 @@ void updateBatteryApp() {
         if (g_chart_h > 48) {
             g_chart_h = 48;
         }
-        batBuildChartCache();
-        const int chart_w = M5Cardputer.Display.width() - APP_CONTENT_X * 2;
-        batDrawChart(APP_CONTENT_X, g_chart_y, chart_w, g_chart_h);
-        batDrawHints();
+        batRedrawChart();
         return;
     }
 
@@ -451,21 +581,33 @@ void updateBatteryApp() {
         batUpdateLine(y, "vbus", vbus, g_last_vbus, sizeof(g_last_vbus));
     }
 
+    // 时钟刚就绪：立刻记点并画历史；同步阶段变化时刷新占位文案
+    batBuildChartCache();
+    const bool clock_just_ready = !had_clock && g_chart_has_clock;
+    if (clock_just_ready) {
+        batRecordNow(true);
+        batRedrawChart();
+        return;
+    }
+    if (!g_chart_has_clock && prev_sync != g_sync_state) {
+        batRedrawChart();
+        return;
+    }
+
     // 整点附近刷新图表
     static uint32_t last_chart_ms = 0;
     const uint32_t ms = millis();
     if (last_chart_ms == 0 || (ms - last_chart_ms) >= 60000) {
         last_chart_ms = ms;
-        batBuildChartCache();
-        const int chart_w = M5Cardputer.Display.width() - APP_CONTENT_X * 2;
-        if (g_chart_h > 0) {
-            batDrawChart(APP_CONTENT_X, g_chart_y, chart_w, g_chart_h);
-            batDrawHints();
-        }
+        batRedrawChart();
     }
 }
 
 void handleBatteryApp(const Keyboard_Class::KeysState& status) {
     (void)status;
     // 预留：暂无按键；btngo 回菜单由 main 处理
+}
+
+bool batteryAppSyncBusy() {
+    return batSyncBusy();
 }

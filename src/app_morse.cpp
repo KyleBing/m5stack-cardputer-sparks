@@ -2,13 +2,16 @@
 #include "app_colors.h"
 #include "app_common.h"
 #include "app_header.h"
+#include <cctype>
 #include <cstring>
 
-static constexpr int MORSE_DOT_R = 3;
-static constexpr int MORSE_DASH_W = 14;
-static constexpr int MORSE_DASH_H = 4;
-static constexpr int MORSE_SYM_GAP = 6;
-static constexpr int MORSE_ROW_H = 12;
+// 摩斯图案尺寸（略放大便于辨认）
+static constexpr int MORSE_DOT_R = 6;
+static constexpr int MORSE_DASH_W = 26;
+static constexpr int MORSE_DASH_H = 8;
+static constexpr int MORSE_SYM_GAP = 10;
+static constexpr int MORSE_ROW_H = 22;
+static constexpr int MORSE_KEY_TEXT_SIZE = 3; // 当前字母 3x
 static constexpr uint32_t MORSE_UNIT_MS = 80;
 
 static bool g_screen_ready = false;
@@ -112,16 +115,25 @@ static void drawMorseApp(const bool full_init) {
 
     int y = APP_CONTENT_Y;
 
+    // Frequency 用小字
     char freq_buf[16];
     snprintf(freq_buf, sizeof(freq_buf), "%d Hz", g_tone_hz);
-    drawInfoLineAt(APP_CONTENT_X, y, "freq", freq_buf, 2);
-    y += INFO_LINE_H_2X + 2;
+    drawInfoLineAt(APP_CONTENT_X, y, "freq", freq_buf, 1);
+    y += INFO_LINE_H + 4;
 
     if (g_last_key != '\0') {
-        char key_buf[4];
-        snprintf(key_buf, sizeof(key_buf), "%c", g_last_key);
-        drawInfoLineAt(APP_CONTENT_X, y, "key", key_buf, 2);
-        y += INFO_LINE_H_2X + 4;
+        // 标签小字，字母 3x
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(INFO_LABEL_COLOR, BLACK);
+        M5Cardputer.Display.setCursor(APP_CONTENT_X, y + 8);
+        M5Cardputer.Display.print("key: ");
+        const int key_x = M5Cardputer.Display.getCursorX();
+        char key_ch = static_cast<char>(toupper(static_cast<unsigned char>(g_last_key)));
+        M5Cardputer.Display.setTextSize(MORSE_KEY_TEXT_SIZE);
+        M5Cardputer.Display.setTextColor(INFO_VALUE_COLOR, BLACK);
+        M5Cardputer.Display.setCursor(key_x, y);
+        M5Cardputer.Display.print(key_ch);
+        y += infoLineHeight(MORSE_KEY_TEXT_SIZE) + 6;
     } else {
         M5Cardputer.Display.setTextSize(1);
         M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
@@ -132,7 +144,7 @@ static void drawMorseApp(const bool full_init) {
 
     if (g_last_pattern != nullptr) {
         drawMorsePatternRow(APP_CONTENT_X, y, content_w, g_last_pattern);
-        y += MORSE_ROW_H + 4;
+        y += MORSE_ROW_H + 6;
     }
 
     if (g_playing) {

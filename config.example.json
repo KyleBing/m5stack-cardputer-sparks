@@ -74,5 +74,10 @@
   "time": {
     "default": "up",
     "pure": false
+  },
+  "Infrared": {
+    "default": "tv",
+    "tv_brand": "samsung",
+    "ac_brand": "midea"
   }
 }

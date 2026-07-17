@@ -83,7 +83,7 @@ static const MenuItem MENU_ITEMS[] = {
     {'w', "WiFi", "WiFi", AppState::WIFI},
     {'t', "Time", "Time", AppState::RTC},
     {'s', "Slp", "Sleep", AppState::SLEEP},
-    {'o', "Set", "Settings", AppState::SETTINGS},
+    {'o', "Opt", "Options", AppState::SETTINGS},
     {'p', "Bat", "Battery", AppState::BATTERY},
     {'c', "Cur", "Cursor", AppState::CURSOR},
     {'v', "Ver", "Version", AppState::VERSION},
@@ -1099,8 +1099,9 @@ enum class SettingsModule : uint8_t {
     Screen = 0,
     Sound = 1,
     Time = 2,
-    Info = 3,
-    Count = 4,
+    Infrared = 3,
+    Info = 4,
+    Count = 5,
 };
 
 enum class SettingsFocus : uint8_t { List = 0, Panel = 1 };
@@ -1108,7 +1109,7 @@ enum class SettingsFocus : uint8_t { List = 0, Panel = 1 };
 static SettingsModule g_settings_module = SettingsModule::Screen;
 static SettingsFocus g_settings_focus = SettingsFocus::List;
 static int g_settings_row = 0; // 右侧行选中
-static constexpr int SETTINGS_LIST_W = 52;
+static constexpr int SETTINGS_LIST_W = 66;
 static constexpr int SETTINGS_HINT_H = 12;
 static constexpr int SETTINGS_LIST_TEXT_PAD_X = 10;
 static constexpr int SETTINGS_PANEL_PAD = 6;
@@ -1121,6 +1122,8 @@ static const char* settingsModuleName(const SettingsModule mod) {
             return "sound";
         case SettingsModule::Time:
             return "clock";
+        case SettingsModule::Infrared:
+            return "infrared";
         case SettingsModule::Info:
             return "info";
         default:
@@ -1136,6 +1139,8 @@ static int settingsPanelRowCount(const SettingsModule mod) {
             return 2; // time key / mijia pwr
         case SettingsModule::Time:
             return 3; // default / timezone / pure
+        case SettingsModule::Infrared:
+            return 3; // category / tv brand / ac brand
         case SettingsModule::Info:
             return 0; // 翻页不靠行
         default:
@@ -1250,17 +1255,17 @@ static bool isSettingsTabKey(const Keyboard_Class::KeysState& status) {
     return false;
 }
 
-static const char* timeDefaultModeShort(const TimeDefaultMode mode) {
+static const char* timeDefaultModeLabel(const TimeDefaultMode mode) {
     switch (mode) {
         case TimeDefaultMode::Ntp:
-            return "NTP";
+            return "Clock";
         case TimeDefaultMode::Countdown:
-            return "CD";
+            return "Countdown";
         case TimeDefaultMode::Stopwatch:
-            return "SW";
+            return "Stopwatch";
         case TimeDefaultMode::Up:
         default:
-            return "UP";
+            return "Uptime";
     }
 }
 
@@ -1351,17 +1356,28 @@ static void drawSettingsSoundPanel(const int x, const int y, const int w) {
 
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.setCursor(x, mijia_y + INFO_LINE_H + 4);
-    M5Cardputer.Display.print("CD alarm always");
+    M5Cardputer.Display.print("countdown alarm always");
 }
 
 static void drawSettingsTimePanel(const int x, const int y, const int w) {
     const AppConfig& cfg = getAppConfig();
-    drawSettingsRowLabel(x, y, w, "default", timeDefaultModeShort(cfg.time_default_mode),
+    drawSettingsRowLabel(x, y, w, "default", timeDefaultModeLabel(cfg.time_default_mode),
                          APP_COLOR_VALUE, g_settings_row == 0);
     drawSettingsRowLabel(x, y + INFO_LINE_H, w, "tz", getAppTimezone(), APP_COLOR_VALUE,
                          g_settings_row == 1);
     drawSettingsRowLabel(x, y + INFO_LINE_H * 2, w, "pure", cfg.time_pure ? "ON" : "OFF",
                          cfg.time_pure ? APP_COLOR_OK : APP_COLOR_HINT, g_settings_row == 2);
+}
+
+static void drawSettingsInfraredPanel(const int x, const int y, const int w) {
+    const AppConfig& cfg = getAppConfig();
+    const char* cat = cfg.infrared_default == IrDefaultCategory::Ac ? "AC" : "TV";
+    drawSettingsRowLabel(x, y, w, "default", cat, APP_COLOR_VALUE, g_settings_row == 0);
+    drawSettingsRowLabel(x, y + INFO_LINE_H, w, "tv", irTvBrandDisplayName(cfg.infrared_tv_brand),
+                         APP_COLOR_VALUE, g_settings_row == 1);
+    drawSettingsRowLabel(x, y + INFO_LINE_H * 2, w, "ac",
+                         irAcBrandDisplayName(cfg.infrared_ac_brand), APP_COLOR_VALUE,
+                         g_settings_row == 2);
 }
 
 static void drawSettingsInfoPanel(const int x, const int y) {
@@ -1444,6 +1460,9 @@ void drawSettingsApp() {
         case SettingsModule::Time:
             drawSettingsTimePanel(panel_content_x, panel_content_y, panel_content_w);
             break;
+        case SettingsModule::Infrared:
+            drawSettingsInfraredPanel(panel_content_x, panel_content_y, panel_content_w);
+            break;
         case SettingsModule::Info:
             drawSettingsInfoPanel(panel_content_x, panel_content_y);
             break;
@@ -1494,6 +1513,21 @@ static void applySettingsValueDelta(const int val_delta) {
                 saveAppConfigTimePure(!getAppConfig().time_pure);
             }
             break;
+        case SettingsModule::Infrared: {
+            const AppConfig& cfg = getAppConfig();
+            IrDefaultCategory cat = cfg.infrared_default;
+            uint8_t tv = cfg.infrared_tv_brand;
+            uint8_t ac = cfg.infrared_ac_brand;
+            if (g_settings_row == 0) {
+                cat = cycleIrDefaultCategory(cat, val_delta);
+            } else if (g_settings_row == 1) {
+                tv = cycleIrTvBrand(tv, val_delta);
+            } else if (g_settings_row == 2) {
+                ac = cycleIrAcBrand(ac, val_delta);
+            }
+            saveAppConfigInfrared(cat, tv, ac);
+            break;
+        }
         case SettingsModule::Info:
             // Info：-= 翻页（不再占用方向键）
             advanceInfoPage(val_delta);
@@ -1668,13 +1702,13 @@ static void drawLedHelpPage() {
     y = drawSimpleHelpKey(2, y, 't', "toggle");
     y = drawSimpleHelpKey(2, y, '0', "off");
     y = drawSimpleHelpBadge(2, y, "1-7", "select color");
+    y = drawSimpleHelpBadge(2, y, "-=", "brightness");
 
     y = drawSimpleHelpColHeader(manual_x, col_y, screen_w - manual_x, "manual");
     y = drawSimpleHelpText(manual_x + 2, y, "test onboard RGB");
     y = drawSimpleHelpText(manual_x + 2, y, "1-7: R G B Y C M W");
     y = drawSimpleHelpText(manual_x + 2, y, "shares LCD power");
-    y = drawSimpleHelpText(manual_x + 2, y, "needs high brightness");
-    y = drawSimpleHelpText(manual_x + 2, y, "screen set to max");
+    y = drawSimpleHelpText(manual_x + 2, y, "-= change bright");
     y = drawSimpleHelpText(manual_x + 2, y, "exit restores level");
 
     drawHelpHintRight("close");
@@ -1808,18 +1842,40 @@ void drawLedApp() {
     snprintf(pin_buf, sizeof(pin_buf), "GPIO%d", getRgbLedPin());
     drawInfoLineAt(APP_CONTENT_X, y, "pin", pin_buf, 2);
     y += INFO_LINE_H_2X + 2;
-    drawInfoLineAt(APP_CONTENT_X, y, "note", "look Stamp module", 2);
 
-    // 底栏 tip
+    // 背光亮度（与 RGB 共电）
+    char bright_buf[12];
+    const int bright_pct = brightnessHwToPercent(M5Cardputer.Display.getBrightness());
+    snprintf(bright_buf, sizeof(bright_buf), "%d", bright_pct);
+    drawInfoLineAt(APP_CONTENT_X, y, "bright", bright_buf, 2);
+
+    // 底栏 tip：t/1/2/3 + -= bright（0 off 不占 tip）
     const int hint_y = M5Cardputer.Display.height() - 12;
+    const int text_y = hint_y + 1;
+    int cx = APP_CONTENT_X;
     const KeyHintItem hints[] = {
-        {'t', "toggle"},
+        {'t', "tog"},
         {'1', "R"},
         {'2', "G"},
         {'3', "B"},
-        {'0', "off"},
     };
-    drawKeyHintsRow(APP_CONTENT_X, hint_y, hints, 5, 1);
+    M5Cardputer.Display.setTextSize(1);
+    for (int i = 0; i < 4; i++) {
+        cx += drawKeyBadge(cx, hint_y, hints[i].key, 1);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(cx, text_y);
+        M5Cardputer.Display.print(hints[i].text);
+        cx += M5Cardputer.Display.textWidth(hints[i].text);
+        M5Cardputer.Display.setCursor(cx, text_y);
+        M5Cardputer.Display.print(" ");
+        cx += M5Cardputer.Display.textWidth(" ");
+    }
+    cx += drawTextBadge(cx, hint_y, "-=", 1);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(cx, text_y);
+    M5Cardputer.Display.print("bright");
     drawHelpHintRight("help");
     updateAppHeaderStatus();
 }
@@ -1853,6 +1909,15 @@ void handleLedApp(const String& key) {
         return;
     }
     if (g_led_help_visible) {
+        return;
+    }
+    // -= 调节背光亮度（与 RGB 共电；离开时仍恢复进入前亮度）
+    if (c == '-' || c == '_' || c == '=' || c == '+') {
+        const int delta = (c == '=' || c == '+') ? 5 : -5;
+        const int pct = constrain(
+            brightnessHwToPercent(M5Cardputer.Display.getBrightness()) + delta, 0, 100);
+        M5Cardputer.Display.setBrightness(brightnessPercentToHw(static_cast<uint8_t>(pct)));
+        drawLedApp();
         return;
     }
     if (c == 't' || c == 'T') {
@@ -2531,7 +2596,9 @@ void loop() {
         }
     } else if (currentState == AppState::BATTERY) {
         static uint32_t lastBatUpdateMs = 0;
-        if (now - lastBatUpdateMs >= 1000) {
+        // 后台 NTP 时 250ms 轮询；平时 1s 刷新电量
+        const uint32_t bat_iv = batteryAppSyncBusy() ? 250 : 1000;
+        if (now - lastBatUpdateMs >= bat_iv) {
             lastBatUpdateMs = now;
             updateBatteryApp();
         }
