@@ -1,0 +1,14 @@
+{
+  "name": "Cardputer Apps",
+  "description": "M5Stack Cardputer multi-app firmware (Arduino / PlatformIO).",
+  "keywords": "ESP32S3, Cardputer, Arduino",
+  "author": "KyleBing",
+  "repository": "https://github.com/KyleBing/m5stack-cardputer",
+  "firmware_category": {
+    "path": "firmware",
+    "device": ["M5Cardputer"],
+    "default_baud": 921600
+  },
+  "version": "0.1.0",
+  "framework": "Arduino"
+}

@@ -673,9 +673,14 @@ static int hintBarY() {
     return M5Cardputer.Display.height() - 12;
 }
 
-// peer MAC 画在底栏 tip 正上方一行（不占内容区）
+// tip 共两排；上行在底栏上方
+static int hintBarRow1Y() {
+    return hintBarY() - 12;
+}
+
+// peer MAC 画在两排 tip 正上方
 static int peerLineY() {
-    return hintBarY() - INFO_LINE_H;
+    return hintBarRow1Y() - INFO_LINE_H;
 }
 
 static int echoAreaY() {
@@ -726,31 +731,42 @@ static void drawEchoOnly() {
 }
 
 static void drawHintBar() {
-    // 先刷 tip 上方 peer 行，再画底栏
+    // 先刷 tip 上方 peer 行，再画两排 tip
     g_drawn_peer[0] = '\0';
     drawPeerLine();
 
-    const int hint_y = hintBarY();
+    const int row1_y = hintBarRow1Y();
+    const int row2_y = hintBarY();
+    const int screen_w = M5Cardputer.Display.width();
+    M5Cardputer.Display.fillRect(0, row1_y, screen_w, 24, BLACK);
+
+    // 上行：USB / BLE 切换
     int cx = APP_CONTENT_X;
-    cx += drawTextBadge(cx, hint_y, "BtnA", 1);
+    cx += drawTextBadge(cx, row1_y, "Fn+u", 1);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, hint_y);
+    M5Cardputer.Display.setCursor(cx, row1_y + 1);
+    M5Cardputer.Display.print("usb ");
+    cx = M5Cardputer.Display.getCursorX();
+    cx += drawTextBadge(cx, row1_y, "Fn+b", 1);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(cx, row1_y + 1);
+    M5Cardputer.Display.print("ble");
+
+    // 下行：退出 + 配对；右侧 h help
+    cx = APP_CONTENT_X;
+    cx += drawTextBadge(cx, row2_y, "BtnA", 1);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(cx, row2_y + 1);
     M5Cardputer.Display.print("exit ");
     cx = M5Cardputer.Display.getCursorX() + 4;
-
-    cx += drawTextBadge(cx, hint_y, "Fn", 1);
+    cx += drawTextBadge(cx, row2_y, "Fn+p", 1);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, hint_y);
-    M5Cardputer.Display.print("+");
-    cx = M5Cardputer.Display.getCursorX();
-    const KeyHintItem items[] = {
-        {'u', "usb"},
-        {'b', "ble"},
-        {'p', "pair"},
-    };
-    drawKeyHintsRow(cx, hint_y, items, 3, 1, APP_COLOR_HINT);
+    M5Cardputer.Display.setCursor(cx, row2_y + 1);
+    M5Cardputer.Display.print("pair");
     drawHelpHintRight("help");
 }
 
@@ -802,7 +818,7 @@ static void drawHelpHintBar() {
 }
 
 static void drawHelpPage() {
-    beginAppScreenAccent("KB", "Help", APP_COLOR_LABEL);
+    beginAppScreenAccent("KB ", "Help", APP_COLOR_LABEL);
     g_screen_ready = true;
     clearAppContentArea();
 
@@ -856,11 +872,11 @@ static void drawHidKbApp(const bool full_init) {
     }
 
     if (full_init || !g_screen_ready) {
-        beginAppScreenAccent("KB", transportName(g_transport), APP_COLOR_LABEL);
+        beginAppScreenAccent("KB ", transportName(g_transport), APP_COLOR_LABEL);
         g_screen_ready = true;
     } else {
         clearAppContentArea();
-        drawAppScreenHeaderAccent("KB", transportName(g_transport), APP_COLOR_LABEL);
+        drawAppScreenHeaderAccent("KB ", transportName(g_transport), APP_COLOR_LABEL);
     }
 
     drawInfoLineAt(APP_CONTENT_X, APP_CONTENT_Y, "link", connectionStatusText(), 2);

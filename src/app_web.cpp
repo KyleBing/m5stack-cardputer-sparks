@@ -993,11 +993,25 @@ void drawWebApp() {
         return;
     }
 
+    // Ready 时 header 显示当前 Mode（AP / LAN）
+    const char* mode_accent = nullptr;
+    if (g_startup_phase == WebStartupPhase::READY && isConfigWebServerRunning()) {
+        mode_accent = isConfigWebStaMode() ? "LAN" : "AP";
+    }
     if (!g_web_screen_ready) {
-        beginAppScreen("Config Setup");
+        if (mode_accent != nullptr) {
+            beginAppScreenAccent("Config ", mode_accent, APP_COLOR_LABEL);
+        } else {
+            beginAppScreen("Config");
+        }
         g_web_screen_ready = true;
     } else {
         clearAppContentArea();
+        if (mode_accent != nullptr) {
+            drawAppScreenHeaderAccent("Config ", mode_accent, APP_COLOR_LABEL);
+        } else {
+            drawAppScreenHeader("Config");
+        }
     }
 
     int y = APP_CONTENT_Y;
@@ -1078,19 +1092,16 @@ void drawWebApp() {
     }
 
     if (isConfigWebStaMode()) {
-        drawLineValue2x("mode", "LAN");
+        // Mode 已在 header；内容区只显示 url / state
         drawLineValue2x("url", stripHttpPrefix(getConfigWebUrl()));
         drawLineValue2x("state", getConfigWebStatus());
         drawKeyHintAt(hint_y, 'a', "switch to AP hotspot");
     } else {
-        drawLine1x("mode", "AP");
+        // AP：无底栏 tip；state 用 2x
         drawLineValue2x("ssid", getConfigWebApSsid());
         drawLineValue2x("pass", getConfigWebApPass());
         drawLineValue2x("url", stripHttpPrefix(getConfigWebUrl()));
-        drawLine1x("state", getConfigWebStatus());
-        drawTextHintAt(hint_y - INFO_LINE_H * 2, "phone connect AP");
-        drawTextHintAt(hint_y - INFO_LINE_H, "open url in browser");
-        drawKeyHintAt(hint_y, 'l', "retry LAN mode");
+        drawLineValue2x("state", getConfigWebStatus());
     }
     drawHelpHintRight("help");
 }

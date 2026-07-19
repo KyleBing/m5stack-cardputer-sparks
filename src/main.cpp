@@ -79,7 +79,7 @@ struct MenuItem {
 static const MenuItem MENU_ITEMS[] = {
     // 常用 app
     {'m', "Mij", "Mijia", AppState::MIJIA},
-    {'u', "Cfg", "Config Setup", AppState::WEB},
+    {'u', "Cfg", "Config", AppState::WEB},
     {'w', "WiFi", "WiFi", AppState::WIFI},
     {'t', "Time", "Time", AppState::RTC},
     {'s', "Slp", "Sleep", AppState::SLEEP},
@@ -1240,6 +1240,19 @@ static int getSettingsValueDelta(const Keyboard_Class::KeysState& status) {
     return 0;
 }
 
+// [] 键：Info 翻页（返回 -1 / +1 / 0）
+static int getSettingsBracketDelta(const Keyboard_Class::KeysState& status) {
+    for (const char c : status.word) {
+        if (c == '[') {
+            return -1;
+        }
+        if (c == ']') {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 // Tab 键（HID 0x2B / '\t'）
 static bool isSettingsTabKey(const Keyboard_Class::KeysState& status) {
     for (const uint8_t hid : status.hid_keys) {
@@ -1408,7 +1421,8 @@ static void drawSettingsHints() {
     M5Cardputer.Display.print("focus ");
     cx += M5Cardputer.Display.textWidth("focus ");
 
-    cx += drawTextBadge(cx, hint_y, "-=", 1);
+    cx += drawTextBadge(cx, hint_y,
+                        g_settings_module == SettingsModule::Info ? "[]" : "-=", 1);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.setCursor(cx, hint_y);
@@ -1529,8 +1543,7 @@ static void applySettingsValueDelta(const int val_delta) {
             break;
         }
         case SettingsModule::Info:
-            // Info：-= 翻页（不再占用方向键）
-            advanceInfoPage(val_delta);
+            // Info 翻页改用 []，见 handleSettingsApp
             break;
         default:
             break;
@@ -1580,7 +1593,7 @@ void handleSettingsApp(const Keyboard_Class::KeysState& status) {
                 infoPage = 0;
             }
         } else {
-            // Panel 焦点：有行则切行；Info 无行（翻页用 -=）
+            // Panel 焦点：有行则切行；Info 无行（翻页用 []）
             const int n = settingsPanelRowCount(g_settings_module);
             if (n > 0) {
                 g_settings_row = (g_settings_row + ud + n) % n;
@@ -1588,6 +1601,16 @@ void handleSettingsApp(const Keyboard_Class::KeysState& status) {
         }
         drawSettingsApp();
         return;
+    }
+
+    // Info：[] 翻页
+    if (g_settings_module == SettingsModule::Info) {
+        const int bracket = getSettingsBracketDelta(status);
+        if (bracket != 0) {
+            advanceInfoPage(bracket);
+            drawSettingsApp();
+            return;
+        }
     }
 
     const int val_delta = getSettingsValueDelta(status);

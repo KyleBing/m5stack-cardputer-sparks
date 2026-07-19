@@ -10,3 +10,5 @@ data/img/
 mijia-devices.json
 # clangd / IDE 编译数据库（本地生成，勿提交）
 compile_commands.json
+# 发布打包产物（由 scripts/pack_m5burner.sh 生成）
+dist/

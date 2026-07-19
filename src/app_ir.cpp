@@ -467,13 +467,14 @@ static void adjustAcField(const int delta) {
     }
 }
 
+// Help 分栏标题（与其它 app 一致：蓝底黑字）
 static int drawHelpColHeader(const int x, const int y, const int w, const char* title) {
-    M5Cardputer.Display.fillRect(x, y, w, 12, BLACK);
+    M5Cardputer.Display.fillRect(x, y, w, 11, APP_COLOR_LABEL);
     M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
+    M5Cardputer.Display.setTextColor(BLACK, APP_COLOR_LABEL);
     M5Cardputer.Display.setCursor(x + 2, y + 1);
     M5Cardputer.Display.print(title);
-    return y + 14;
+    return y + 13;
 }
 
 static int drawHelpKeyAt(const int x, const int y, const char key, const char* text) {
@@ -525,7 +526,7 @@ static void drawIrHelpPage() {
     const int content_h = M5Cardputer.Display.height() - col_y;
     M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y, content_h, DARKGREY);
 
-    int y = drawHelpColHeader(keys_x, col_y, col_w, "keys");
+    int y = drawHelpColHeader(keys_x, col_y, col_w, "keymap");
     const int kx = keys_x + 2;
     y = drawHelpBadgeAt(kx, y, "Tab", "brand");
     y = drawHelpKeyAt(kx, y, 't', "TV / AC");
@@ -534,7 +535,7 @@ static void drawIrHelpPage() {
     y = drawHelpKeyAt(kx, y, '[', "TV ch");
     y = drawHelpBadgeAt(kx, y, "BtnA", "send");
 
-    y = drawHelpColHeader(notes_x, col_y, screen_w - notes_x, "notes");
+    y = drawHelpColHeader(notes_x, col_y, screen_w - notes_x, "manual");
     const int nx = notes_x + 2;
     y = drawHelpTextAt(nx, y, "TX GPIO44");
     y = drawHelpTextAt(nx, y, "aim IR window");

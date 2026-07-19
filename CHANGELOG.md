@@ -6,6 +6,21 @@
 
 ---
 
+## 2026-07-19
+
+### 新增
+
+- **M5Burner 发布**：`m5burner/m5burner.json` 元信息；`scripts/pack_m5burner.sh` 一键编译并生成 M5Burner zip 与 `cardputer_merged.bin`（产物输出到 `dist/`）
+
+### 改进
+
+- **HID Keyboard**：底栏 tip 改为两排（`Fn+u`/`Fn+b` 切模式，`BtnA`/`Fn+p` 退出与配对）；标题统一为 `KB `
+- **Infrared Help**：分栏标题改为蓝底黑字；栏名改为 `keymap` / `manual`
+- **Config**：菜单与标题由 Config Setup 改为 Config；Ready 时 header 显示 AP / LAN；AP 模式内容区精简
+- **Options Info**：翻页由 `-=` 改为 `[]`，底栏提示同步
+
+---
+
 ## 2026-07-18
 
 ### 新增
