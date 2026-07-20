@@ -1,0 +1,94 @@
+# 推送 v* tag 时自动编译固件 + LittleFS，合并全镜像并发布 GitHub Release
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '已存在的 tag（留空则用当前 ref）'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install PlatformIO
+        run: pip install -U platformio esptool
+
+      - name: Build firmware
+        run: pio run -e m5stack-cardputer
+
+      - name: Build LittleFS
+        run: pio run -e m5stack-cardputer -t buildfs
+
+      - name: Package artifacts
+        id: pkg
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          BUILD=".pio/build/m5stack-cardputer"
+          OUT="dist"
+          mkdir -p "$OUT"
+
+          cp "$BUILD/firmware.bin" "$OUT/sparks-${TAG}-firmware.bin"
+          cp "$BUILD/littlefs.bin" "$OUT/sparks-${TAG}-littlefs.bin"
+
+          # 合并 bootloader + 分区表 + app + LittleFS（StampS3 8MB / default_8MB）
+          esptool.py --chip esp32s3 merge_bin \
+            -o "$OUT/sparks-${TAG}-merged.bin" \
+            --flash_mode qio \
+            --flash_freq 80m \
+            --flash_size 8MB \
+            0x0 "$BUILD/bootloader.bin" \
+            0x8000 "$BUILD/partitions.bin" \
+            0x10000 "$BUILD/firmware.bin" \
+            0x670000 "$BUILD/littlefs.bin"
+
+          ls -lh "$OUT"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.pkg.outputs.tag }}
+          name: Sparks ${{ steps.pkg.outputs.tag }}
+          generate_release_notes: true
+          body: |
+            ## 刷机说明
+
+            | 文件 | 用途 |
+            |------|------|
+            | `*-merged.bin` | 整片烧录（推荐首次 / M5Burner）：`write_flash 0x0` |
+            | `*-firmware.bin` | 仅更新程序：`write_flash 0x10000` |
+            | `*-littlefs.bin` | 仅更新资源：`write_flash 0x670000` |
+
+            PlatformIO：
+            ```bash
+            pio run -e m5stack-cardputer -t upload
+            pio run -e m5stack-cardputer -t uploadfs
+            ```
+          files: |
+            dist/sparks-${{ steps.pkg.outputs.tag }}-merged.bin
+            dist/sparks-${{ steps.pkg.outputs.tag }}-firmware.bin
+            dist/sparks-${{ steps.pkg.outputs.tag }}-littlefs.bin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

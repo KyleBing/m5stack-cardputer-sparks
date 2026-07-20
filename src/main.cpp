@@ -94,7 +94,7 @@ static const MenuItem MENU_ITEMS[] = {
 
     // 系统功能测试
     {'k', "KB", "HID Keyboard", AppState::HID_KB},
-    {'g', "BMI", "BMI", AppState::BMI},
+    {'g', "IMU", "IMU", AppState::BMI},
     {'l', "LED", "RGB LED", AppState::LED},
     {'r', "Mic", "Mic", AppState::MIC},
     {'b', "BLE", "BLE", AppState::BLE},
@@ -750,7 +750,7 @@ void drawBmiApp() {
     if (!M5.Imu.isEnabled()) {
         bmiScreenReady = false;
         bmiPrevDotX[0] = bmiPrevDotX[1] = -1;
-        beginAppScreen("BMI");
+        beginAppScreen("IMU");
         M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_Y);
         M5Cardputer.Display.println("IMU not found");
         return;

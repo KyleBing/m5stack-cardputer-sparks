@@ -10,6 +10,7 @@
 
 ### 新增
 
+- **GitHub Release**：推送 `v*` tag 时自动编译并发布 `firmware` / `littlefs` / 含 FS 的 `merged` 全镜像（`.github/workflows/release.yml`）
 - **Mijia 快捷键**：设备可配置 `hotkey`（a-z/0-9，`q` 保留）；`Q` 快速选择页、`Fn+Q` 编辑当前设备快捷键（冲突时 BtnA 确认替换）；列表/宫格名称旁显示彩色快捷键字母；Web 配网设备表增加快捷键列并去重
 - **诊断日志**：Cursor HTTPS 失败写入 LittleFS `/cursor.log`（HTTP 错误码、heap、RSSI、max_alloc）；Config Web `/cursor-log` 查看；主菜单 `Fn+i` 打开 Log App 翻页浏览
 - **错误轨 `/cursor.err`**：fail / lowmem / 负 HTTP 码与开机 `boot reset=...` 单独落盘；重启后仍可查；Log 默认 Err（`f` 切完整 log）；Config Web `/cursor-err`
@@ -17,6 +18,7 @@
 
 ### 改进
 
+- **菜单**：BMI App 显示名改为 **IMU**（快捷键仍为 `g`）
 - **WiFi STA 生命周期**：统一到 `app_connectivity`（`ensureStaWifi` / `releaseStaWifi` / `forceShutdownStaWifi`）；用完立刻 `disconnect` + `WIFI_OFF`；同 SSID 已连则复用，避免无谓硬重启造成堆碎片
 - **Cursor WiFi**：去掉用户操作后 1 分钟宽限保持；拉取结束与离开 App 一律立刻关射频；连网不再先 `WIFI_OFF`，仅错 SSID 时断开
 - **Cursor 低内存防护**：HTTPS / 建 task 前检查 free heap 与 max_alloc；不足时跳过并提示 `auth lowmem`，避免误报 `auth -1/conn`；周期刷新已有 `user_id` 时跳过 `/api/auth/me`
