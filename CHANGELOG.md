@@ -12,7 +12,8 @@
 
 - **喇叭音量**：`sound.volume`（0~100，默认 25）；Options → Sound → `volume`；Config Web 可调；Mic 列表播放时 `-=` 实时调节
 - **Mic 录音列表**（`l`）：扫描 TF `/audioRecord`；选中播放 / 停止 / Backspace 删除；播放中只刷进度行
-- **Infrared AC 模式图标**：制冷 / 制热 / 除湿 / 送风 PNG（含 active）
+- **Infrared AC 模式图标**：制冷 / 制热 / 除湿 / 送风（含 active）
+- **图标 RGB565 烘焙**：设备 / IR / Logo 预生成 `.rgb565`；绘制优先 bake 文件，缺失回退 PNG；Config `POST /bake-rgb565` 与 Icons `b` 可现场烘焙；`scripts/pull_rgb565_from_device.py` 拉取到 `data/`
 
 ### 改进
 
@@ -20,6 +21,7 @@
 - **Mic**：列表模式关麦；播完保持喇叭脚拉低；回示波器若本会话播过音则显示 `mic paused`，按 `R` 再开麦
 - **截图 / Config Web**：截图与文件相关页面体验继续完善
 - **M5Burner 打包**：`version` / `author` / 描述中的版本信息统一取自 `include/app_version.h`，发版只改该头文件
+- **IR 模式图标**：进入 App 时预缓存全部 `.rgb565`；切模式直接 `pushImage` 覆盖，去掉先清黑底造成的闪烁
 
 ---
 

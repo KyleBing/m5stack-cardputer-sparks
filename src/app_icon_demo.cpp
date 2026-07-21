@@ -209,6 +209,7 @@ static void drawIconHelpPage() {
     y = drawIconHelpText(manual_x + 2, y, "used by firmware");
     y = drawIconHelpText(manual_x + 2, y, "built-in UI icons");
     y = drawIconHelpText(manual_x + 2, y, "device off/on PNG");
+    y = drawIconHelpText(manual_x + 2, y, "b bake M5GFX RGB565");
 
     // Help tip 放左下角
     const int hint_y = M5Cardputer.Display.height() - 12;
@@ -280,8 +281,8 @@ static void drawIconDemoApp() {
     }
     // Help tip 放左下角
     const int hint_y = M5Cardputer.Display.height() - 12;
-    const KeyHintItem help_item[] = {{'h', "help"}};
-    drawKeyHintsRow(APP_CONTENT_X, hint_y, help_item, 1, 1, APP_COLOR_HINT);
+    const KeyHintItem help_item[] = {{'h', "help"}, {'b', "bake"}};
+    drawKeyHintsRow(APP_CONTENT_X, hint_y, help_item, 2, 1, APP_COLOR_HINT);
     updateAppHeaderStatus();
 }
 
@@ -303,6 +304,23 @@ void handleIconDemoNav(const Keyboard_Class::KeysState& status) {
         return;
     }
     if (iconDemoHelpVisible) {
+        return;
+    }
+    // b：用 M5GFX 将 PNG 烘焙为 .rgb565（与屏上解码一致）
+    if (key == "b") {
+        beginAppScreen("Icons");
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_Y);
+        M5Cardputer.Display.print("baking RGB565 via M5GFX...");
+        updateAppHeaderStatus();
+        const int n = bakeAllPngIconsToRgb565();
+        M5Cardputer.Display.fillRect(APP_CONTENT_X, APP_CONTENT_Y, 220, 24, BLACK);
+        M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_Y);
+        M5Cardputer.Display.setTextColor(APP_COLOR_OK, BLACK);
+        M5Cardputer.Display.printf("baked %d files", n);
+        delay(800);
+        drawIconDemoApp();
         return;
     }
     const int delta = getMenuNavDelta(status);

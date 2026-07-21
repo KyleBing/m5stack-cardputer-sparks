@@ -20,7 +20,7 @@ const char* deviceIconPathForModel(const char* model, bool active);
 // 生成列表用小图标路径：{basename}_25w.png / {basename}_active_25w.png
 const char* deviceIconPathForModelList(const char* model, bool active);
 
-// data 根目录打包后的 Version logo
+// data 根目录打包后的 Version logo（优先 bake 的 .rgb565，缺失回退 .png）
 static constexpr const char* APP_LOGO_60_PATH = "/logo_60.png";
 static constexpr int APP_LOGO_60_PX = 60;
 
@@ -47,3 +47,9 @@ bool drawDeviceIconDefault(int x, int y, bool active);
 
 // 设备 PNG 资源是否已在 LittleFS 中
 bool deviceIconsAvailable();
+
+// 用 M5GFX 解码 PNG 并写入同名 .rgb565（黑底上的库输出，与屏上一致）
+bool bakePngToRgb565File(const char* png_path);
+
+// 批量烘焙 /icon/device、/icon/ir、logo；返回成功个数
+int bakeAllPngIconsToRgb565();

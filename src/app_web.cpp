@@ -152,232 +152,310 @@ static String loadConfigText() {
     return cfg;
 }
 
-static void sendHtmlPage(const String& body) {
-    String html;
-    html.reserve(body.length() + 4096);
-    html += F("<!DOCTYPE html><html><head><meta charset='utf-8'>"
-              "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-              "<link rel='icon' href='/favicon.svg' type='image/svg+xml'>"
-              "<title>Cardputer Config</title>"
-              "<style>"
-              "*{box-sizing:border-box}"
-              ":root{color-scheme:light dark;"
-              "--bg:#f5f5f5;--fg:#1a1a1a;--fg-h:#111;--input-bg:#fff;--input-bd:#ccc;"
-              "--btn-bg:#eee;--btn-bd:#bbb;--tab-bd:#ddd;--tab-fg:#666;--tab-act:#1a73e8;"
-              "--th-bg:#e8e8e8;--td-bg:#fff;--td-alt:#f7f7f7;--td-hover:#e8f0fe;"
-              "--link:#1a73e8;--code-bg:#eee;--pre-bg:#f0f0f0;--pre-bd:#ccc;"
-              "--save-bd:#ddd;--hint:#666;--icon-bg:#000}"
-              "@media(prefers-color-scheme:dark){:root{"
-              "--bg:#121212;--fg:#e0e0e0;--fg-h:#f0f0f0;--input-bg:#1e1e1e;--input-bd:#444;"
-              "--btn-bg:#2a2a2a;--btn-bd:#444;--tab-bd:#333;--tab-fg:#888;--tab-act:#8ab4f8;"
-              "--th-bg:#222;--td-bg:#1a1a1a;--td-alt:#161616;--td-hover:#1e2a3a;"
-              "--link:#8ab4f8;--code-bg:#2a2a2a;--pre-bg:#0d0d0d;--pre-bd:#333;"
-              "--save-bd:#333;--hint:#999;--icon-bg:#000}}"
-              "body{font-family:system-ui,sans-serif;margin:0;padding:10px 12px;line-height:1.4;"
-              "width:100%;max-width:100%;background:var(--bg);color:var(--fg)}"
-              ".topbar{margin-bottom:8px}"
-              ".brand{display:flex;align-items:center;gap:10px}"
-              ".site-logo{width:36px;height:36px;object-fit:contain;flex-shrink:0}"
-              ".brand-text{min-width:0}"
-              ".brand-text h1{font-size:1.2rem;margin:0 0 2px;color:var(--fg-h)}"
-              ".nav{font-size:13px;margin:2px 0 0}"
-              ".nav a{color:var(--link)}"
-              "h1{font-size:1.2rem;margin:0 0 8px;color:var(--fg-h)}"
-              "h2{font-size:1.05rem;margin:0 0 8px;color:var(--fg-h)}"
-              "input,textarea{width:100%;padding:6px 8px;font-size:13px;border:1px solid var(--input-bd);"
-              "border-radius:4px;font-family:inherit;background:var(--input-bg);color:var(--fg)}"
-              "textarea{resize:vertical;min-height:28px;font-family:ui-monospace,monospace;"
-              "font-size:12px;line-height:1.35}"
-              "label{font-size:12px;color:var(--hint);display:block;margin-bottom:10px}"
-              "button{padding:8px 14px;margin:0 6px 6px 0;border:1px solid var(--btn-bd);border-radius:4px;"
-              "background:var(--btn-bg);color:var(--fg);cursor:pointer;font-size:13px}"
-              "button.primary{background:#1a73e8;color:#fff;border-color:#1a73e8}"
-              "button.danger{color:#ff8a80;border-color:#5c3333;background:#2a1a1a}"
-              "button.icon-btn{padding:3px 6px;font-size:12px;line-height:1;min-width:26px;"
-              "white-space:nowrap}"
-              "a.btn{display:inline-block;padding:8px 14px;margin:0 6px 6px 0;border:1px solid var(--btn-bd);"
-              "border-radius:4px;background:var(--btn-bg);color:var(--fg);cursor:pointer;font-size:13px;"
-              "text-decoration:none}"
-              "a.btn.primary{background:#1a73e8;color:#fff;border-color:#1a73e8}"
-              ".tabs{display:flex;gap:0;border-bottom:2px solid var(--tab-bd);margin-bottom:12px}"
-              ".tab{padding:10px 18px;cursor:pointer;border:none;background:none;font-size:14px;"
-              "color:var(--tab-fg);border-bottom:2px solid transparent;margin-bottom:-2px}"
-              ".tab.active{color:var(--tab-act);border-bottom-color:var(--tab-act);font-weight:600}"
-              ".panel{display:none}"
-              ".panel.active{display:block}"
-              ".hint{font-size:12px;color:var(--hint);margin:0 0 10px}"
-              ".shot-space{font-size:13px;margin:0 0 12px;padding:10px 12px;border:1px solid var(--tab-bd);"
-              "border-radius:6px;background:var(--td-bg);line-height:1.5}"
-              ".shot-space .bar{height:8px;border-radius:4px;background:var(--code-bg);margin:8px 0 0;"
-              "overflow:hidden}"
-              ".shot-space .bar>i{display:block;height:100%;background:var(--tab-act);border-radius:4px}"
-              ".shot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));"
-              "gap:12px;margin:12px 0}"
-              ".shot-card{border:1px solid var(--tab-bd);border-radius:6px;padding:8px;"
-              "background:var(--td-bg)}"
-              ".shot-card a.thumb{display:block;background:#000;border-radius:4px;overflow:hidden;"
-              "aspect-ratio:240/135}"
-              ".shot-card img{width:100%;height:100%;object-fit:contain;display:block;"
-              "image-rendering:pixelated}"
-              ".shot-card .meta{margin-top:6px;font-size:12px;line-height:1.35}"
-              ".shot-card .meta a{color:var(--link);word-break:break-all}"
-              ".shot-card .size{color:var(--hint)}"
-              ".toolbar{margin:10px 0;display:flex;flex-wrap:wrap;align-items:center;gap:6px}"
-              ".toolbar .count{font-size:13px;color:var(--hint);margin-left:auto}"
-              ".table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}"
-              "table.dev-table{width:100%;min-width:1000px;border-collapse:collapse;table-layout:fixed}"
-              ".dev-table th,.dev-table td{border:1px solid var(--tab-bd);padding:4px;vertical-align:top;"
-              "background:var(--td-bg)}"
-              ".dev-table th{background:var(--th-bg);font-size:12px;font-weight:600;text-align:left;"
-              "padding:6px 4px;color:var(--fg)}"
-              ".dev-table tr:nth-child(even) td{background:var(--td-alt)}"
-              ".dev-table tr:hover td{background:var(--td-hover)!important}"
-              ".dev-table .col-idx{width:36px;text-align:center;color:var(--hint);font-size:12px;"
-              "vertical-align:middle}"
-              ".dev-table .col-act{width:168px;vertical-align:middle}"
-              ".dev-table .col-act .act-stack{display:flex;flex-direction:row;flex-wrap:nowrap;"
-              "gap:3px;align-items:center}"
-              ".dev-table .col-act button{width:auto;margin:0;flex-shrink:0}"
-              ".dev-table .col-name{width:10%}"
-              ".dev-table .col-namezh{width:9%}"
-              ".dev-table .col-hotkey{width:52px}"
-              ".dev-table .col-hotkey textarea{text-align:center;text-transform:lowercase;"
-              "font-weight:700;max-width:40px}"
-              ".dev-table .col-ip{width:9%}"
-              ".dev-table .col-token{width:13%}"
-              ".dev-table .col-ble{width:13%}"
-              ".dev-table .col-model{width:15%}"
-              ".dev-table .col-id{width:10%}"
-              ".dev-table .col-mac{width:9%}"
-              ".model-cell{display:flex;gap:6px;align-items:flex-start}"
-              ".model-cell textarea{flex:1;min-width:0}"
-              ".dev-icon{width:32px;height:32px;object-fit:contain;flex-shrink:0;margin-top:2px;"
-              "background:var(--icon-bg);border-radius:4px}"
-              ".wifi-grid{max-width:480px}"
-              ".save-bar{margin-top:14px;padding-top:12px;border-top:1px solid var(--save-bd)}"
-              ".result-actions{margin-top:16px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}"
-              ".ok{color:#81c784}.err{color:#ff8a80}"
-              "code{background:var(--code-bg);padding:2px 4px;border-radius:3px;color:var(--fg)}"
-              "pre{background:var(--pre-bg);color:var(--fg);padding:12px;overflow:auto;font-size:12px;"
-              "border:1px solid var(--pre-bd);border-radius:4px}"
-              "textarea.json-editor{height:min(70vh,520px);font-family:ui-monospace,monospace}"
-              ".token-steps{margin:0 0 12px;padding:0 0 0 18px;font-size:12px;color:var(--hint)}"
-              ".token-steps li{margin:0 0 6px}"
-              ".token-method-title{font-size:13px;margin:14px 0 6px;color:var(--fg-h)}"
-              ".token-paths{margin:0 0 8px;padding:0 0 0 18px;font-size:12px;color:var(--hint)}"
-              ".token-paths li{margin:0 0 4px}"
-              ".token-cmd{margin:0 0 12px;font-size:11px;line-height:1.4;white-space:pre-wrap;word-break:break-all}"
-              ".token-formats{font-size:12px;color:var(--hint);margin:0 0 10px}"
-              ".group-card{border:1px solid var(--tab-bd);border-radius:6px;padding:10px 12px;"
-              "margin:0 0 12px;background:var(--td-bg)}"
-              ".group-card .group-head{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;"
-              "margin-bottom:8px}"
-              ".group-card .group-head label{margin:0;flex:1;min-width:140px}"
-              ".group-card .group-acts{display:flex;gap:4px;flex-wrap:wrap}"
-              ".group-members{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));"
-              "gap:6px;margin-top:6px}"
-              ".group-members label.member{display:flex;gap:8px;align-items:flex-start;margin:0;"
-              "padding:6px 8px;border:1px solid var(--tab-bd);border-radius:4px;font-size:12px;"
-              "color:var(--fg);cursor:pointer;box-sizing:border-box}"
-              ".group-members label.member.ble{opacity:.55}"
-              /* 覆盖全局 input{width:100%}，避免 checkbox 撑满把文字挤成竖排 */
-              ".group-members label.member input[type=checkbox]{width:auto;min-width:16px;"
-              "margin:2px 0 0;padding:0;flex:0 0 auto;accent-color:#1a73e8}"
-              ".group-members .member-meta{flex:1 1 auto;min-width:0;line-height:1.35;"
-              "overflow-wrap:anywhere}"
-              ".group-members .member-id{font-family:ui-monospace,monospace;font-size:11px;"
-              "color:var(--hint);word-break:break-all}"
-              ".sys-grid{max-width:480px}"
-              ".sys-grid .check-row{display:flex;align-items:center;gap:8px;margin:0 0 10px;"
-              "font-size:13px;color:var(--fg);cursor:pointer}"
-              ".sys-grid .check-row input{width:auto;margin:0;accent-color:#1a73e8}"
-              ".sys-grid .bright-row{display:flex;align-items:center;gap:10px}"
-              ".sys-grid .bright-row input[type=range]{flex:1;min-width:0;padding:0}"
-              ".sys-grid .bright-val{min-width:2.5em;font-variant-numeric:tabular-nums;"
-              "color:var(--fg)}"
-              /* TF 文件管理：简单表格列表 */
-              ".fm-crumb{display:flex;flex-wrap:wrap;align-items:center;gap:4px 2px;"
-              "font-size:13px;margin:0 0 12px;padding:8px 10px;border:1px solid var(--tab-bd);"
-              "border-radius:6px;background:var(--td-bg);word-break:break-all}"
-              ".fm-crumb a{color:var(--link);text-decoration:none;padding:2px 4px;border-radius:4px}"
-              ".fm-crumb a:hover{background:var(--td-hover)}"
-              ".fm-crumb .sep{color:var(--hint);padding:0 2px}"
-              ".fm-crumb .cur{color:var(--fg-h);font-weight:600;padding:2px 4px}"
-              ".fm-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px}"
-              ".fm-mkdir{display:flex;flex-wrap:wrap;align-items:center;gap:6px;flex:1;min-width:220px;"
-              "margin:0;padding:8px 10px;border:1px solid var(--tab-bd);border-radius:6px;"
-              "background:var(--td-bg)}"
-              ".fm-mkdir label{margin:0;color:var(--hint);font-size:12px;white-space:nowrap}"
-              ".fm-mkdir input[type=text]{flex:1;min-width:120px;margin:0;width:auto}"
-              ".fm-mkdir button{margin:0}"
-              ".fm-count{font-size:13px;color:var(--hint);margin-left:auto}"
-              ".fm-flash{margin:0 0 12px;padding:8px 12px;border-radius:6px;font-size:13px}"
-              ".fm-flash.ok{background:#1b3d2f;color:#81c784;border:1px solid #2e5a45}"
-              ".fm-flash.err{background:#3d1b1b;color:#ff8a80;border:1px solid #5c3333}"
-              "@media(prefers-color-scheme:light){"
-              ".fm-flash.ok{background:#e8f5e9;color:#2e7d32;border-color:#a5d6a7}"
-              ".fm-flash.err{background:#ffebee;color:#c62828;border-color:#ef9a9a}}"
-              "table.fm-table{width:100%;min-width:560px;border-collapse:collapse;table-layout:fixed}"
-              ".fm-table th,.fm-table td{border:1px solid var(--tab-bd);padding:6px 8px;"
-              "vertical-align:middle;background:var(--td-bg);font-size:13px}"
-              ".fm-table th{background:var(--th-bg);font-size:12px;font-weight:600;text-align:left;"
-              "color:var(--fg);white-space:nowrap}"
-              ".fm-table tr:nth-child(even) td{background:var(--td-alt)}"
-              ".fm-table tr:hover td{background:var(--td-hover)!important}"
-              ".fm-table .col-name{width:36%}"
-              ".fm-table .col-size{width:12%;white-space:nowrap;font-variant-numeric:tabular-nums;"
-              "color:var(--hint)}"
-              ".fm-table .col-time{width:18%;white-space:nowrap;font-variant-numeric:tabular-nums;"
-              "font-size:12px;color:var(--hint)}"
-              ".fm-table .col-act{width:16%;white-space:nowrap}"
-              ".fm-table a.name{color:var(--link);text-decoration:none;word-break:break-all}"
-              ".fm-table a.name:hover{text-decoration:underline}"
-              ".fm-table .tag{display:inline-block;margin-right:4px;padding:1px 5px;border-radius:3px;"
-              "font-size:10px;font-weight:700;letter-spacing:.02em;color:var(--hint);"
-              "background:var(--code-bg);vertical-align:middle}"
-              ".fm-table .tag.dir{color:#b8860b}"
-              ".fm-table .acts{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center}"
-              ".fm-table .acts form{display:inline;margin:0}"
-              ".fm-table .acts .btn,.fm-table .acts button{margin:0;padding:4px 8px;font-size:12px}"
-              ".fm-empty{text-align:center;padding:28px 12px;border:1px dashed var(--tab-bd);"
-              "border-radius:6px;color:var(--hint);font-size:13px;background:var(--td-bg)}"
-              ".fm-empty strong{display:block;color:var(--fg-h);margin-bottom:4px;font-size:14px}"
-              "</style></head><body>");
-    html += body;
-    html += F("</body></html>");
-    g_server.send(200, "text/html", html);
+// 页面按需附加的 CSS 段
+enum HtmlCssFlags : uint8_t {
+    HTML_CSS_NONE = 0,
+    HTML_CSS_DEVICES = 1u << 0, // 设备表 / WiFi 网格
+    HTML_CSS_GROUPS = 1u << 1,  // 编组卡片
+    HTML_CSS_CURSOR = 1u << 2,  // Cursor token 说明
+    HTML_CSS_SYSTEM = 1u << 3,  // 系统设置
+    HTML_CSS_SHOTS = 1u << 4,   // 截图网格 / 空间条
+    HTML_CSS_FILES = 1u << 5,   // TF 文件管理
+};
+
+// 分块发送 HTML：不拼 head+body 大 String，避免 OOM / pending
+static void sendHtmlPage(const String& body, const uint8_t css_flags = HTML_CSS_NONE) {
+    g_server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+    g_server.send(200, "text/html", "");
+    g_server.sendContent_P(PSTR(
+        "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<link rel='icon' href='/favicon.svg' type='image/svg+xml'>"
+        "<title>Cardputer Config</title>"
+        "<style>"
+        "*{box-sizing:border-box}"
+        ":root{color-scheme:light dark;"
+        "--bg:#f5f5f5;--fg:#1a1a1a;--fg-h:#111;--input-bg:#fff;--input-bd:#ccc;"
+        "--btn-bg:#eee;--btn-bd:#bbb;--tab-bd:#ddd;--tab-fg:#666;--tab-act:#1a73e8;"
+        "--th-bg:#e8e8e8;--td-bg:#fff;--td-alt:#f7f7f7;--td-hover:#e8f0fe;"
+        "--link:#1a73e8;--code-bg:#eee;--pre-bg:#f0f0f0;--pre-bd:#ccc;"
+        "--save-bd:#ddd;--hint:#666;--icon-bg:#000}"
+        "@media(prefers-color-scheme:dark){:root{"
+        "--bg:#121212;--fg:#e0e0e0;--fg-h:#f0f0f0;--input-bg:#1e1e1e;--input-bd:#444;"
+        "--btn-bg:#2a2a2a;--btn-bd:#444;--tab-bd:#333;--tab-fg:#888;--tab-act:#8ab4f8;"
+        "--th-bg:#222;--td-bg:#1a1a1a;--td-alt:#161616;--td-hover:#1e2a3a;"
+        "--link:#8ab4f8;--code-bg:#2a2a2a;--pre-bg:#0d0d0d;--pre-bd:#333;"
+        "--save-bd:#333;--hint:#999;--icon-bg:#000}}"
+        "body{font-family:system-ui,sans-serif;margin:0;padding:10px 12px;line-height:1.4;"
+        "width:100%;max-width:100%;background:var(--bg);color:var(--fg)}"
+        ".topbar{margin-bottom:8px}"
+        ".brand{display:flex;align-items:center;gap:10px}"
+        ".site-logo{width:36px;height:36px;object-fit:contain;flex-shrink:0}"
+        ".brand-text{min-width:0}"
+        ".brand-text h1{font-size:1.2rem;margin:0 0 2px;color:var(--fg-h)}"
+        ".nav{font-size:13px;margin:2px 0 0}"
+        ".nav a{color:var(--link)}"
+        "h1{font-size:1.2rem;margin:0 0 8px;color:var(--fg-h)}"
+        "h2{font-size:1.05rem;margin:12px 0 8px;color:var(--fg-h)}"
+        "input,textarea,select{width:100%;padding:6px 8px;font-size:13px;border:1px solid var(--input-bd);"
+        "border-radius:4px;font-family:inherit;background:var(--input-bg);color:var(--fg)}"
+        "textarea{resize:vertical;min-height:28px;font-family:ui-monospace,monospace;"
+        "font-size:12px;line-height:1.35}"
+        "label{font-size:12px;color:var(--hint);display:block;margin-bottom:10px}"
+        "button{padding:8px 14px;margin:0 6px 6px 0;border:1px solid var(--btn-bd);border-radius:4px;"
+        "background:var(--btn-bg);color:var(--fg);cursor:pointer;font-size:13px}"
+        "button.primary{background:#1a73e8;color:#fff;border-color:#1a73e8}"
+        "button.danger{color:#ff8a80;border-color:#5c3333;background:#2a1a1a}"
+        "button.icon-btn{padding:3px 6px;font-size:12px;line-height:1;min-width:26px;"
+        "white-space:nowrap}"
+        "a.btn{display:inline-block;padding:8px 14px;margin:0 6px 6px 0;border:1px solid var(--btn-bd);"
+        "border-radius:4px;background:var(--btn-bg);color:var(--fg);cursor:pointer;font-size:13px;"
+        "text-decoration:none}"
+        "a.btn.primary{background:#1a73e8;color:#fff;border-color:#1a73e8}"
+        ".hint{font-size:12px;color:var(--hint);margin:0 0 10px}"
+        ".toolbar{margin:10px 0;display:flex;flex-wrap:wrap;align-items:center;gap:6px}"
+        ".toolbar .count{font-size:13px;color:var(--hint);margin-left:auto}"
+        ".table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}"
+        ".save-bar{margin-top:14px;padding-top:12px;border-top:1px solid var(--save-bd)}"
+        ".result-actions{margin-top:16px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}"
+        ".ok{color:#81c784}.err{color:#ff8a80}"
+        "code{background:var(--code-bg);padding:2px 4px;border-radius:3px;color:var(--fg)}"
+        "pre{background:var(--pre-bg);color:var(--fg);padding:12px;overflow:auto;font-size:12px;"
+        "border:1px solid var(--pre-bd);border-radius:4px}"
+        "textarea.json-editor{height:min(70vh,520px);font-family:ui-monospace,monospace}"
+    ));
+    if (css_flags & HTML_CSS_DEVICES) {
+        g_server.sendContent_P(PSTR(
+            "table.dev-table{width:100%;min-width:1000px;border-collapse:collapse;table-layout:fixed}"
+            ".dev-table th,.dev-table td{border:1px solid var(--tab-bd);padding:4px;vertical-align:top;"
+            "background:var(--td-bg)}"
+            ".dev-table th{background:var(--th-bg);font-size:12px;font-weight:600;text-align:left;"
+            "padding:6px 4px;color:var(--fg)}"
+            ".dev-table tr:nth-child(even) td{background:var(--td-alt)}"
+            ".dev-table tr:hover td{background:var(--td-hover)!important}"
+            ".dev-table .col-idx{width:36px;text-align:center;color:var(--hint);font-size:12px;"
+            "vertical-align:middle}"
+            ".dev-table .col-act{width:168px;vertical-align:middle}"
+            ".dev-table .col-act .act-stack{display:flex;flex-direction:row;flex-wrap:nowrap;"
+            "gap:3px;align-items:center}"
+            ".dev-table .col-act button{width:auto;margin:0;flex-shrink:0}"
+            ".dev-table .col-name{width:10%}"
+            ".dev-table .col-namezh{width:9%}"
+            ".dev-table .col-hotkey{width:52px}"
+            ".dev-table .col-hotkey textarea{text-align:center;text-transform:lowercase;"
+            "font-weight:700;max-width:40px}"
+            ".dev-table .col-ip{width:9%}"
+            ".dev-table .col-token{width:13%}"
+            ".dev-table .col-ble{width:13%}"
+            ".dev-table .col-model{width:15%}"
+            ".dev-table .col-id{width:10%}"
+            ".dev-table .col-mac{width:9%}"
+            ".model-cell{display:flex;gap:6px;align-items:flex-start}"
+            ".model-cell textarea{flex:1;min-width:0}"
+            ".dev-icon{width:32px;height:32px;object-fit:contain;flex-shrink:0;margin-top:2px;"
+            "background:var(--icon-bg);border-radius:4px}"
+            ".wifi-grid{max-width:480px}"
+        ));
+    }
+    if (css_flags & HTML_CSS_GROUPS) {
+        g_server.sendContent_P(PSTR(
+            ".group-card{border:1px solid var(--tab-bd);border-radius:6px;padding:10px 12px;"
+            "margin:0 0 12px;background:var(--td-bg)}"
+            ".group-card .group-head{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;"
+            "margin-bottom:8px}"
+            ".group-card .group-head label{margin:0;flex:1;min-width:140px}"
+            ".group-card .group-acts{display:flex;gap:4px;flex-wrap:wrap}"
+            ".group-members{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));"
+            "gap:6px;margin-top:6px}"
+            ".group-members label.member{display:flex;gap:8px;align-items:flex-start;margin:0;"
+            "padding:6px 8px;border:1px solid var(--tab-bd);border-radius:4px;font-size:12px;"
+            "color:var(--fg);cursor:pointer;box-sizing:border-box}"
+            ".group-members label.member.ble{opacity:.55}"
+            ".group-members label.member input[type=checkbox]{width:auto;min-width:16px;"
+            "margin:2px 0 0;padding:0;flex:0 0 auto;accent-color:#1a73e8}"
+            ".group-members .member-meta{flex:1 1 auto;min-width:0;line-height:1.35;"
+            "overflow-wrap:anywhere}"
+            ".group-members .member-id{font-family:ui-monospace,monospace;font-size:11px;"
+            "color:var(--hint);word-break:break-all}"
+        ));
+    }
+    if (css_flags & HTML_CSS_CURSOR) {
+        g_server.sendContent_P(PSTR(
+            ".token-steps{margin:0 0 12px;padding:0 0 0 18px;font-size:12px;color:var(--hint)}"
+            ".token-steps li{margin:0 0 6px}"
+            ".token-method-title{font-size:13px;margin:14px 0 6px;color:var(--fg-h)}"
+            ".token-paths{margin:0 0 8px;padding:0 0 0 18px;font-size:12px;color:var(--hint)}"
+            ".token-paths li{margin:0 0 4px}"
+            ".token-cmd{margin:0 0 12px;font-size:11px;line-height:1.4;white-space:pre-wrap;word-break:break-all}"
+            ".token-formats{font-size:12px;color:var(--hint);margin:0 0 10px}"
+        ));
+    }
+    if (css_flags & HTML_CSS_SYSTEM) {
+        g_server.sendContent_P(PSTR(
+            ".sys-grid{max-width:480px}"
+            ".sys-grid .check-row{display:flex;align-items:center;gap:8px;margin:0 0 10px;"
+            "font-size:13px;color:var(--fg);cursor:pointer}"
+            ".sys-grid .check-row input{width:auto;margin:0;accent-color:#1a73e8}"
+            ".sys-grid .bright-row{display:flex;align-items:center;gap:10px}"
+            ".sys-grid .bright-row input[type=range]{flex:1;min-width:0;padding:0}"
+            ".sys-grid .bright-val{min-width:2.5em;font-variant-numeric:tabular-nums;"
+            "color:var(--fg)}"
+        ));
+    }
+    if (css_flags & HTML_CSS_SHOTS) {
+        g_server.sendContent_P(PSTR(
+            ".shot-space{font-size:13px;margin:0 0 12px;padding:10px 12px;border:1px solid var(--tab-bd);"
+            "border-radius:6px;background:var(--td-bg);line-height:1.5}"
+            ".shot-space .bar{height:8px;border-radius:4px;background:var(--code-bg);margin:8px 0 0;"
+            "overflow:hidden}"
+            ".shot-space .bar>i{display:block;height:100%;background:var(--tab-act);border-radius:4px}"
+            ".shot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));"
+            "gap:12px;margin:12px 0}"
+            ".shot-card{border:1px solid var(--tab-bd);border-radius:6px;padding:8px;"
+            "background:var(--td-bg)}"
+            ".shot-card a.thumb{display:block;background:#000;border-radius:4px;overflow:hidden;"
+            "aspect-ratio:240/135}"
+            ".shot-card img{width:100%;height:100%;object-fit:contain;display:block;"
+            "image-rendering:pixelated}"
+            ".shot-card .meta{margin-top:6px;font-size:12px;line-height:1.35}"
+            ".shot-card .meta a{color:var(--link);word-break:break-all}"
+            ".shot-card .size{color:var(--hint)}"
+        ));
+    }
+    if (css_flags & HTML_CSS_FILES) {
+        g_server.sendContent_P(PSTR(
+            ".fm-crumb{display:flex;flex-wrap:wrap;align-items:center;gap:4px 2px;"
+            "font-size:13px;margin:0 0 12px;padding:8px 10px;border:1px solid var(--tab-bd);"
+            "border-radius:6px;background:var(--td-bg);word-break:break-all}"
+            ".fm-crumb a{color:var(--link);text-decoration:none;padding:2px 4px;border-radius:4px}"
+            ".fm-crumb a:hover{background:var(--td-hover)}"
+            ".fm-crumb .sep{color:var(--hint);padding:0 2px}"
+            ".fm-crumb .cur{color:var(--fg-h);font-weight:600;padding:2px 4px}"
+            ".fm-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px}"
+            ".fm-mkdir{display:flex;flex-wrap:wrap;align-items:center;gap:6px;flex:1;min-width:220px;"
+            "margin:0;padding:8px 10px;border:1px solid var(--tab-bd);border-radius:6px;"
+            "background:var(--td-bg)}"
+            ".fm-mkdir label{margin:0;color:var(--hint);font-size:12px;white-space:nowrap}"
+            ".fm-mkdir input[type=text]{flex:1;min-width:120px;margin:0;width:auto}"
+            ".fm-mkdir button{margin:0}"
+            ".fm-count{font-size:13px;color:var(--hint);margin-left:auto}"
+            ".fm-flash{margin:0 0 12px;padding:8px 12px;border-radius:6px;font-size:13px}"
+            ".fm-flash.ok{background:#1b3d2f;color:#81c784;border:1px solid #2e5a45}"
+            ".fm-flash.err{background:#3d1b1b;color:#ff8a80;border:1px solid #5c3333}"
+            "@media(prefers-color-scheme:light){"
+            ".fm-flash.ok{background:#e8f5e9;color:#2e7d32;border-color:#a5d6a7}"
+            ".fm-flash.err{background:#ffebee;color:#c62828;border-color:#ef9a9a}}"
+            "table.fm-table{width:100%;min-width:560px;border-collapse:collapse;table-layout:fixed}"
+            ".fm-table th,.fm-table td{border:1px solid var(--tab-bd);padding:6px 8px;"
+            "vertical-align:middle;background:var(--td-bg);font-size:13px}"
+            ".fm-table th{background:var(--th-bg);font-size:12px;font-weight:600;text-align:left;"
+            "color:var(--fg);white-space:nowrap}"
+            ".fm-table tr:nth-child(even) td{background:var(--td-alt)}"
+            ".fm-table tr:hover td{background:var(--td-hover)!important}"
+            ".fm-table .col-name{width:36%}"
+            ".fm-table .col-size{width:12%;white-space:nowrap;font-variant-numeric:tabular-nums;"
+            "color:var(--hint)}"
+            ".fm-table .col-time{width:18%;white-space:nowrap;font-variant-numeric:tabular-nums;"
+            "font-size:12px;color:var(--hint)}"
+            ".fm-table .col-act{width:16%;white-space:nowrap}"
+            ".fm-table a.name{color:var(--link);text-decoration:none;word-break:break-all}"
+            ".fm-table a.name:hover{text-decoration:underline}"
+            ".fm-table .tag{display:inline-block;margin-right:4px;padding:1px 5px;border-radius:3px;"
+            "font-size:10px;font-weight:700;letter-spacing:.02em;color:var(--hint);"
+            "background:var(--code-bg);vertical-align:middle}"
+            ".fm-table .tag.dir{color:#b8860b}"
+            ".fm-table .acts{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center}"
+            ".fm-table .acts form{display:inline;margin:0}"
+            ".fm-table .acts .btn,.fm-table .acts button{margin:0;padding:4px 8px;font-size:12px}"
+            ".fm-empty{text-align:center;padding:28px 12px;border:1px dashed var(--tab-bd);"
+            "border-radius:6px;color:var(--hint);font-size:13px;background:var(--td-bg)}"
+            ".fm-empty strong{display:block;color:var(--fg-h);margin-bottom:4px;font-size:14px}"
+        ));
+    }
+    g_server.sendContent_P(PSTR("</style></head><body>"));
+    g_server.sendContent(body);
+    g_server.sendContent_P(PSTR("</body></html>"));
+    g_server.sendContent(""); // 结束 chunked 传输
 }
 
-// 表单编辑页（Tab：WiFi / 米家设备）
+// 各页共用顶栏导航
+static void appendTopBar(String& body, const char* title) {
+    body += F("<div class='topbar'><div class='brand'>"
+              "<img class='site-logo' src='/favicon.svg' alt='' width='36' height='36'>"
+              "<div class='brand-text'><h1>");
+    body += title;
+    body += F("</h1>"
+              "<p class='nav'>"
+              "<a href='/'>主页</a> · "
+              "<a href='/groups'>编组</a> · "
+              "<a href='/cursor'>Cursor</a> · "
+              "<a href='/system'>系统</a> · "
+              "<a href='/shots'>截图</a> · "
+              "<a href='/files'>TF文件</a> · "
+              "<a href='/advanced'>高级JSON</a> · "
+              "<a href='/example'>示例</a>"
+              "</p></div></div></div>");
+}
+
+// 嵌入 cfg JSON 供页面 JS 读取
+static void appendCfgDataScript(String& body, const String& cfg) {
+    body += F("<script type='application/json' id='cfg-data'>");
+    body += cfg;
+    body += F("</script>");
+}
+
+// 默认 cfg 对象字面量（JS）
+static const char* JS_CFG_DEFAULT =
+    "{wifi:{ssid:'',password:''},devices:[],device_groups:[],cursor:{token:''},"
+    "timezone:'CST-8',brightness:30,sound:{time_key:true,mijia_on_off:true,volume:25},"
+    "time:{default:'up'},Infrared:{default:'tv',tv_brand:'samsung',ac_brand:'midea'}}";
+
+// 加载并规范化 cfg（各编辑页共用）
+static void appendJsLoadCfg(String& body) {
+    body += F("let cfg=");
+    body += JS_CFG_DEFAULT;
+    body += F(";"
+              "function loadCfg(){try{cfg=JSON.parse(document.getElementById('cfg-data').textContent);}"
+              "catch(e){cfg=");
+    body += JS_CFG_DEFAULT;
+    body += F(";}"
+              "if(!cfg.wifi)cfg.wifi={ssid:'',password:''};"
+              "if(!cfg.devices)cfg.devices=[];"
+              "if(!cfg.device_groups)cfg.device_groups=[];"
+              "if(!cfg.cursor)cfg.cursor={token:''};"
+              "if(!cfg.timezone)cfg.timezone='CST-8';"
+              "let bright=cfg.brightness;if(bright==null||isNaN(+bright))bright=30;"
+              "bright=+bright;if(bright>100)bright=Math.round(bright*100/255);"
+              "if(bright<0)bright=0;if(bright>100)bright=100;cfg.brightness=bright;"
+              "if(!cfg.sound)cfg.sound={};"
+              "if(cfg.sound.time_key==null)cfg.sound.time_key=true;"
+              "if(cfg.sound.mijia_on_off==null)cfg.sound.mijia_on_off=true;"
+              "let svol=cfg.sound.volume;if(svol==null||isNaN(+svol))svol=25;"
+              "svol=+svol;if(svol<0)svol=0;if(svol>100)svol=100;cfg.sound.volume=svol;"
+              "if(!cfg.time)cfg.time={};"
+              "if(!cfg.time.default)cfg.time.default='up';"
+              "if(!cfg.Infrared&&cfg.infrared){cfg.Infrared=cfg.infrared;delete cfg.infrared;}"
+              "if(!cfg.Infrared)cfg.Infrared={};"
+              "if(!cfg.Infrared.default)cfg.Infrared.default='tv';"
+              "if(!cfg.Infrared.tv_brand)cfg.Infrared.tv_brand='samsung';"
+              "if(!cfg.Infrared.ac_brand)cfg.Infrared.ac_brand='midea';}");
+}
+
+// 主页：WiFi + 米家设备
 static void handleFormRoot() {
     const String cfg = sanitizeJsonForHtml(loadConfigText());
 
     String body;
-    body.reserve(cfg.length() + 8192);
-    body += F("<div class='topbar'><div class='brand'>"
-              "<img class='site-logo' src='/favicon.svg' alt='' width='36' height='36'>"
-              "<div class='brand-text'><h1>Cardputer Config</h1>"
-              "<p class='nav'><a href='/advanced'>高级 JSON</a> · "
-              "<a href='/example'>示例</a> · "
-              "<a href='/shots'>截图</a> · "
-              "<a href='/files'>TF 文件</a> · "
-              "<a href='/cursor-err'>Cursor 错误</a> · "
-              "<a href='/cursor-log'>Cursor 日志</a></p></div></div></div>"
-              "<form id='save-form' method='POST' action='/save'>"
+    body.reserve(cfg.length() + 6144);
+    appendTopBar(body, "Cardputer Config");
+    body += F("<form id='save-form' method='POST' action='/save'>"
               "<input type='hidden' name='config' id='config-payload'>"
-              "<div class='tabs'>"
-              "<button type='button' class='tab active' data-tab='wifi'>WiFi</button>"
-              "<button type='button' class='tab' data-tab='devices'>米家设备</button>"
-              "<button type='button' class='tab' data-tab='groups'>米家设备编组</button>"
-              "<button type='button' class='tab' data-tab='cursor'>Cursor</button>"
-              "<button type='button' class='tab' data-tab='system'>系统设置</button>"
-              "</div>"
-              "<div id='panel-wifi' class='panel active'>"
+              "<h2>WiFi</h2>"
               "<div class='wifi-grid'>"
               "<label>SSID<input id='wifi-ssid' autocomplete='off'></label>"
               "<label>密码<input id='wifi-pass' autocomplete='off'></label>"
-              "</div></div>"
-              "<div id='panel-devices' class='panel'>"
+              "</div>"
+              "<h2>米家设备</h2>"
               "<div class='toolbar'>"
               "<button type='button' id='btn-add'>+ 添加设备</button>"
               "<span class='count' id='dev-count'></span>"
@@ -397,18 +475,225 @@ static void handleFormRoot() {
               "<th class='col-mac'>MAC</th>"
               "</tr></thead>"
               "<tbody id='dev-tbody'></tbody>"
-              "</table></div></div>"
-              "<div id='panel-groups' class='panel'>"
+              "</table></div>"
+              "<div class='save-bar'>"
+              "<button type='submit' class='primary' id='btn-save'>保存到设备</button>"
+              "</div></form>");
+    appendCfgDataScript(body, cfg);
+    body += F("<script>");
+    body += F("const DEV_MAX=");
+    body += WEB_DEVICE_MAX;
+    body += F(";");
+    body += F("const ICON_NAMES=[");
+    for (const char* const* name = deviceIconNames(); *name != nullptr; ++name) {
+        body += '\'';
+        body += *name;
+        body += F("',");
+    }
+    body += F("];");
+    appendJsLoadCfg(body);
+    body += F(
+        "function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/\"/g,'&quot;')"
+        ".replace(/</g,'&lt;');}"
+        "function ta(f,v){return `<textarea data-f='${f}' rows='1'>${esc(v)}</textarea>`;}"
+        "function iconBase(model){const m=String(model||'').toLowerCase();"
+        "for(const n of ICON_NAMES){if(m.includes(n))return n;}"
+        "if(m.includes('light'))return 'light';return 'default';}"
+        "function iconUrl(model){return '/icon/device/'+iconBase(model)+'.png';}"
+        "function modelCell(model){return `<div class='model-cell'>"
+        "<img class='dev-icon' src='${iconUrl(model)}' alt='' title='${iconBase(model)}'>"
+        "${ta('model',model)}</div>`;}"
+        "function bleKeyOf(d){return (d.ble&&d.ble.key)||d.ble_key||'';}"
+        "function memberIdOf(m){return typeof m==='string'?m:(m&&m.id)||'';}"
+        "function collectDevices(){cfg.devices=[];"
+        "document.querySelectorAll('#dev-tbody tr').forEach(row=>{"
+        "const d={};row.querySelectorAll('[data-f]').forEach(el=>{d[el.dataset.f]=el.value;});"
+        "const bk=d.ble_key||'';delete d.ble_key;"
+        "if(bk)d.ble={key:bk};else delete d.ble;"
+        "if(!d.name_zh)delete d.name_zh;"
+        "let hk=String(d.hotkey||'').trim().toLowerCase();"
+        "hk=hk.length?hk[0]:'';"
+        "if(/^[a-z0-9]$/.test(hk)&&hk!=='q')d.hotkey=hk;else delete d.hotkey;"
+        "cfg.devices.push(d);});}"
+        "function dedupeDeviceHotkeys(){const seen=new Set();"
+        "(cfg.devices||[]).forEach(d=>{if(!d||!d.hotkey)return;"
+        "const h=String(d.hotkey).toLowerCase()[0];"
+        "if(!h||seen.has(h)){delete d.hotkey;return;}seen.add(h);d.hotkey=h;});}"
+        // 仅写回本页字段，其余 cfg 原样提交
+        "function collect(){cfg.wifi.ssid=document.getElementById('wifi-ssid').value;"
+        "cfg.wifi.password=document.getElementById('wifi-pass').value;"
+        "collectDevices();dedupeDeviceHotkeys();}"
+        "function renderDevices(){const tb=document.getElementById('dev-tbody');tb.innerHTML='';"
+        "cfg.devices.forEach((d,i)=>{const tr=document.createElement('tr');tr.dataset.i=i;"
+        "tr.innerHTML=`<td class='col-idx'>${i+1}</td>"
+        "<td class='col-name'>${ta('name',d.name)}</td>"
+        "<td class='col-namezh'>${ta('name_zh',d.name_zh||d.name_cn||'')}</td>"
+        "<td class='col-hotkey'>${ta('hotkey',d.hotkey||'')}</td>"
+        "<td class='col-act'><div class='act-stack'>"
+        "<button type='button' class='icon-btn' data-act='up' title='上移'>↑</button>"
+        "<button type='button' class='icon-btn' data-act='down' title='下移'>↓</button>"
+        "<button type='button' class='icon-btn' data-act='top' title='置顶'>顶</button>"
+        "<button type='button' class='icon-btn' data-act='bottom' title='置底'>底</button>"
+        "<button type='button' class='danger icon-btn' data-act='del' title='删除'>删</button>"
+        "</div></td>"
+        "<td class='col-ip'>${ta('ip',d.ip)}</td>"
+        "<td class='col-token'>${ta('token',d.token)}</td>"
+        "<td class='col-ble'>${ta('ble_key',bleKeyOf(d))}</td>"
+        "<td class='col-model'>${modelCell(d.model)}</td>"
+        "<td class='col-id'>${ta('id',d.id)}</td>"
+        "<td class='col-mac'>${ta('mac',d.mac)}</td>`;tb.appendChild(tr);});"
+        "document.getElementById('dev-count').textContent=`共 ${cfg.devices.length} / ${DEV_MAX} 台`;}"
+        "function move(i,d){collect();const j=i+d;if(j<0||j>=cfg.devices.length)return;"
+        "[cfg.devices[i],cfg.devices[j]]=[cfg.devices[j],cfg.devices[i]];renderDevices();}"
+        "function moveTop(i){collect();if(i<=0)return;"
+        "const item=cfg.devices.splice(i,1)[0];cfg.devices.unshift(item);renderDevices();}"
+        "function moveBottom(i){collect();if(i>=cfg.devices.length-1)return;"
+        "const item=cfg.devices.splice(i,1)[0];cfg.devices.push(item);renderDevices();}"
+        "function init(){loadCfg();"
+        "document.getElementById('wifi-ssid').value=cfg.wifi.ssid||'';"
+        "document.getElementById('wifi-pass').value=cfg.wifi.password||'';"
+        "renderDevices();"
+        "document.getElementById('btn-add').onclick=()=>{collect();"
+        "if(cfg.devices.length>=DEV_MAX){alert('最多 '+DEV_MAX+' 台设备');return;}"
+        "cfg.devices.push({name:'',name_zh:'',id:'',mac:'',ip:'',token:'',model:'',hotkey:'',ble:{key:''}});"
+        "renderDevices();};"
+        "document.getElementById('dev-tbody').onclick=e=>{const b=e.target.closest('button');"
+        "if(!b)return;const i=+b.closest('tr').dataset.i;"
+        "if(b.dataset.act==='up')move(i,-1);"
+        "else if(b.dataset.act==='down')move(i,1);"
+        "else if(b.dataset.act==='top')moveTop(i);"
+        "else if(b.dataset.act==='bottom')moveBottom(i);"
+        "else if(b.dataset.act==='del'){collect();const removed=cfg.devices.splice(i,1)[0];"
+        "const rid=removed&&removed.id;if(rid){(cfg.device_groups||[]).forEach(g=>{"
+        "g.members=(g.members||[]).filter(m=>memberIdOf(m)!==rid);});}"
+        "renderDevices();}};"
+        "document.getElementById('dev-tbody').oninput=e=>{const el=e.target;"
+        "if(!el||el.dataset.f!=='model')return;"
+        "const img=el.closest('tr').querySelector('.dev-icon');"
+        "if(!img)return;const base=iconBase(el.value);img.src=iconUrl(el.value);img.title=base;};"
+        "document.getElementById('save-form').onsubmit=()=>{collect();"
+        "document.getElementById('config-payload').value=JSON.stringify(cfg,null,2);};}"
+        "init();");
+    body += F("</script>");
+    sendHtmlPage(body, HTML_CSS_DEVICES);
+}
+
+// 编组页
+static void handleGroupsPage() {
+    const String cfg = sanitizeJsonForHtml(loadConfigText());
+
+    String body;
+    body.reserve(cfg.length() + 4096);
+    appendTopBar(body, "米家设备编组");
+    body += F("<form id='save-form' method='POST' action='/save'>"
+              "<input type='hidden' name='config' id='config-payload'>"
               "<p class='hint'>用设备 <code>id</code> 组成米家设备编组；改名不影响成员。"
               "成员里的 name / name_zh 仅方便阅读，保存时会从设备表同步。"
-              "BLE 只读设备可勾选但设备端开/关会跳过。</p>"
+              "BLE 只读设备可勾选但设备端开/关会跳过。"
+              "请先在 <a href='/'>主页</a> 填写设备 id。</p>"
               "<div class='toolbar'>"
               "<button type='button' id='btn-add-group'>+ 添加米家设备编组</button>"
               "<span class='count' id='group-count'></span>"
               "</div>"
               "<div id='group-list'></div>"
-              "</div>"
-              "<div id='panel-cursor' class='panel'>"
+              "<div class='save-bar'>"
+              "<button type='submit' class='primary'>保存到设备</button>"
+              "</div></form>");
+    appendCfgDataScript(body, cfg);
+    body += F("<script>");
+    body += F("const GROUP_MAX=");
+    body += String(MIJIA_GROUP_MAX);
+    body += F(";const GROUP_MEMBER_MAX=");
+    body += String(MIJIA_GROUP_MEMBER_MAX);
+    body += F(";");
+    appendJsLoadCfg(body);
+    body += F(
+        "function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/\"/g,'&quot;')"
+        ".replace(/</g,'&lt;');}"
+        "function bleKeyOf(d){return (d.ble&&d.ble.key)||d.ble_key||'';}"
+        "function isBleDev(d){return !!bleKeyOf(d);}"
+        "function memberIdOf(m){return typeof m==='string'?m:(m&&m.id)||'';}"
+        "function syncGroupMembers(g){const byId={};"
+        "(cfg.devices||[]).forEach(d=>{if(d&&d.id)byId[d.id]=d;});"
+        "const seen=new Set();const out=[];"
+        "(g.members||[]).forEach(m=>{const id=memberIdOf(m);if(!id||seen.has(id))return;"
+        "const d=byId[id];if(!d)return;seen.add(id);"
+        "const row={id:id,name:d.name||''};"
+        "const zh=d.name_zh||d.name_cn||'';if(zh)row.name_zh=zh;"
+        "out.push(row);});"
+        "g.members=out.slice(0,GROUP_MEMBER_MAX);return g;}"
+        "function collectGroups(){cfg.device_groups=[];"
+        "document.querySelectorAll('#group-list .group-card').forEach(card=>{"
+        "const g={name:card.querySelector('[data-gf=name]').value||'',"
+        "name_zh:card.querySelector('[data-gf=name_zh]').value||'',members:[]};"
+        "card.querySelectorAll('.group-members input[type=checkbox]:checked').forEach(cb=>{"
+        "if(g.members.length>=GROUP_MEMBER_MAX)return;"
+        "const id=cb.value;if(!id)return;"
+        "const d=(cfg.devices||[]).find(x=>x&&x.id===id);"
+        "const row={id:id,name:(d&&d.name)||cb.dataset.name||''};"
+        "const zh=(d&&(d.name_zh||d.name_cn))||cb.dataset.namezh||'';"
+        "if(zh)row.name_zh=zh;g.members.push(row);});"
+        "if(!g.name_zh)delete g.name_zh;"
+        "cfg.device_groups.push(g);});}"
+        "function collect(){collectGroups();"
+        "(cfg.device_groups||[]).forEach(syncGroupMembers);}"
+        "function renderGroups(){const list=document.getElementById('group-list');list.innerHTML='';"
+        "if(!cfg.device_groups)cfg.device_groups=[];"
+        "cfg.device_groups.forEach(syncGroupMembers);"
+        "cfg.device_groups.forEach((g,gi)=>{const selected=new Set((g.members||[]).map(memberIdOf));"
+        "const card=document.createElement('div');card.className='group-card';card.dataset.gi=gi;"
+        "let membersHtml='';"
+        "(cfg.devices||[]).forEach(d=>{if(!d||!d.id)return;"
+        "const zh=d.name_zh||d.name_cn||'';"
+        "const label=zh?`${esc(zh)} (${esc(d.name||'')})`:`${esc(d.name||'(unnamed)')}`;"
+        "const ble=isBleDev(d);"
+        "membersHtml+=`<label class='member${ble?' ble':''}'>"
+        "<input type='checkbox' value='${esc(d.id)}' data-name='${esc(d.name||'')}' "
+        "data-namezh='${esc(zh)}' ${selected.has(d.id)?'checked':''}>"
+        "<span class='member-meta'><span>${label}${ble?' · BLE':''}</span>"
+        "<div class='member-id'>id: ${esc(d.id)}</div></span></label>`;});"
+        "if(!membersHtml)membersHtml='<p class=\"hint\">请先在「主页」里填写设备 id</p>';"
+        "card.innerHTML=`<div class='group-head'>"
+        "<label>名称<input data-gf='name' value='${esc(g.name||'')}'></label>"
+        "<label>中文名<input data-gf='name_zh' value='${esc(g.name_zh||g.name_cn||'')}'></label>"
+        "<div class='group-acts'>"
+        "<button type='button' class='icon-btn' data-gact='up' title='上移'>↑</button>"
+        "<button type='button' class='icon-btn' data-gact='down' title='下移'>↓</button>"
+        "<button type='button' class='danger icon-btn' data-gact='del' title='删除'>删</button>"
+        "</div></div>"
+        "<div class='hint'>成员 ${selected.size} / ${GROUP_MEMBER_MAX}</div>"
+        "<div class='group-members'>${membersHtml}</div>`;"
+        "list.appendChild(card);});"
+        "document.getElementById('group-count').textContent="
+        "`共 ${cfg.device_groups.length} / ${GROUP_MAX} 组`;}"
+        "function moveGroup(i,d){collect();const j=i+d;if(j<0||j>=cfg.device_groups.length)return;"
+        "[cfg.device_groups[i],cfg.device_groups[j]]=[cfg.device_groups[j],cfg.device_groups[i]];"
+        "renderGroups();}"
+        "function init(){loadCfg();renderGroups();"
+        "document.getElementById('btn-add-group').onclick=()=>{collect();"
+        "if(cfg.device_groups.length>=GROUP_MAX){alert('最多 '+GROUP_MAX+' 组');return;}"
+        "cfg.device_groups.push({name:'',name_zh:'',members:[]});renderGroups();};"
+        "document.getElementById('group-list').onclick=e=>{const b=e.target.closest('button');"
+        "if(!b||!b.dataset.gact)return;const i=+b.closest('.group-card').dataset.gi;"
+        "if(b.dataset.gact==='up')moveGroup(i,-1);"
+        "else if(b.dataset.gact==='down')moveGroup(i,1);"
+        "else if(b.dataset.gact==='del'){collect();cfg.device_groups.splice(i,1);renderGroups();}};"
+        "document.getElementById('save-form').onsubmit=()=>{collect();"
+        "document.getElementById('config-payload').value=JSON.stringify(cfg,null,2);};}"
+        "init();");
+    body += F("</script>");
+    sendHtmlPage(body, HTML_CSS_GROUPS);
+}
+
+// Cursor token 页
+static void handleCursorPage() {
+    const String cfg = sanitizeJsonForHtml(loadConfigText());
+
+    String body;
+    body.reserve(cfg.length() + 2048);
+    appendTopBar(body, "Cursor");
+    body += F("<form id='save-form' method='POST' action='/save'>"
+              "<input type='hidden' name='config' id='config-payload'>"
               "<h2>Cursor Session Token</h2>"
               "<p class='hint'>用于 Cursor 应用拉取用量数据，写入 "
               "<code>cursor.token</code>。</p>"
@@ -443,9 +728,34 @@ static void handleFormRoot() {
               "设备上也可主菜单 <code>Fn+i</code> 查看，无需开 Config。</p>"
               "<p class='nav'><a href='/cursor-err' target='_blank'>查看错误轨</a> · "
               "<a href='/cursor-log' target='_blank'>查看完整日志</a></p>"
-              "</div>"
-              "<div id='panel-system' class='panel'>"
-              "<h2>系统设置</h2>"
+              "<div class='save-bar'>"
+              "<button type='submit' class='primary'>保存到设备</button>"
+              "</div></form>");
+    appendCfgDataScript(body, cfg);
+    body += F("<script>");
+    appendJsLoadCfg(body);
+    body += F(
+        "function collect(){if(!cfg.cursor)cfg.cursor={token:''};"
+        "cfg.cursor.token=document.getElementById('cursor-key').value;"
+        "delete cfg.cursor.api_key;}"
+        "function init(){loadCfg();"
+        "document.getElementById('cursor-key').value=cfg.cursor.token||'';"
+        "document.getElementById('save-form').onsubmit=()=>{collect();"
+        "document.getElementById('config-payload').value=JSON.stringify(cfg,null,2);};}"
+        "init();");
+    body += F("</script>");
+    sendHtmlPage(body, HTML_CSS_CURSOR);
+}
+
+// 系统设置页
+static void handleSystemPage() {
+    const String cfg = sanitizeJsonForHtml(loadConfigText());
+
+    String body;
+    body.reserve(cfg.length() + 2048);
+    appendTopBar(body, "系统设置");
+    body += F("<form id='save-form' method='POST' action='/save'>"
+              "<input type='hidden' name='config' id='config-payload'>"
               "<p class='hint'>时区、亮度、提示音与红外默认。亮度配置为 0~100，"
               "设备端会换算为背光 0~255。</p>"
               "<div class='sys-grid'>"
@@ -496,90 +806,15 @@ static void handleFormRoot() {
               "<option value='hisense'>Hisense</option>"
               "<option value='xiaomi'>Xiaomi</option>"
               "</select></label>"
-              "</div></div>"
+              "</div>"
               "<div class='save-bar'>"
-              "<button type='submit' class='primary' id='btn-save'>保存到设备</button>"
-              "</div></form>"
-              "<script type='application/json' id='cfg-data'>");
-    body += cfg;
-    body += F("</script><script>");
-    body += F("const DEV_MAX=");
-    body += WEB_DEVICE_MAX;
-    body += F(";const GROUP_MAX=");
-    body += String(MIJIA_GROUP_MAX);
-    body += F(";const GROUP_MEMBER_MAX=");
-    body += String(MIJIA_GROUP_MEMBER_MAX);
-    body += F(";");
-    // 与固件 deviceIconBasenameForModel 同一套 basename 列表
-    body += F("const ICON_NAMES=[");
-    for (const char* const* name = deviceIconNames(); *name != nullptr; ++name) {
-        body += '\'';
-        body += *name;
-        body += F("',");
-    }
-    body += F("];");
+              "<button type='submit' class='primary'>保存到设备</button>"
+              "</div></form>");
+    appendCfgDataScript(body, cfg);
+    body += F("<script>");
+    appendJsLoadCfg(body);
     body += F(
-        "let cfg={wifi:{ssid:'',password:''},devices:[],device_groups:[],cursor:{token:''},"
-        "timezone:'CST-8',brightness:30,sound:{time_key:true,mijia_on_off:true,volume:25},"
-        "time:{default:'up'},Infrared:{default:'tv',tv_brand:'samsung',ac_brand:'midea'}};"
-        "function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/\"/g,'&quot;')"
-        ".replace(/</g,'&lt;');}"
-        "function ta(f,v){return `<textarea data-f='${f}' rows='1'>${esc(v)}</textarea>`;}"
-        // 与固件匹配规则一致：子串忽略大小写，较长名优先，再回退 light/default
-        "function iconBase(model){const m=String(model||'').toLowerCase();"
-        "for(const n of ICON_NAMES){if(m.includes(n))return n;}"
-        "if(m.includes('light'))return 'light';return 'default';}"
-        "function iconUrl(model){return '/icon/device/'+iconBase(model)+'.png';}"
-        "function modelCell(model){return `<div class='model-cell'>"
-        "<img class='dev-icon' src='${iconUrl(model)}' alt='' title='${iconBase(model)}'>"
-        "${ta('model',model)}</div>`;}"
-        "function bleKeyOf(d){return (d.ble&&d.ble.key)||d.ble_key||'';}"
-        "function isBleDev(d){return !!bleKeyOf(d);}"
-        "function memberIdOf(m){return typeof m==='string'?m:(m&&m.id)||'';}"
-        // 从设备表同步成员 name/name_zh；剔除无效 id
-        "function syncGroupMembers(g){const byId={};"
-        "(cfg.devices||[]).forEach(d=>{if(d&&d.id)byId[d.id]=d;});"
-        "const seen=new Set();const out=[];"
-        "(g.members||[]).forEach(m=>{const id=memberIdOf(m);if(!id||seen.has(id))return;"
-        "const d=byId[id];if(!d)return;seen.add(id);"
-        "const row={id:id,name:d.name||''};"
-        "const zh=d.name_zh||d.name_cn||'';if(zh)row.name_zh=zh;"
-        "out.push(row);});"
-        "g.members=out.slice(0,GROUP_MEMBER_MAX);return g;}"
-        "function collectDevices(){cfg.devices=[];"
-        "document.querySelectorAll('#dev-tbody tr').forEach(row=>{"
-        "const d={};row.querySelectorAll('[data-f]').forEach(el=>{d[el.dataset.f]=el.value;});"
-        "const bk=d.ble_key||'';delete d.ble_key;"
-        "if(bk)d.ble={key:bk};else delete d.ble;"
-        "if(!d.name_zh)delete d.name_zh;"
-        // 快捷键：仅保留首个 a-z/0-9；q 保留给设备端快速选择
-        "let hk=String(d.hotkey||'').trim().toLowerCase();"
-        "hk=hk.length?hk[0]:'';"
-        "if(/^[a-z0-9]$/.test(hk)&&hk!=='q')d.hotkey=hk;else delete d.hotkey;"
-        "cfg.devices.push(d);});}"
-        // 快捷键去重：保留靠前第一个，后面清空
-        "function dedupeDeviceHotkeys(){const seen=new Set();"
-        "(cfg.devices||[]).forEach(d=>{if(!d||!d.hotkey)return;"
-        "const h=String(d.hotkey).toLowerCase()[0];"
-        "if(!h||seen.has(h)){delete d.hotkey;return;}seen.add(h);d.hotkey=h;});}"
-        "function collectGroups(){cfg.device_groups=[];"
-        "document.querySelectorAll('#group-list .group-card').forEach(card=>{"
-        "const g={name:card.querySelector('[data-gf=name]').value||'',"
-        "name_zh:card.querySelector('[data-gf=name_zh]').value||'',members:[]};"
-        "card.querySelectorAll('.group-members input[type=checkbox]:checked').forEach(cb=>{"
-        "if(g.members.length>=GROUP_MEMBER_MAX)return;"
-        "const id=cb.value;if(!id)return;"
-        "const d=(cfg.devices||[]).find(x=>x&&x.id===id);"
-        "const row={id:id,name:(d&&d.name)||cb.dataset.name||''};"
-        "const zh=(d&&(d.name_zh||d.name_cn))||cb.dataset.namezh||'';"
-        "if(zh)row.name_zh=zh;g.members.push(row);});"
-        "if(!g.name_zh)delete g.name_zh;"
-        "cfg.device_groups.push(g);});}"
-        "function collect(){cfg.wifi.ssid=document.getElementById('wifi-ssid').value;"
-        "cfg.wifi.password=document.getElementById('wifi-pass').value;"
-        "if(!cfg.cursor)cfg.cursor={token:''};"
-        "cfg.cursor.token=document.getElementById('cursor-key').value;"
-        "delete cfg.cursor.api_key;"
+        "function collect(){"
         "cfg.timezone=document.getElementById('sys-timezone').value||'CST-8';"
         "let b=+document.getElementById('sys-brightness').value;if(isNaN(b))b=30;"
         "if(b<0)b=0;if(b>100)b=100;cfg.brightness=b;"
@@ -594,100 +829,8 @@ static void handleFormRoot() {
         "if(!cfg.Infrared)cfg.Infrared={};"
         "cfg.Infrared.default=document.getElementById('sys-ir-default').value||'tv';"
         "cfg.Infrared.tv_brand=document.getElementById('sys-ir-tv-brand').value||'samsung';"
-        "cfg.Infrared.ac_brand=document.getElementById('sys-ir-ac-brand').value||'midea';"
-        "collectDevices();collectGroups();"
-        "dedupeDeviceHotkeys();"
-        "(cfg.device_groups||[]).forEach(syncGroupMembers);}"
-        "function renderDevices(){const tb=document.getElementById('dev-tbody');tb.innerHTML='';"
-        "cfg.devices.forEach((d,i)=>{const tr=document.createElement('tr');tr.dataset.i=i;"
-        "tr.innerHTML=`<td class='col-idx'>${i+1}</td>"
-        "<td class='col-name'>${ta('name',d.name)}</td>"
-        "<td class='col-namezh'>${ta('name_zh',d.name_zh||d.name_cn||'')}</td>"
-        "<td class='col-hotkey'>${ta('hotkey',d.hotkey||'')}</td>"
-        "<td class='col-act'><div class='act-stack'>"
-        "<button type='button' class='icon-btn' data-act='up' title='上移'>↑</button>"
-        "<button type='button' class='icon-btn' data-act='down' title='下移'>↓</button>"
-        "<button type='button' class='icon-btn' data-act='top' title='置顶'>顶</button>"
-        "<button type='button' class='icon-btn' data-act='bottom' title='置底'>底</button>"
-        "<button type='button' class='danger icon-btn' data-act='del' title='删除'>删</button>"
-        "</div></td>"
-        "<td class='col-ip'>${ta('ip',d.ip)}</td>"
-        "<td class='col-token'>${ta('token',d.token)}</td>"
-        "<td class='col-ble'>${ta('ble_key',bleKeyOf(d))}</td>"
-        "<td class='col-model'>${modelCell(d.model)}</td>"
-        "<td class='col-id'>${ta('id',d.id)}</td>"
-        "<td class='col-mac'>${ta('mac',d.mac)}</td>`;tb.appendChild(tr);});"
-        "document.getElementById('dev-count').textContent=`共 ${cfg.devices.length} / ${DEV_MAX} 台`;}"
-        "function renderGroups(){const list=document.getElementById('group-list');list.innerHTML='';"
-        "if(!cfg.device_groups)cfg.device_groups=[];"
-        "cfg.device_groups.forEach(syncGroupMembers);"
-        "cfg.device_groups.forEach((g,gi)=>{const selected=new Set((g.members||[]).map(memberIdOf));"
-        "const card=document.createElement('div');card.className='group-card';card.dataset.gi=gi;"
-        "let membersHtml='';"
-        "(cfg.devices||[]).forEach(d=>{if(!d||!d.id)return;"
-        "const zh=d.name_zh||d.name_cn||'';"
-        "const label=zh?`${esc(zh)} (${esc(d.name||'')})`:`${esc(d.name||'(unnamed)')}`;"
-        "const ble=isBleDev(d);"
-        "membersHtml+=`<label class='member${ble?' ble':''}'>"
-        "<input type='checkbox' value='${esc(d.id)}' data-name='${esc(d.name||'')}' "
-        "data-namezh='${esc(zh)}' ${selected.has(d.id)?'checked':''}>"
-        "<span class='member-meta'><span>${label}${ble?' · BLE':''}</span>"
-        "<div class='member-id'>id: ${esc(d.id)}</div></span></label>`;});"
-        "if(!membersHtml)membersHtml='<p class=\"hint\">请先在「米家设备」里填写设备 id</p>';"
-        "card.innerHTML=`<div class='group-head'>"
-        "<label>名称<input data-gf='name' value='${esc(g.name||'')}'></label>"
-        "<label>中文名<input data-gf='name_zh' value='${esc(g.name_zh||g.name_cn||'')}'></label>"
-        "<div class='group-acts'>"
-        "<button type='button' class='icon-btn' data-gact='up' title='上移'>↑</button>"
-        "<button type='button' class='icon-btn' data-gact='down' title='下移'>↓</button>"
-        "<button type='button' class='danger icon-btn' data-gact='del' title='删除'>删</button>"
-        "</div></div>"
-        "<div class='hint'>成员 ${selected.size} / ${GROUP_MEMBER_MAX}</div>"
-        "<div class='group-members'>${membersHtml}</div>`;"
-        "list.appendChild(card);});"
-        "document.getElementById('group-count').textContent="
-        "`共 ${cfg.device_groups.length} / ${GROUP_MAX} 组`;}"
-        "function render(){renderDevices();renderGroups();}"
-        "function move(i,d){collect();const j=i+d;if(j<0||j>=cfg.devices.length)return;"
-        "[cfg.devices[i],cfg.devices[j]]=[cfg.devices[j],cfg.devices[i]];render();}"
-        "function moveTop(i){collect();if(i<=0)return;"
-        "const item=cfg.devices.splice(i,1)[0];cfg.devices.unshift(item);render();}"
-        "function moveBottom(i){collect();if(i>=cfg.devices.length-1)return;"
-        "const item=cfg.devices.splice(i,1)[0];cfg.devices.push(item);render();}"
-        "function moveGroup(i,d){collect();const j=i+d;if(j<0||j>=cfg.device_groups.length)return;"
-        "[cfg.device_groups[i],cfg.device_groups[j]]=[cfg.device_groups[j],cfg.device_groups[i]];"
-        "renderGroups();}"
-        "function switchTab(id){document.querySelectorAll('.tab').forEach(t=>{"
-        "t.classList.toggle('active',t.dataset.tab===id);});"
-        "document.querySelectorAll('.panel').forEach(p=>{"
-        "p.classList.toggle('active',p.id==='panel-'+id);});}"
-        "function init(){try{cfg=JSON.parse(document.getElementById('cfg-data').textContent);}"
-        "catch(e){cfg={wifi:{ssid:'',password:''},devices:[],device_groups:[],cursor:{token:''},"
-        "timezone:'CST-8',brightness:30,sound:{time_key:true,mijia_on_off:true,volume:25},"
-        "time:{default:'up'},Infrared:{default:'tv',tv_brand:'samsung',ac_brand:'midea'}};} "
-        "if(!cfg.wifi)cfg.wifi={ssid:'',password:''};"
-        "if(!cfg.devices)cfg.devices=[];"
-        "if(!cfg.device_groups)cfg.device_groups=[];"
-        "if(!cfg.cursor)cfg.cursor={token:''};"
-        "if(!cfg.timezone)cfg.timezone='CST-8';"
-        "let bright=cfg.brightness;if(bright==null||isNaN(+bright))bright=30;"
-        "bright=+bright;if(bright>100)bright=Math.round(bright*100/255);"
-        "if(bright<0)bright=0;if(bright>100)bright=100;cfg.brightness=bright;"
-        "if(!cfg.sound)cfg.sound={};"
-        "if(cfg.sound.time_key==null)cfg.sound.time_key=true;"
-        "if(cfg.sound.mijia_on_off==null)cfg.sound.mijia_on_off=true;"
-        "let svol=cfg.sound.volume;if(svol==null||isNaN(+svol))svol=25;"
-        "svol=+svol;if(svol<0)svol=0;if(svol>100)svol=100;cfg.sound.volume=svol;"
-        "if(!cfg.time)cfg.time={};"
-        "if(!cfg.time.default)cfg.time.default='up';"
-        "if(!cfg.Infrared&&cfg.infrared){cfg.Infrared=cfg.infrared;delete cfg.infrared;}"
-        "if(!cfg.Infrared)cfg.Infrared={};"
-        "if(!cfg.Infrared.default)cfg.Infrared.default='tv';"
-        "if(!cfg.Infrared.tv_brand)cfg.Infrared.tv_brand='samsung';"
-        "if(!cfg.Infrared.ac_brand)cfg.Infrared.ac_brand='midea';"
-        "document.getElementById('wifi-ssid').value=cfg.wifi.ssid||'';"
-        "document.getElementById('wifi-pass').value=cfg.wifi.password||'';"
-        "document.getElementById('cursor-key').value=cfg.cursor.token||'';"
+        "cfg.Infrared.ac_brand=document.getElementById('sys-ir-ac-brand').value||'midea';}"
+        "function init(){loadCfg();"
         "document.getElementById('sys-timezone').value=cfg.timezone||'CST-8';"
         "document.getElementById('sys-brightness').value=String(cfg.brightness);"
         "document.getElementById('sys-brightness-val').textContent=String(cfg.brightness);"
@@ -703,43 +846,11 @@ static void handleFormRoot() {
         "document.getElementById('sys-brightness-val').textContent=e.target.value;};"
         "document.getElementById('sys-sound-volume').oninput=e=>{"
         "document.getElementById('sys-sound-volume-val').textContent=e.target.value;};"
-        "render();"
-        "document.querySelectorAll('.tab').forEach(t=>{"
-        "t.onclick=()=>switchTab(t.dataset.tab);});"
-        "document.getElementById('btn-add').onclick=()=>{collect();"
-        "if(cfg.devices.length>=DEV_MAX){alert('最多 '+DEV_MAX+' 台设备');return;}"
-        "cfg.devices.push({name:'',name_zh:'',id:'',mac:'',ip:'',token:'',model:'',hotkey:'',ble:{key:''}});"
-        "render();"
-        "switchTab('devices');};"
-        "document.getElementById('btn-add-group').onclick=()=>{collect();"
-        "if(cfg.device_groups.length>=GROUP_MAX){alert('最多 '+GROUP_MAX+' 组');return;}"
-        "cfg.device_groups.push({name:'',name_zh:'',members:[]});renderGroups();"
-        "switchTab('groups');};"
-        "document.getElementById('dev-tbody').onclick=e=>{const b=e.target.closest('button');"
-        "if(!b)return;const i=+b.closest('tr').dataset.i;"
-        "if(b.dataset.act==='up')move(i,-1);"
-        "else if(b.dataset.act==='down')move(i,1);"
-        "else if(b.dataset.act==='top')moveTop(i);"
-        "else if(b.dataset.act==='bottom')moveBottom(i);"
-        "else if(b.dataset.act==='del'){collect();const removed=cfg.devices.splice(i,1)[0];"
-        "const rid=removed&&removed.id;if(rid){(cfg.device_groups||[]).forEach(g=>{"
-        "g.members=(g.members||[]).filter(m=>memberIdOf(m)!==rid);});}"
-        "render();}};"
-        // 输入 model 时即时刷新匹配图标
-        "document.getElementById('dev-tbody').oninput=e=>{const el=e.target;"
-        "if(!el||el.dataset.f!=='model')return;"
-        "const img=el.closest('tr').querySelector('.dev-icon');"
-        "if(!img)return;const base=iconBase(el.value);img.src=iconUrl(el.value);img.title=base;};"
-        "document.getElementById('group-list').onclick=e=>{const b=e.target.closest('button');"
-        "if(!b||!b.dataset.gact)return;const i=+b.closest('.group-card').dataset.gi;"
-        "if(b.dataset.gact==='up')moveGroup(i,-1);"
-        "else if(b.dataset.gact==='down')moveGroup(i,1);"
-        "else if(b.dataset.gact==='del'){collect();cfg.device_groups.splice(i,1);renderGroups();}};"
         "document.getElementById('save-form').onsubmit=()=>{collect();"
         "document.getElementById('config-payload').value=JSON.stringify(cfg,null,2);};}"
         "init();");
     body += F("</script>");
-    sendHtmlPage(body);
+    sendHtmlPage(body, HTML_CSS_SYSTEM);
 }
 
 // 高级 JSON 编辑页
@@ -748,14 +859,8 @@ static void handleAdvancedRoot() {
 
     String body;
     body.reserve(cfg.length() + 512);
-    body += F("<div class='topbar'><div class='brand'>"
-              "<img class='site-logo' src='/favicon.svg' alt='' width='36' height='36'>"
-              "<div class='brand-text'><h1>Cardputer Config</h1>"
-              "<p class='nav'><a href='/'>← 返回主页</a> · "
-              "<a href='/shots'>截图</a> · "
-              "<a href='/files'>TF 文件</a> · "
-              "<a href='/example'>示例格式</a></p></div></div></div>"
-              "<h2>高级 JSON 编辑</h2>"
+    appendTopBar(body, "Cardputer Config");
+    body += F("<h2>高级 JSON 编辑</h2>"
               "<form method='POST' action='/save'>"
               "<textarea class='json-editor' name='config'>");
     body += escapeForTextarea(cfg);
@@ -777,33 +882,39 @@ static void handleSave() {
         M5Cardputer.Display.setBrightness(brightnessPercentToHw(getAppConfig().brightness));
         snprintf(g_web_status, sizeof(g_web_status), "saved %d dev",
                  getAppConfig().device_count);
-        String body = F("<h1>已保存</h1><p class='ok'>config.json 写入成功。</p>"
-                        "<p>设备数: ");
+        String body;
+        appendTopBar(body, "已保存");
+        body += F("<p class='ok'>config.json 写入成功。</p>"
+                  "<p>设备数: ");
         body += getAppConfig().device_count;
         body += F("</p><div class='result-actions'>"
                   "<a href='/' class='btn primary'>返回主页</a>"
+                  "<a href='/groups' class='btn'>编组</a>"
                   "<a href='/advanced' class='btn'>高级 JSON</a></div>");
         sendHtmlPage(body);
     } else {
         strncpy(g_web_status, "json error", sizeof(g_web_status));
-        String body = F("<h1>保存失败</h1><p class='err'>JSON 格式无效，请检查后重试。</p>"
-                        "<div class='result-actions'>"
-                        "<a href='/' class='btn primary'>返回主页</a>"
-                        "<a href='/advanced' class='btn'>高级 JSON</a></div>");
+        String body;
+        appendTopBar(body, "保存失败");
+        body += F("<p class='err'>JSON 格式无效，请检查后重试。</p>"
+                  "<div class='result-actions'>"
+                  "<a href='/' class='btn primary'>返回主页</a>"
+                  "<a href='/advanced' class='btn'>高级 JSON</a></div>");
         sendHtmlPage(body);
     }
 }
 
 static void handleExample() {
-    String body = F("<h1>示例 config.json</h1><p>WiFi 米家用 <code>ip</code> + <code>token</code>；"
-                    "BLE 传感器用 <code>mac</code> + <code>ble.key</code>，可加 <code>name_zh</code>。"
-                    "可选 <code>hotkey</code>（a-z/0-9，勿用 q）供设备端 Q 快速选择；重复时保留靠前第一个。"
-                    "米家设备编组见 <code>device_groups</code>，成员用设备 <code>id</code> 引用。"
-                    "系统项见主页 <strong>系统设置</strong>（时区 / 亮度 / 提示音 / Infrared）。"
-                    "Cursor 用量见主页 "
-                    "<strong>Cursor</strong> 标签页。</p><pre>");
+    String body;
+    appendTopBar(body, "示例 config.json");
+    body += F("<p>WiFi 米家用 <code>ip</code> + <code>token</code>；"
+              "BLE 传感器用 <code>mac</code> + <code>ble.key</code>，可加 <code>name_zh</code>。"
+              "可选 <code>hotkey</code>（a-z/0-9，勿用 q）供设备端 Q 快速选择；重复时保留靠前第一个。"
+              "米家设备编组见 <code>device_groups</code>，成员用设备 <code>id</code> 引用。"
+              "系统项见 <a href='/system'>系统设置</a>（时区 / 亮度 / 提示音 / Infrared）。"
+              "Cursor 用量见 <a href='/cursor'>Cursor</a> 页。</p><pre>");
     body += DEFAULT_CONFIG;
-    body += F("</pre><p class='nav'><a href='/'>← 返回主页</a></p>");
+    body += F("</pre>");
     sendHtmlPage(body);
 }
 
@@ -926,12 +1037,8 @@ static void handleShotsList() {
 
     String body;
     body.reserve(4096);
-    body += F("<div class='topbar'><div class='brand'>"
-              "<img class='site-logo' src='/favicon.svg' alt='' width='36' height='36'>"
-              "<div class='brand-text'><h1>截图</h1>"
-              "<p class='nav'><a href='/'>← 返回主页</a> · "
-              "<a href='/files'>TF 文件</a></p></div></div></div>"
-              "<p class='hint'>任意界面按 <code>Fn+s</code> 截图："
+    appendTopBar(body, "截图");
+    body += F("<p class='hint'>任意界面按 <code>Fn+s</code> 截图："
               "有 TF 卡优先存卡，否则存 Flash；"
               "文件名 <code>app_&lt;界面&gt;_001.bmp</code> 序号递增。"
               "本页仅在 Config 联网时可预览/下载。</p>"
@@ -983,15 +1090,17 @@ static void handleShotsList() {
         body += F("<p class='hint'>暂无截图。到任意界面按 Fn+s 后再刷新本页。</p>");
     }
 
-    sendHtmlPage(body);
+    sendHtmlPage(body, HTML_CSS_SHOTS);
 }
 
 // 清空全部截图
 static void handleShotsClear() {
     const int n = clearAllScreenshots();
-    String body = F("<h1>已清空</h1><p>删除 ");
+    String body;
+    appendTopBar(body, "已清空");
+    body += F("<p>删除 ");
     body += String(n);
-    body += F(" 张截图。</p><p class='nav'><a href='/shots'>← 返回截图列表</a></p>");
+    body += F(" 张截图。</p>");
     sendHtmlPage(body);
 }
 
@@ -1252,13 +1361,10 @@ static void fmRedirect(const String& path, const char* msg, const bool ok) {
 // TF 文件列表页：?path=/foo[&ok=|&err=]
 static void handleFilesList() {
     if (!isScreenshotSdReady()) {
-        String body = F("<div class='topbar'><div class='brand'>"
-                        "<img class='site-logo' src='/favicon.svg' alt='' width='36' height='36'>"
-                        "<div class='brand-text'><h1>TF 文件</h1>"
-                        "<p class='nav'><a href='/'>← 返回主页</a> · "
-                        "<a href='/shots'>截图</a></p></div></div></div>"
-                        "<p class='err'>未检测到 TF 卡，或挂载失败。插入 microSD 后刷新本页。</p>");
-        sendHtmlPage(body);
+        String body;
+        appendTopBar(body, "TF 文件");
+        body += F("<p class='err'>未检测到 TF 卡，或挂载失败。插入 microSD 后刷新本页。</p>");
+        sendHtmlPage(body, HTML_CSS_FILES | HTML_CSS_SHOTS);
         return;
     }
 
@@ -1281,14 +1387,12 @@ static void handleFilesList() {
         if (dir) {
             dir.close();
         }
-        String body = F("<div class='topbar'><div class='brand'>"
-                        "<img class='site-logo' src='/favicon.svg' alt='' width='36' height='36'>"
-                        "<div class='brand-text'><h1>TF 文件</h1>"
-                        "<p class='nav'><a href='/files'>← 根目录</a></p></div></div></div>"
-                        "<p class='err'>目录不存在：");
+        String body;
+        appendTopBar(body, "TF 文件");
+        body += F("<p class='err'>目录不存在：");
         body += escapeHtmlText(path);
         body += F("</p>");
-        sendHtmlPage(body);
+        sendHtmlPage(body, HTML_CSS_FILES | HTML_CSS_SHOTS);
         return;
     }
 
@@ -1335,12 +1439,8 @@ static void handleFilesList() {
     // 列表时间按配置时区显示
     setenv("TZ", getAppTimezone(), 1);
     tzset();
-    body += F("<div class='topbar'><div class='brand'>"
-              "<img class='site-logo' src='/favicon.svg' alt='' width='36' height='36'>"
-              "<div class='brand-text'><h1>TF 文件</h1>"
-              "<p class='nav'><a href='/'>← 返回主页</a> · "
-              "<a href='/shots'>截图</a></p></div></div></div>"
-              "<div class='shot-space'>"
+    appendTopBar(body, "TF 文件");
+    body += F("<div class='shot-space'>"
               "<div><strong>TF 卡（SD）</strong></div>"
               "<div>总容量：");
     body += formatBytesHuman(sd_total);
@@ -1420,7 +1520,7 @@ static void handleFilesList() {
 
     if (entries == nullptr) {
         body += F("<p class='err'>内存不足，无法列出目录。</p>");
-        sendHtmlPage(body);
+        sendHtmlPage(body, HTML_CSS_FILES | HTML_CSS_SHOTS);
         return;
     }
 
@@ -1428,7 +1528,7 @@ static void handleFilesList() {
         body += F("<div class='fm-empty'><strong>此目录为空</strong>"
                   "可在上方创建文件夹，或用电脑往 TF 卡拷入文件后刷新。</div>");
         free(entries);
-        sendHtmlPage(body);
+        sendHtmlPage(body, HTML_CSS_FILES | HTML_CSS_SHOTS);
         return;
     }
 
@@ -1500,7 +1600,7 @@ static void handleFilesList() {
     }
     body += F("</tbody></table></div>");
     free(entries);
-    sendHtmlPage(body);
+    sendHtmlPage(body, HTML_CSS_FILES | HTML_CSS_SHOTS);
 }
 
 // 新建文件夹 POST path=父目录&name=名称
@@ -1688,23 +1788,25 @@ static bool tryServeFavicon() {
     return true;
 }
 
-// 从 LittleFS 提供 /icon/device/*.png（供配置页预览）
+// 从 LittleFS 提供图标资源（png / rgb565；配置页预览仍用 png）
 static bool tryServeDeviceIcon() {
     const String uri = g_server.uri();
-    if (!uri.startsWith("/icon/device/") || !uri.endsWith(".png")) {
+    const bool is_device = uri.startsWith("/icon/device/");
+    const bool is_ir = uri.startsWith("/icon/ir/");
+    const bool is_logo = uri.startsWith("/logo_") && (uri.endsWith(".png") || uri.endsWith(".rgb565"));
+    if (!is_device && !is_ir && !is_logo) {
         return false;
     }
-    if (uri.indexOf("..") >= 0 || uri.length() > 64) {
+    if (uri.indexOf("..") >= 0 || uri.length() > 80) {
         return false;
     }
-    // 仅允许字母数字与 _-
-    const char* p = uri.c_str() + strlen("/icon/device/");
-    if (*p == '\0') {
+    if (!uri.endsWith(".png") && !uri.endsWith(".rgb565")) {
         return false;
     }
-    for (const char* c = p; *c != '\0'; ++c) {
-        const bool ok = (*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z') ||
-                        (*c >= '0' && *c <= '9') || *c == '_' || *c == '-' || *c == '.';
+    const char* p = uri.c_str();
+    for (; *p != '\0'; ++p) {
+        const bool ok = (*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') ||
+                        (*p >= '0' && *p <= '9') || *p == '_' || *p == '-' || *p == '.' || *p == '/';
         if (!ok) {
             return false;
         }
@@ -1714,14 +1816,34 @@ static bool tryServeDeviceIcon() {
     if (!file) {
         return false;
     }
-    g_server.streamFile(file, "image/png");
+    const char* mime = "application/octet-stream";
+    if (uri.endsWith(".png")) {
+        mime = "image/png";
+    }
+    g_server.streamFile(file, mime);
     file.close();
     return true;
 }
 
-// 注册 HTTP 路由
+// M5GFX 烘焙 PNG → RGB565（写入 LittleFS，供固件与拉取脚本使用）
+static void handleBakeRgb565() {
+    const int n = bakeAllPngIconsToRgb565();
+    char buf[48];
+    snprintf(buf, sizeof(buf), "{\"ok\":true,\"baked\":%d}", n);
+    g_server.send(200, "application/json", buf);
+}
+
+// 注册 HTTP 路由（仅一次，避免重复 on()）
+static bool g_routes_registered = false;
 static void registerWebRoutes() {
+    if (g_routes_registered) {
+        return;
+    }
+    g_routes_registered = true;
     g_server.on("/", HTTP_GET, handleFormRoot);
+    g_server.on("/groups", HTTP_GET, handleGroupsPage);
+    g_server.on("/cursor", HTTP_GET, handleCursorPage);
+    g_server.on("/system", HTTP_GET, handleSystemPage);
     g_server.on("/advanced", HTTP_GET, handleAdvancedRoot);
     g_server.on("/save", HTTP_POST, handleSave);
     g_server.on("/example", HTTP_GET, handleExample);
@@ -1732,6 +1854,7 @@ static void registerWebRoutes() {
     g_server.on("/files", HTTP_GET, handleFilesList);
     g_server.on("/files/delete", HTTP_POST, handleFilesDelete);
     g_server.on("/files/mkdir", HTTP_POST, handleFilesMkdir);
+    g_server.on("/bake-rgb565", HTTP_POST, handleBakeRgb565);
     g_server.on("/sd", HTTP_GET, []() { tryServeSdFile(); });
     g_server.onNotFound([]() {
         if (tryServeFavicon() || tryServeDeviceIcon() || tryServeShotFile() || tryServeSdFile()) {

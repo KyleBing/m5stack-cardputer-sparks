@@ -8,20 +8,36 @@
 #include <IRremoteESP8266.h>
 #include <IRsend.h>
 #include <IRac.h>
+#include <LittleFS.h>
 
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 
 // Cardputer / Adv 板载红外发射管
 static constexpr uint16_t IR_TX_PIN = 44;
-// data/icon/ir 下空调模式图（30x30），绘制 scale=1 即 1:1
+// data/icon/ir：优先 bake 的 .rgb565，缺失时回退 PNG
 static constexpr const char* AC_ICON_DIR = "/icon/ir";
 static constexpr int AC_MODE_ICON_PX = 30;
+static constexpr int AC_MODE_ICON_PIXELS = AC_MODE_ICON_PX * AC_MODE_ICON_PX;
+static constexpr int AC_MODE_ICON_BYTES = AC_MODE_ICON_PIXELS * 2; // RGB565
 static constexpr int AC_MODE_ICON_GAP = 2;
-// 与 drawAcRemotePad 布局一致：品牌行下方模式图标起点
-static constexpr int AC_MODE_ICON_X = APP_CONTENT_X + 52;
-static constexpr int AC_MODE_ROW_GAP = 3;
-static constexpr int AC_MODE_ICON_Y_LIFT = 6;
+static constexpr int AC_MODE_COLS = 2; // 左栏 2x2 模式图标
+static constexpr int AC_MODE_ICON_X = APP_CONTENT_X;
+// 模式/按键相对顶栏（品牌行）下方间距
+static constexpr int AC_MODE_ROW_GAP = 10;
+// 左栏模式区宽度（含间距）
+static constexpr int AC_MODE_GRID_W =
+    AC_MODE_COLS * AC_MODE_ICON_PX + (AC_MODE_COLS - 1) * AC_MODE_ICON_GAP;
+static constexpr int AC_MODE_GRID_H =
+    2 * AC_MODE_ICON_PX + AC_MODE_ICON_GAP;
+// 右栏按键起点
+static constexpr int AC_PAD_X = AC_MODE_ICON_X + AC_MODE_GRID_W + 4;
+
+// 首次从 LittleFS 读入 .rgb565，之后 pushImage（避免每次切模式重读 Flash）
+static constexpr int AC_ICON_CACHE_SLOTS = 8; // 4 模式 × normal/active
+static uint16_t s_ac_icon_px[AC_ICON_CACHE_SLOTS][AC_MODE_ICON_PIXELS];
+static bool s_ac_icon_ready[AC_ICON_CACHE_SLOTS] = {};
 
 static IRsend g_irsend(IR_TX_PIN);
 static IRac g_irac(IR_TX_PIN);
@@ -168,29 +184,112 @@ static const char* acModeIconStem(const stdAc::opmode_t mode) {
     }
 }
 
-// 1:1 绘制单个模式图标；失败返回 false
+// cool/heat/dry/fan → 0..3；active 占后 4 槽
+static int acModeIconCacheSlot(const char* stem, const bool active) {
+    static const char* kStems[] = {"ac_cool", "ac_heat", "ac_dry", "ac_fan"};
+    for (int i = 0; i < 4; i++) {
+        if (strcmp(stem, kStems[i]) == 0) {
+            return i + (active ? 4 : 0);
+        }
+    }
+    return -1;
+}
+
+// 从 LittleFS 读入 bake 的 RGB565 到缓存槽
+static bool loadAcRgb565ToSlot(const char* path, const int slot) {
+    if (slot < 0 || slot >= AC_ICON_CACHE_SLOTS || path == nullptr) {
+        return false;
+    }
+    if (!LittleFS.exists(path)) {
+        return false;
+    }
+    File f = LittleFS.open(path, "r");
+    if (!f) {
+        return false;
+    }
+    const size_t n =
+        f.read(reinterpret_cast<uint8_t*>(s_ac_icon_px[slot]), AC_MODE_ICON_BYTES);
+    f.close();
+    if (n != static_cast<size_t>(AC_MODE_ICON_BYTES)) {
+        return false;
+    }
+    s_ac_icon_ready[slot] = true;
+    return true;
+}
+
+// 1:1 绘制；优先 RAM 缓存 → .rgb565 → PNG
 static bool drawAcModeIconAt(const char* stem, const int x, const int y, const bool active) {
     if (stem == nullptr) {
         return false;
     }
-    char path[48];
-    if (active) {
-        snprintf(path, sizeof(path), "%s/%s_active.png", AC_ICON_DIR, stem);
-    } else {
-        snprintf(path, sizeof(path), "%s/%s.png", AC_ICON_DIR, stem);
-    }
-    if (drawLittleFsPng(path, x, y, 1.0f)) {
+    const int slot = acModeIconCacheSlot(stem, active);
+    if (slot >= 0 && s_ac_icon_ready[slot]) {
+        M5Cardputer.Display.pushImage(x, y, AC_MODE_ICON_PX, AC_MODE_ICON_PX, s_ac_icon_px[slot]);
         return true;
     }
-    // active 图缺失时回退普通图
+
+    if (slot >= 0) {
+        char path[56];
+        if (active) {
+            snprintf(path, sizeof(path), "%s/%s_active.rgb565", AC_ICON_DIR, stem);
+        } else {
+            snprintf(path, sizeof(path), "%s/%s.rgb565", AC_ICON_DIR, stem);
+        }
+        bool ok = loadAcRgb565ToSlot(path, slot);
+        if (!ok && active) {
+            snprintf(path, sizeof(path), "%s/%s.rgb565", AC_ICON_DIR, stem);
+            ok = loadAcRgb565ToSlot(path, slot);
+        }
+        if (ok) {
+            M5Cardputer.Display.pushImage(x, y, AC_MODE_ICON_PX, AC_MODE_ICON_PX,
+                                          s_ac_icon_px[slot]);
+            return true;
+        }
+    }
+
+    // 回退：drawLittleFsPng（内部仍优先 565，再 PNG）
+    char png_path[48];
     if (active) {
-        snprintf(path, sizeof(path), "%s/%s.png", AC_ICON_DIR, stem);
-        return drawLittleFsPng(path, x, y, 1.0f);
+        snprintf(png_path, sizeof(png_path), "%s/%s_active.png", AC_ICON_DIR, stem);
+    } else {
+        snprintf(png_path, sizeof(png_path), "%s/%s.png", AC_ICON_DIR, stem);
+    }
+    if (drawLittleFsPng(png_path, x, y, 1.0f)) {
+        return true;
+    }
+    if (active) {
+        snprintf(png_path, sizeof(png_path), "%s/%s.png", AC_ICON_DIR, stem);
+        return drawLittleFsPng(png_path, x, y, 1.0f);
     }
     return false;
 }
 
-// 横排四个模式图标；当前模式用 _active，Auto 时全部普通态
+// 进入 IR 时预读全部模式图标（normal + active），切模式时不再触 Flash
+static void preloadAcModeIcons() {
+    static const char* kStems[] = {"ac_cool", "ac_heat", "ac_dry", "ac_fan"};
+    for (int i = 0; i < 4; i++) {
+        const char* stem = kStems[i];
+        for (int active = 0; active < 2; active++) {
+            const int slot = i + (active ? 4 : 0);
+            if (s_ac_icon_ready[slot]) {
+                continue;
+            }
+            char path[56];
+            if (active) {
+                snprintf(path, sizeof(path), "%s/%s_active.rgb565", AC_ICON_DIR, stem);
+            } else {
+                snprintf(path, sizeof(path), "%s/%s.rgb565", AC_ICON_DIR, stem);
+            }
+            if (!loadAcRgb565ToSlot(path, slot) && active) {
+                // active 缺失时用普通态顶上
+                snprintf(path, sizeof(path), "%s/%s.rgb565", AC_ICON_DIR, stem);
+                loadAcRgb565ToSlot(path, slot);
+            }
+        }
+    }
+}
+
+// 左栏 2x2 模式图标；当前模式用 _active，Auto 时全部普通态
 static void drawAcModeIcons(const int x, const int y) {
     static const stdAc::opmode_t kModes[] = {
         stdAc::opmode_t::kCool,
@@ -198,45 +297,52 @@ static void drawAcModeIcons(const int x, const int y) {
         stdAc::opmode_t::kDry,
         stdAc::opmode_t::kFan,
     };
-    int cx = x;
     for (size_t i = 0; i < sizeof(kModes) / sizeof(kModes[0]); i++) {
+        const int col = static_cast<int>(i % AC_MODE_COLS);
+        const int row = static_cast<int>(i / AC_MODE_COLS);
+        const int ix = x + col * (AC_MODE_ICON_PX + AC_MODE_ICON_GAP);
+        const int iy = y + row * (AC_MODE_ICON_PX + AC_MODE_ICON_GAP);
         const char* stem = acModeIconStem(kModes[i]);
         const bool active = (g_ac_mode == kModes[i]);
-        if (!drawAcModeIconAt(stem, cx, y, active)) {
+        if (!drawAcModeIconAt(stem, ix, iy, active)) {
             // 缺图时退回文字缩写
             M5Cardputer.Display.setTextSize(1);
             M5Cardputer.Display.setTextColor(active ? APP_COLOR_OK : APP_COLOR_HINT, BLACK);
-            M5Cardputer.Display.setCursor(cx, y + 10);
+            M5Cardputer.Display.setCursor(ix + 10, iy + 10);
             M5Cardputer.Display.print(acModeName(kModes[i])[0]);
         }
-        cx += AC_MODE_ICON_PX + AC_MODE_ICON_GAP;
     }
 }
 
 static int acModeIconY() {
-    return APP_CONTENT_Y + INFO_LINE_H_2X + AC_MODE_ROW_GAP - AC_MODE_ICON_Y_LIFT;
+    return APP_CONTENT_Y + INFO_LINE_H_2X + AC_MODE_ROW_GAP;
 }
 
-static int acModeSideX() {
-    return AC_MODE_ICON_X + 4 * (AC_MODE_ICON_PX + AC_MODE_ICON_GAP) - AC_MODE_ICON_GAP + 4;
+// 模式图标下方：Auto / 风速
+static int acModeMetaY() {
+    return acModeIconY() + AC_MODE_GRID_H + 2;
 }
 
-// 仅刷新模式图标与 Auto 标记（切模式时不整页重绘）
+static const char* acFanName(stdAc::fanspeed_t fan);
+
+// 仅刷新模式图标与 Auto/风速（切模式时不整页重绘）
 static void redrawAcModeIconsOnly() {
     const int icon_y = acModeIconY();
     const int mode_x = AC_MODE_ICON_X;
-    const int side_x = acModeSideX();
-    const int icons_w = 4 * (AC_MODE_ICON_PX + AC_MODE_ICON_GAP) - AC_MODE_ICON_GAP;
-    M5Cardputer.Display.fillRect(mode_x, icon_y, icons_w, AC_MODE_ICON_PX, BLACK);
-    // 清 Auto 文字，避开下方风速行
-    M5Cardputer.Display.fillRect(side_x, icon_y + 4, 32, 10, BLACK);
+    // 565 不透明，直接覆盖，避免先 fillRect 黑底闪一下
     drawAcModeIcons(mode_x, icon_y);
+
+    const int meta_y = acModeMetaY();
+    M5Cardputer.Display.fillRect(mode_x, meta_y, AC_MODE_GRID_W, 20, BLACK);
+    M5Cardputer.Display.setTextSize(1);
     if (g_ac_mode == stdAc::opmode_t::kAuto) {
-        M5Cardputer.Display.setTextSize(1);
         M5Cardputer.Display.setTextColor(APP_COLOR_OK, BLACK);
-        M5Cardputer.Display.setCursor(side_x, icon_y + 4);
+        M5Cardputer.Display.setCursor(mode_x, meta_y);
         M5Cardputer.Display.print("Auto");
     }
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(mode_x, meta_y + 10);
+    M5Cardputer.Display.print(acFanName(g_ac_fan));
 }
 
 static const char* acFanName(const stdAc::fanspeed_t fan) {
@@ -646,7 +752,7 @@ static void drawIrHelpPage() {
     updateAppHeaderStatus();
 }
 
-// 遥控器垫按钮：黄框/灰底，按下反色
+// 遥控器垫按钮：黄框/灰底，按下反色（横排：徽章 + 说明，TV 用）
 static void drawIrPadBtn(const int x, const int y, const int w, const int h, const bool pressed,
                          const char key, const char* label, const bool selected) {
     const uint16_t fill = pressed ? APP_COLOR_MENU_KEY : (selected ? 0x4208 : BLACK);
@@ -667,6 +773,46 @@ static void drawIrPadBtn(const int x, const int y, const int w, const int h, con
     M5Cardputer.Display.print(label);
 }
 
+// 空调垫按钮：2x 键名在上、小字说明在下，整体在圆角框内居中
+static void drawAcPadBtn(const int x, const int y, const int w, const int h, const bool pressed,
+                         const char key, const char* label) {
+    const uint16_t fill = pressed ? APP_COLOR_MENU_KEY : BLACK;
+    const uint16_t border = pressed ? APP_COLOR_MENU_KEY : APP_COLOR_MUTED;
+    M5Cardputer.Display.fillRoundRect(x, y, w, h, 3, fill);
+    M5Cardputer.Display.drawRoundRect(x, y, w, h, 3, border);
+
+    constexpr int badge_size = 2;
+    constexpr int pad_x = 2;
+    constexpr int pad_y = 1;
+    constexpr int stack_gap = 1;
+    const int badge_h = 8 * badge_size + pad_y * 2;
+    constexpr int label_h = 8;
+    const int stack_h = badge_h + stack_gap + label_h;
+    const int sy = y + (h - stack_h) / 2;
+
+    int badge_w = 0;
+    if (key == ' ') {
+        M5Cardputer.Display.setTextSize(badge_size);
+        badge_w = M5Cardputer.Display.textWidth("SP") + pad_x * 2;
+        const int bx = x + (w - badge_w) / 2;
+        drawTextBadge(bx, sy, "SP", badge_size);
+    } else {
+        const char letter = static_cast<char>(toupper(static_cast<unsigned char>(key)));
+        const char str[2] = {letter, '\0'};
+        M5Cardputer.Display.setTextSize(badge_size);
+        badge_w = M5Cardputer.Display.textWidth(str) + pad_x * 2;
+        const int bx = x + (w - badge_w) / 2;
+        drawKeyBadge(bx, sy, key, badge_size);
+    }
+
+    M5Cardputer.Display.setTextSize(1);
+    const int label_w = M5Cardputer.Display.textWidth(label);
+    const int lx = x + (w - label_w) / 2;
+    M5Cardputer.Display.setTextColor(pressed ? APP_COLOR_KEY_TEXT : APP_COLOR_HINT, fill);
+    M5Cardputer.Display.setCursor(lx, sy + badge_h + stack_gap);
+    M5Cardputer.Display.print(label);
+}
+
 static bool isAcBtnPressed(const IrAcBtn btn) {
     return g_press_ac == btn && static_cast<int32_t>(millis() - g_press_until_ms) < 0;
 }
@@ -677,71 +823,78 @@ static bool isTvBtnPressed(const IrTvBtn btn) {
 
 static void drawAcRemotePad(const int content_y) {
     const int x0 = APP_CONTENT_X;
-    int y = content_y;
+    const int screen_w = M5Cardputer.Display.width();
+    const int y0 = content_y;
 
-    // 第一排：品牌 / 电源状态（二倍字体）
+    // 顶栏左：品牌 / 电源；右：温度
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-    M5Cardputer.Display.setCursor(x0, y);
+    M5Cardputer.Display.setCursor(x0, y0);
     const char* ac_brand = acBrandName(g_ac_brand);
     M5Cardputer.Display.print(ac_brand);
     int cx = x0 + M5Cardputer.Display.textWidth(ac_brand) + 8;
     const char* ac_pwr = g_ac_power ? "ON" : "OFF";
     M5Cardputer.Display.setTextColor(g_ac_power ? APP_COLOR_OK : APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
+    M5Cardputer.Display.setCursor(cx, y0);
     M5Cardputer.Display.print(ac_pwr);
     if (g_tx_status[0] != '\0' && static_cast<int32_t>(millis() - g_tx_status_until_ms) < 0) {
         cx += M5Cardputer.Display.textWidth(ac_pwr) + 8;
         M5Cardputer.Display.setTextColor(APP_COLOR_OK, BLACK);
-        M5Cardputer.Display.setCursor(cx, y);
+        M5Cardputer.Display.setCursor(cx, y0);
         M5Cardputer.Display.print(g_tx_status);
     }
-    y += INFO_LINE_H_2X + AC_MODE_ROW_GAP; // 与下方内容间隔
 
-    // 紧凑温度区（为 tab 腾高度）
+    // 右上角温度
     char tbuf[8];
     snprintf(tbuf, sizeof(tbuf), "%u", static_cast<unsigned>(g_ac_temp));
     M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setTextColor(APP_COLOR_VALUE, BLACK);
-    M5Cardputer.Display.setCursor(x0, y);
-    M5Cardputer.Display.print(tbuf);
     const int temp_w = M5Cardputer.Display.textWidth(tbuf);
     M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setCursor(x0 + temp_w + 2, y + 4);
+    const int unit_w = M5Cardputer.Display.textWidth("C");
+    const int temp_total_w = temp_w + 2 + unit_w;
+    const int temp_x = screen_w - APP_CONTENT_X - temp_total_w;
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setTextColor(APP_COLOR_VALUE, BLACK);
+    M5Cardputer.Display.setCursor(temp_x, y0);
+    M5Cardputer.Display.print(tbuf);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setCursor(temp_x + temp_w + 2, y0 + 4);
     M5Cardputer.Display.print("C");
 
-    // 模式图标 30x30 1:1；风速/Auto 画在图标右侧以省高度
-    const int mode_x = AC_MODE_ICON_X;
+    // 左：2x2 模式；右：按键垫
     const int icon_y = acModeIconY();
-    drawAcModeIcons(mode_x, icon_y);
-    const int side_x = acModeSideX();
+    drawAcModeIcons(AC_MODE_ICON_X, icon_y);
+    const int meta_y = acModeMetaY();
     M5Cardputer.Display.setTextSize(1);
     if (g_ac_mode == stdAc::opmode_t::kAuto) {
         M5Cardputer.Display.setTextColor(APP_COLOR_OK, BLACK);
-        M5Cardputer.Display.setCursor(side_x, icon_y + 4);
+        M5Cardputer.Display.setCursor(AC_MODE_ICON_X, meta_y);
         M5Cardputer.Display.print("Auto");
     }
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(side_x, icon_y + 16);
+    M5Cardputer.Display.setCursor(AC_MODE_ICON_X, meta_y + 10);
     M5Cardputer.Display.print(acFanName(g_ac_fan));
-    y += AC_MODE_ICON_PX + 2;
 
-    constexpr int btn_w = 72;
-    constexpr int btn_h = 16;
-    constexpr int gap = 3;
-    const int row1 = y;
-    const int row2 = y + btn_h + gap;
-    // 无上下导航选中，仅按键闪烁反馈
-    drawIrPadBtn(x0, row1, btn_w, btn_h, isAcBtnPressed(IrAcBtn::Power), 'p', "pwr", false);
-    drawIrPadBtn(x0 + btn_w + gap, row1, btn_w, btn_h, isAcBtnPressed(IrAcBtn::Mode), 'm', "mode",
-                 false);
-    drawIrPadBtn(x0 + 2 * (btn_w + gap), row1, btn_w, btn_h, isAcBtnPressed(IrAcBtn::Fan), 'f',
-                 "fan", false);
-    drawIrPadBtn(x0, row2, btn_w, btn_h, isAcBtnPressed(IrAcBtn::TempDown), '-', "temp", false);
-    drawIrPadBtn(x0 + btn_w + gap, row2, btn_w, btn_h, isAcBtnPressed(IrAcBtn::TempUp), '=', "temp",
-                 false);
-    drawIrPadBtn(x0 + 2 * (btn_w + gap), row2, btn_w, btn_h, isAcBtnPressed(IrAcBtn::Send), ' ',
-                 "send", false);
+    constexpr int cols = 3;
+    constexpr int rows = 2;
+    constexpr int gap = 2;
+    const int pad_right = screen_w - APP_CONTENT_X;
+    const int pad_w = pad_right - AC_PAD_X;
+    const int btn_w = (pad_w - (cols - 1) * gap) / cols;
+    // 按键区高度对齐模式网格
+    const int btn_h = (AC_MODE_GRID_H - (rows - 1) * gap) / rows;
+    const int row1 = icon_y;
+    const int row2 = icon_y + btn_h + gap;
+    drawAcPadBtn(AC_PAD_X, row1, btn_w, btn_h, isAcBtnPressed(IrAcBtn::Power), 'p', "pwr");
+    drawAcPadBtn(AC_PAD_X + btn_w + gap, row1, btn_w, btn_h, isAcBtnPressed(IrAcBtn::Mode), 'm',
+                 "mode");
+    drawAcPadBtn(AC_PAD_X + 2 * (btn_w + gap), row1, btn_w, btn_h, isAcBtnPressed(IrAcBtn::Fan), 'f',
+                 "fan");
+    drawAcPadBtn(AC_PAD_X, row2, btn_w, btn_h, isAcBtnPressed(IrAcBtn::TempDown), '-', "temp");
+    drawAcPadBtn(AC_PAD_X + btn_w + gap, row2, btn_w, btn_h, isAcBtnPressed(IrAcBtn::TempUp), '=',
+                 "temp");
+    drawAcPadBtn(AC_PAD_X + 2 * (btn_w + gap), row2, btn_w, btn_h, isAcBtnPressed(IrAcBtn::Send), ' ',
+                 "send");
 }
 
 static IrTvBtn tvActionToBtn(const int action) {
@@ -829,22 +982,7 @@ static void drawIrMain() {
     } else {
         drawAcRemotePad(content_y);
     }
-
-    const int hint_y = M5Cardputer.Display.height() - 12;
-    M5Cardputer.Display.fillRect(APP_CONTENT_X, hint_y, 236, 12, BLACK);
-    int cx = APP_CONTENT_X;
-    cx += drawTextBadge(cx, hint_y, "Tab", 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, hint_y);
-    M5Cardputer.Display.print("brand ");
-    cx += M5Cardputer.Display.textWidth("brand ");
-    cx += drawKeyBadge(cx, hint_y, 't', 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, hint_y);
-    M5Cardputer.Display.print("mode");
-    drawHelpHintRight("help");
+    // 无底栏 tip：Tab/t 等说明见 h 帮助页
 }
 
 static void redrawIr() {
@@ -872,6 +1010,7 @@ void enterIrApp() {
                            static_cast<int>(IrAcBrand::Count) - 1);
 
     ensureIrReady();
+    preloadAcModeIcons(); // 进入时缓存全部模式图标，切模式无闪
     redrawIr();
 }
 
