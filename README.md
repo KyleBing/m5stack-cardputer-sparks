@@ -1,68 +1,52 @@
 # Sparks
+为 Cardputer-ADV 制作的个人固件，主要功能是米家设备控制、cursor 信息查看。
 
-M5Stack Cardputer 多应用固件：字母键启动器，覆盖米家控制、红外遥控、配网、时间工具、Cursor 用量与硬件调试等。
+_该固件内容为全英文，英文缩写比较多，所以需要有良好的英语基础才能比较方便的使用。_
 
-**文档（VitePress · v1.0.0）：** [在线文档](https://kylebing.github.io/m5stack-cardputer-sparks/) · 源码 [`docs/`](./docs/)。本地预览：
 
-```bash
-npm install
-npm run docs:dev
-```
 
----
+## 一、功能说明
+基于 M5Stack 的库进行的开发，功能有：
 
-## 功能目录
+| App | 英文名 | 快捷按键 | 功能 |
+|-----|--------|----------|------|
+| 米家 | Mijia | `m` | 设备状态查看、控制 |
+| 时钟 | Time | `t` | 开机时间，实时时间，秒表，倒计时 |
+| Cursor | Cursor Dashboard | `c` | Cursor 信息查看，TOKEN 余量，使用概况（24h,7d,30d） |
+| 红外 | Infrared | `x` | 电视、空调红外遥控，适配主流品牌 |
+| 麦克风 | Mic | `r` | 测试，波型查看 |
+| IMU | IMU | `g` | BMI270 6轴参数查看 |
+| WiFi | WiFi | `w` | WiFi 设置，支持多组配置选择 |
+| AP/LAN | Config | `u` | Web 配置服务，针对 config.json 的修改 |
+| 系统配置 | Options | `o` | 屏幕、音量，首选项配置 |
+| 图标查看 | Icons | `a` | 固件内的图标查看 |
+| 字体 | Font | `f` | 预览系统自带字体 |
+| 休眠 | Sleep | `s` | 不关机的状态下，浅睡、深睡 |
+| 摩斯密码 | Morse | `j` | 按键出摩斯码音频 |
+| 键盘 | HID Keyboard | `k` | 蓝牙、USB 键盘 |
+| LED | RGB LED | `l` | ESP-32 板载 LED 测试 |
+| 蓝牙 | BLE | `b` | 附近蓝牙设备列表查看 |
+| 屏幕 | Display | `d` | 屏幕测试，多背景色，线条，方块 |
 
-### 主界面与系统
 
-- [ ] 启动器（分页菜单 / 字母快捷键）
-- [ ] 顶栏状态（WiFi / BLE / 电池 / 分页）
-- [ ] Version
-- [ ] Options（亮度 / 声音 / 时钟 / 红外默认）
-- [ ] Sleep（浅睡 / 深睡）
-- [ ] 诊断日志（Fn+i）
+## 二、文档
+固件详细功能说明： [在线文档](https://kylebing.github.io/m5stack-cardputer-sparks/)
 
-### 智能家居
+## 三、固件刷写
 
-- [ ] Mijia
-  - [ ] 设备控制（灯 / 风扇 / 净化器 / 炸锅等）
-  - [ ] 列表 / 宫格 / 编组
-  - [ ] 快捷键
-  - [ ] BLE 传感器与事件设备
-- [ ] Infrared（TV / AC）
 
-### 网络与配置
 
-- [ ] Config（Web 配网 / 设备与编组管理）
-- [ ] WiFi（连接 / 扫描切换）
-- [ ] BLE（扫描与信息）
+## 三、对 Cardputer 的喜爱
+一直非常喜欢像素屏，尤其那种低功耗的单色像素屏，像诺基亚那种，靠反射光线看内容的更好。  
+前端时间想自己攒一个小设备出来，带个低功耗的这种屏幕，然后实现一些自己感觉比较好玩的功能。后来算了算，弄下来还不如直接买个手表划算了，就没有再弄。  
 
-### 时间与电源
+但这个想法一直在，通过跟 gemini 的聊天，把我导向了 M5Stack 的相关产品，最初是看上了那个 [Stick](https://shop.m5stack.com/products/m5sticks3-esp32s3-mini-iot-dev-kit)。  
+但非常不喜欢那种用四个方向键或更少键来导航菜单的操作，非常的繁琐，更何况是在那种非常廉价的按键上面去实现这种操作，感觉是反人类的交互设计。  
+后来又看到 M5Stack 有 [Cardputer](https://shop.m5stack.com/products/m5stack-cardputer-adv-version-esp32-s3) 这个设备，要比 Stick 有更多的按键，这个不错。  
+之前就非常喜欢黑莓手机里的全键盘每个按键对应一个应用的设计，Cardputer 有这么多按键就能非常方便的作为 app 启动器，直接按一个字母就进入一个固定 app，爽，当前固件就保留了黑莓里按 O 进入系统设置的操作。  
 
-- [ ] Time
-  - [ ] Uptime
-  - [ ] Clock（NTP / 时区 / Pure）
-  - [ ] Countdown
-  - [ ] Stopwatch
-- [ ] Battery（实时电量 / 历史曲线）
+拿到这个设备之后感觉实现自己想法就有了地基一样，把自己喜欢的小工具做到了这上面，后面有更多新想法再慢慢往上加。  
+Cardputer 这种基于 ESP32 的工具有一点是我非常喜欢的，就是秒开系统，要比安卓、linux 启动都要快，就很爽。
 
-### 效率工具
+用 ai 能实现各种有意思的功能，就成了我近期最喜欢的玩具，我非常喜欢用它控制这种室内米家设备。
 
-- [ ] Cursor（用量摘要 / 图表 / last）
-- [ ] HID Keyboard（USB / BLE）
-- [ ] Morse
-
-### 硬件调试与演示
-
-- [ ] BMI（IMU）
-- [ ] RGB LED
-- [ ] Mic（波形）
-- [ ] Display
-- [ ] Icons
-- [ ] Font
-- [ ] InI2C / ExI2C
-
-### 配置与发布
-
-- [ ] `config.json` / LittleFS
-- [ ] M5Burner 打包
