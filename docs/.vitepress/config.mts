@@ -1,6 +1,19 @@
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitepress'
 
-// Sparks 固件文档（v1.0.0）
+// 与固件同源：只改 include/app_version.h，文档 nav / footer / md 占位符自动同步
+const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+const versionH = readFileSync(resolve(rootDir, 'include/app_version.h'), 'utf-8')
+const pick = (key: string, fallback = '') =>
+  versionH.match(new RegExp(`${key}\\s*=\\s*"([^"]+)"`))?.[1] ?? fallback
+
+const APP_VERSION = pick('APP_VERSION', '0.0')
+const APP_UPDATE_TIME = pick('APP_UPDATE_TIME')
+const APP_AUTHOR = pick('APP_AUTHOR', 'KyleBing')
+const DOC_VERSION = `v${APP_VERSION}`
+
 // GitHub Pages 项目站 base 须与仓库名一致（非 ./，VitePress 不支持相对 base）
 const base = process.env.GITHUB_ACTIONS ? '/m5stack-cardputer-sparks/' : '/'
 
@@ -21,6 +34,22 @@ export default defineConfig({
     ['link', { rel: 'icon', href: `${base}assets/logo_60.png` }],
   ],
 
+  // md 中可用 {{APP_VERSION}} / {{APP_UPDATE_TIME}} / {{APP_AUTHOR}} / {{DOC_VERSION}}
+  markdown: {
+    config(md) {
+      const render = md.render.bind(md)
+      md.render = (src, env) =>
+        render(
+          src
+            .replaceAll('{{APP_VERSION}}', APP_VERSION)
+            .replaceAll('{{APP_UPDATE_TIME}}', APP_UPDATE_TIME)
+            .replaceAll('{{APP_AUTHOR}}', APP_AUTHOR)
+            .replaceAll('{{DOC_VERSION}}', DOC_VERSION),
+          env,
+        )
+    },
+  },
+
   themeConfig: {
     logo: '/assets/logo_60.png',
     siteTitle: 'Sparks',
@@ -30,7 +59,7 @@ export default defineConfig({
       { text: '截图', link: '/apps/shots' },
       { text: '快捷键', link: '/guide/shortcuts' },
       {
-        text: 'v1.0.1',
+        text: DOC_VERSION,
         items: [
           { text: '入门', link: '/guide/getting-started' },
           { text: 'CHANGELOG', link: 'https://github.com/KyleBing/m5stack-cardputer-sparks/blob/main/CHANGELOG.md' },
@@ -129,7 +158,7 @@ export default defineConfig({
 
     footer: {
       message: 'Sparks for M5Stack Cardputer',
-      copyright: 'v1.0.0 · KyleBing',
+      copyright: `${DOC_VERSION} · ${APP_AUTHOR}`,
     },
   },
 })
