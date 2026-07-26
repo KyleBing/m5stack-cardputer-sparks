@@ -24,6 +24,7 @@ enum class TimeMode {
 static TimeMode timeMode = TimeMode::UPTIME;
 static bool timeHelpVisible = false;
 static bool timePureVisible = false;
+static bool rtcPureLargeClockVisible = false;
 static bool rtcSyncTimedOut = false;
 static bool rtcScreenReady = false;
 static bool uptimeScreenReady = false;
@@ -32,6 +33,7 @@ static char rtcLastTime[16] = "";
 static char rtcLastDate[20] = "";
 static char rtcLastSrc[8] = "";
 static char pureLastDate[20] = "";
+static char pureLargeClockLastTime[8] = "";
 static BigTimeState uptimeTimeState{};
 static BigTimeState uptimePureTimeState{};
 static BigTimeState pureTimeState{};
@@ -50,6 +52,7 @@ static constexpr uint32_t UPTIME_UPDATE_MS = 1000;       // 更新间隔 1 secon
 static void drawUptimeApp(const bool full_init);
 static void drawRtcApp(const bool full_init);
 static void drawRtcPureApp(const bool full_init);
+static void drawRtcPureLargeClockApp(const bool full_init);
 static void drawUptimePureApp(const bool full_init);
 static void drawTimePureApp(const bool full_init);
 
@@ -185,6 +188,7 @@ static void drawTimeHelpScreen() {
     y = drawTimeHelpKey(2, y, 'c', "countdown");
     y = drawTimeHelpKey(2, y, 's', "stopwatch");
     y = drawTimeHelpKey(2, y, 'p', "pure mode");
+    y = drawTimeHelpKey(2, y, 'b', "big clock");
     y = drawTimeHelpKey(2, y, 'r', "sync / reset");
     y = drawTimeHelpBadge(2, y, "BtnGO", "start / pause");
 
@@ -388,7 +392,76 @@ static void drawTimePureApp(const bool full_init) {
     }
 }
 
+static void drawRtcPureLargeClockApp(const bool full_init) {
+    struct tm timeinfo{};
+    const char* source = "none";
+    if (!readCurrentTime(timeinfo, source)) {
+        rtcPureLargeClockVisible = false;
+        timePureVisible = false;
+        drawRtcApp(true);
+        return;
+    }
+
+    char time_buf[8];
+    snprintf(time_buf, sizeof(time_buf), "%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+
+    if (full_init) {
+        M5Cardputer.Display.fillScreen(BLACK);
+        pureLargeClockLastTime[0] = '\0';
+    }
+
+    const int screen_w = M5Cardputer.Display.width();
+    const int screen_h = M5Cardputer.Display.height();
+    M5Cardputer.Display.setFont(nullptr);
+    int large_text_size = 1;
+    int time_w = 0;
+    int time_h = 0;
+    // 使用字体自带冒号，根据完整 HH:MM 宽高选择最大整数倍字号
+    for (int candidate = 12; candidate >= 1; candidate--) {
+        M5Cardputer.Display.setTextSize(candidate);
+        const int candidate_w = M5Cardputer.Display.textWidth("00:00");
+        const int candidate_h = M5Cardputer.Display.fontHeight();
+        if (candidate_w <= screen_w && candidate_h <= screen_h) {
+            large_text_size = candidate;
+            time_w = candidate_w;
+            time_h = candidate_h;
+            break;
+        }
+    }
+    // 最大可用字号再缩小一级，给屏幕边缘留出呼吸空间
+    if (large_text_size > 1) {
+        large_text_size--;
+        M5Cardputer.Display.setTextSize(large_text_size);
+        time_w = M5Cardputer.Display.textWidth("00:00");
+        time_h = M5Cardputer.Display.fontHeight();
+    }
+    M5Cardputer.Display.setTextSize(large_text_size);
+
+    const int time_x = (screen_w - time_w) / 2;
+    const int time_y = (screen_h - time_h) / 2;
+
+    if (full_init || strcmp(time_buf, pureLargeClockLastTime) != 0) {
+        M5Cardputer.Display.fillRect(0, time_y, screen_w, time_h, BLACK);
+        M5Cardputer.Display.setFont(nullptr);
+        M5Cardputer.Display.setTextSize(large_text_size);
+        M5Cardputer.Display.setTextColor(WHITE, BLACK);
+        M5Cardputer.Display.setCursor(time_x, time_y);
+        M5Cardputer.Display.print(time_buf);
+        strncpy(pureLargeClockLastTime, time_buf, sizeof(pureLargeClockLastTime) - 1);
+        pureLargeClockLastTime[sizeof(pureLargeClockLastTime) - 1] = '\0';
+    }
+
+    // 内置字体是全局显示状态，避免影响其它 Time 界面
+    M5Cardputer.Display.setTextFont(1);
+    M5Cardputer.Display.setTextSize(1);
+}
+
 static void drawRtcPureApp(const bool full_init) {
+    if (rtcPureLargeClockVisible) {
+        drawRtcPureLargeClockApp(full_init);
+        return;
+    }
+
     struct tm timeinfo{};
     const char* source = "none";
     if (!readCurrentTime(timeinfo, source)) {
@@ -519,6 +592,9 @@ static void enterClockMode(const bool force_sync) {
 
 static void enterTimeMode(const TimeMode mode) {
     timeHelpVisible = false;
+    if (mode != TimeMode::CLOCK) {
+        rtcPureLargeClockVisible = false;
+    }
     if (mode == TimeMode::CLOCK) {
         timeMode = TimeMode::CLOCK;
         rtcScreenReady = false;
@@ -553,6 +629,7 @@ static void enterTimeMode(const TimeMode mode) {
 
 void enterRtcApp() {
     timePureVisible = getAppConfig().time_pure;
+    rtcPureLargeClockVisible = false;
     uptimeScreenReady = false;
     uptimeTimeState = BigTimeState{};
     rtcScreenReady = false;
@@ -648,14 +725,22 @@ void handleTimeApp(const Keyboard_Class::KeysState& status) {
     const char key = timePressedLetter(status);
 
     if (timePureVisible) {
+        if (key == 'b' && timeMode == TimeMode::CLOCK) {
+            // 4 倍默认字体的大时钟只在 Pure Clock 内切换
+            rtcPureLargeClockVisible = !rtcPureLargeClockVisible;
+            drawRtcPureApp(true);
+            return;
+        }
         if (key == 'p') {
             // 先退出 Pure 界面，再异步写配置，避免卡在保存上
+            rtcPureLargeClockVisible = false;
             timePureVisible = false;
             redrawCurrentTimeMode();
             saveAppConfigTimePure(false);
             return;
         }
         if (key == 'h') {
+            rtcPureLargeClockVisible = false;
             timePureVisible = false;
             timeHelpVisible = true;
             drawTimeHelpScreen();

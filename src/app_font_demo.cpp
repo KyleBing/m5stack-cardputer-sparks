@@ -77,11 +77,6 @@ static const FontDemoItem FONT_DEMO_ITEMS[] = {
     {"Satisfy24", &fonts::Satisfy_24, 1, "Satisfy"},
     {"DejaVu12", &fonts::DejaVu12, 1, "DejaVu 12"},
     {"DejaVu18", &fonts::DejaVu18, 1, "DejaVu 18"},
-    {"efontCN10", nullptr, 1, "listed: efontCN 10"},
-    {"efontCN12", nullptr, 1, "listed: efontCN 12"},
-    {"efontCN14", &fonts::efontCN_14, 1, "字体演示 ABC 123"},
-    {"efontCN16", nullptr, 1, "listed: efontCN 16"},
-    {"efontCN24", nullptr, 1, "listed: efontCN 24"},
 };
 
 static constexpr int FONT_DEMO_COUNT =

@@ -24,9 +24,10 @@ Sparks 是跑在 [M5Stack Cardputer](https://docs.m5stack.com/en/core/Cardputer)
 | `i` | Inf | [Info](/apps/info) | `p` | Bat | [Battery](/apps/battery) | `c` | Cur | [Cursor](/apps/cursor) |
 | `v` | Ver | [Version](/apps/version) | `j` | Mor | [Morse](/apps/morse) | `x` | IR | [Infrared](/apps/infrared) |
 | `k` | KB | [Keyboard](/apps/hid-keyboard) | `g` | IMU | [IMU](/apps/imu) | `l` | LED | [RGB LED](/apps/rgb-led) |
-| `r` | Mic | [Mic](/apps/mic) | `b` | BLE | [BLE](/apps/ble) | `d` | Disp | [Display](/apps/display) |
-| `a` | Icn | [Icons](/apps/icons) | `f` | Fnt | [Font](/apps/font) | `n` | InI2 | [InI2C](/apps/i2c) |
-| `e` | ExI2 | [ExI2C](/apps/i2c) | | | | | | |
+| `r` | Mic | [Mic](/apps/mic) | `y` | FX | [Neon FX](/apps/neon-fx) | `z` | Dice | [Dice](/apps/dice) |
+| `q` | Phys | [Newton Cradle](/apps/newton-cradle) |  |  |  |  |  |  |
+| `b` | BLE | [BLE](/apps/ble) | `d` | Disp | [Display](/apps/display) | `a` | Icn | [Icons](/apps/icons) |
+| `f` | Fnt | [Font](/apps/font) | `n` | InI2 | [InI2C](/apps/i2c) | `e` | ExI2 | [ExI2C](/apps/i2c) |
 
 菜单可翻页： 对应键盘上的上下左右 箭头键，无需按 **Fn** 。
 

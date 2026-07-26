@@ -19,6 +19,9 @@
 #include "app_ir.h"
 #include "app_font_demo.h"
 #include "app_mic.h"
+#include "app_neon_fx.h"
+#include "app_dice.h"
+#include "app_newton_cradle.h"
 #include "app_battery.h"
 #include "app_info.h"
 #include "app_hid_keyboard.h"
@@ -51,6 +54,9 @@ enum class AppState {
     KEYBOARD,
     BMI,
     MIC,
+    NEON_FX,
+    DICE,
+    NEWTON_CRADLE,
     SETTINGS,
     RTC,
     IN_I2C,
@@ -101,6 +107,9 @@ static const MenuItem MENU_ITEMS[] = {
     {'g', "IMU", "IMU", AppState::BMI},
     {'l', "LED", "RGB LED", AppState::LED},
     {'r', "Mic", "Mic", AppState::MIC},
+    {'y', "FX", "Neon FX", AppState::NEON_FX},
+    {'z', "Dice", "Dice", AppState::DICE},
+    {'q', "Phys", "Newton Cradle", AppState::NEWTON_CRADLE},
     {'b', "BLE", "BLE", AppState::BLE},
     {'d', "Disp", "Display", AppState::DISP},
     {'a', "Icn", "Icons", AppState::ICONS},
@@ -158,6 +167,12 @@ const char* getCurrentAppShotSlug() {
             return "imu";
         case AppState::MIC:
             return "mic";
+        case AppState::NEON_FX:
+            return "neonfx";
+        case AppState::DICE:
+            return "dice";
+        case AppState::NEWTON_CRADLE:
+            return "newton";
         case AppState::SETTINGS:
             return "options";
         case AppState::RTC:
@@ -286,6 +301,9 @@ void showMenu() {
     flushSpeakerVolumeSave(); // 离开 Options 等界面时落盘未写完的音量
     menuNoAppPrompt = false;
     leaveCursorApp();
+    leaveNeonFxApp();
+    leaveDiceApp();
+    leaveNewtonCradleApp();
     leaveLedApp();
     leaveHidKeyboardApp();
     leaveIrApp(); // 释放红外图标 RAM 缓存
@@ -2156,6 +2174,15 @@ void enterApp(const AppState state) {
     if (currentState == AppState::MIC && state != AppState::MIC) {
         leaveMicApp();
     }
+    if (currentState == AppState::NEON_FX && state != AppState::NEON_FX) {
+        leaveNeonFxApp();
+    }
+    if (currentState == AppState::DICE && state != AppState::DICE) {
+        leaveDiceApp();
+    }
+    if (currentState == AppState::NEWTON_CRADLE && state != AppState::NEWTON_CRADLE) {
+        leaveNewtonCradleApp();
+    }
     if (currentState == AppState::HID_KEYBOARD && state != AppState::HID_KEYBOARD) {
         leaveHidKeyboardApp();
     }
@@ -2186,6 +2213,15 @@ void enterApp(const AppState state) {
             break;
         case AppState::MIC:
             enterMicApp();
+            break;
+        case AppState::NEON_FX:
+            enterNeonFxApp();
+            break;
+        case AppState::DICE:
+            enterDiceApp();
+            break;
+        case AppState::NEWTON_CRADLE:
+            enterNewtonCradleApp();
             break;
         case AppState::RTC:
             enterRtcApp();
@@ -2365,6 +2401,15 @@ void loop() {
             if (currentState == AppState::MIC) {
                 leaveMicApp();
             }
+            if (currentState == AppState::NEON_FX) {
+                leaveNeonFxApp();
+            }
+            if (currentState == AppState::DICE) {
+                leaveDiceApp();
+            }
+            if (currentState == AppState::NEWTON_CRADLE) {
+                leaveNewtonCradleApp();
+            }
             showMenu();
             return;
         }
@@ -2382,6 +2427,8 @@ void loop() {
         if (currentState == AppState::MENU) {
             updateMenuHeaderStatus(getMenuPageCount());
         } else if (currentState != AppState::SLEEP && currentState != AppState::DISP &&
+                   currentState != AppState::NEON_FX && currentState != AppState::DICE &&
+                   currentState != AppState::NEWTON_CRADLE &&
                    !(currentState == AppState::RTC && isTimePureMode()) &&
                    !(currentState == AppState::CURSOR && isCursorDisplayBlanked()) &&
                    !(currentState == AppState::MIJIA && mijiaAppSuppressesHeader())) {
@@ -2398,6 +2445,13 @@ void loop() {
     } else if (currentState == AppState::MIC) {
         // 每帧拉取：Mic.record 异步双槽，40ms 节流会造成断流破音
         updateMicApp();
+    } else if (currentState == AppState::NEON_FX) {
+        // 调色板动画不节流，用屏幕实际吞吐量跑满刷新率。
+        updateNeonFxApp();
+    } else if (currentState == AppState::DICE) {
+        updateDiceApp();
+    } else if (currentState == AppState::NEWTON_CRADLE) {
+        updateNewtonCradleApp();
     } else if (currentState == AppState::BATTERY) {
         static uint32_t lastBatUpdateMs = 0;
         // 后台 NTP 时 250ms 轮询；平时 1s 刷新电量
@@ -2501,6 +2555,21 @@ void loop() {
                     handleMicApp(M5Cardputer.Keyboard.keysState());
                 }
                 break;
+            case AppState::NEON_FX:
+                if (M5Cardputer.Keyboard.isPressed()) {
+                    handleNeonFxApp(M5Cardputer.Keyboard.keysState());
+                }
+                break;
+            case AppState::DICE:
+                if (M5Cardputer.Keyboard.isPressed()) {
+                    handleDiceApp(M5Cardputer.Keyboard.keysState());
+                }
+                break;
+            case AppState::NEWTON_CRADLE:
+                if (M5Cardputer.Keyboard.isPressed()) {
+                    handleNewtonCradleApp(M5Cardputer.Keyboard.keysState());
+                }
+                break;
             case AppState::WIFI:
                 if (M5Cardputer.Keyboard.isPressed()) {
                     handleWifiApp(M5Cardputer.Keyboard.keysState());
@@ -2602,10 +2671,16 @@ void loop() {
     // 实时 app 不休眠；Cursor 无操作 5 分钟后 1s 一拍，否则 10ms；其它状态 yield 10ms
     if (currentState == AppState::CURSOR && isCursorIdleSlowLoop()) {
         delay(1000);
+    } else if ((currentState == AppState::NEON_FX && isNeonFxHelpVisible()) ||
+               (currentState == AppState::DICE && isDiceHelpVisible())) {
+        // Help 页静态展示，节流到 ~30ms 节省 CPU
+        delay(30);
     } else if (currentState == AppState::HID_KEYBOARD) {
         // HID 键盘：更密采样 + 排空 BLE 发送队列
         delay(2);
     } else if (currentState != AppState::BMI && currentState != AppState::MIC &&
+               currentState != AppState::NEON_FX && currentState != AppState::DICE &&
+               currentState != AppState::NEWTON_CRADLE &&
                currentState != AppState::RTC) {
         delay(10);
     }

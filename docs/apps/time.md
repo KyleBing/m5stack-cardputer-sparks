@@ -56,6 +56,7 @@
 |------|------|
 | `r` | NTP 同步（需 WiFi） |
 | `p` | Pure |
+| `b` | Pure 模式下切换大号默认字体时钟（仅显示时、分） |
 | `h` | Help |
 
 ### Countdown · 设置 SETUP
@@ -123,4 +124,4 @@ Uptime 与 Clock 仅在 Time 前台刷新显示；**Countdown** 与 **Stopwatch*
 
 ### Pure 模式
 
-Pure 隐藏 header / 底栏 tip，Countdown 到期页仍保留 **取消提示**；后台计时与响铃逻辑与非 Pure 相同。
+Pure 隐藏 header / 底栏 tip，Clock 中可按 `b` 切换自动适配屏幕的最大默认字体时钟；Countdown 到期页仍保留 **取消提示**；后台计时与响铃逻辑与非 Pure 相同。

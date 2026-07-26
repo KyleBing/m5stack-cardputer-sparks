@@ -65,6 +65,9 @@
 | `g` | [IMU](./imu) | IMU(芯片BMI270) 姿态可视化 |
 | `l` | [RGB LED](./rgb-led) | 板载 LED 测试 |
 | `r` | [Mic](./mic) | 实时波形 + VU + 增益 展示 |
+| `y` | [Neon FX](./neon-fx) | 高帧率调色板动画 + 软渲染立方体 |
+| `z` | [Dice](./dice) | BMI270 摇晃掷骰，静止后面朝上 |
+| `q` | [Newton Cradle](./newton-cradle) | 约束摆、近弹性碰撞与真实钢球光照 |
 | `d` | [Display](./display) | 屏幕显示测试，色块 / 格 / 线条 |
 | `a` | [Icons](./icons) | 固件内的图标查看 |
 | `f` | [Font](./font) | 字体预览 |
