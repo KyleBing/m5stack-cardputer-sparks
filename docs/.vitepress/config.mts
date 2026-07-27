@@ -138,9 +138,13 @@ export default defineConfig({
                 link: '/apps/mini-games',
                 collapsed: false,
                 items: [
+                  { text: 'Coin Toss 硬币', link: '/apps/coin-toss' },
+                  { text: 'Double Pendulum 双摆', link: '/apps/double-pendulum' },
+                  { text: 'Prize Wheel 抽奖轮', link: '/apps/prize-wheel' },
                   { text: 'Dice 骰子', link: '/apps/dice' },
                   { text: 'Newton Cradle 牛顿摆', link: '/apps/newton-cradle' },
                   { text: 'Neon FX 动画', link: '/apps/neon-fx' },
+                  { text: 'Curves 方程曲线', link: '/apps/curves' },
                 ],
               },
               {
@@ -260,9 +264,13 @@ export default defineConfig({
                 link: '/en/apps/mini-games',
                 collapsed: false,
                 items: [
+                  { text: 'Coin Toss', link: '/en/apps/coin-toss' },
+                  { text: 'Double Pendulum', link: '/en/apps/double-pendulum' },
+                  { text: 'Prize Wheel', link: '/en/apps/prize-wheel' },
                   { text: 'Dice', link: '/en/apps/dice' },
                   { text: 'Newton Cradle', link: '/en/apps/newton-cradle' },
                   { text: 'Neon FX', link: '/en/apps/neon-fx' },
+                  { text: 'Curves', link: '/en/apps/curves' },
                 ],
               },
               {

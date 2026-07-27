@@ -62,5 +62,5 @@
 | 键 | App | 说明 |
 |----|-----|------|
 | `r` | [Mic](./mic) | 实时波形 + VU + 增益 展示 |
-| `g` | [Mini Games](./mini-games) | 硬币、双摆、抽奖轮、Dice、牛顿摆、Neon FX 与曲线 |
+| `g` | [Mini Games](./mini-games) | [硬币](./coin-toss)、[双摆](./double-pendulum)、[抽奖轮](./prize-wheel)、[Dice](./dice)、[牛顿摆](./newton-cradle)、[Neon FX](./neon-fx)、[曲线](./curves) |
 | `h` | [Hardware Test](./hardware-test) | Display、IMU、Font、Icons、LED、BLE 与 I2C |

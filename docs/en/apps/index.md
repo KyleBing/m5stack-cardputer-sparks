@@ -62,5 +62,5 @@ More detail: [Getting Started · Main Menu](/en/guide/getting-started#main-menu)
 | Key | App | Description |
 |-----|-----|-------------|
 | `r` | [Mic](./mic) | Live waveform + VU + gain |
-| `g` | [Mini Games](./mini-games) | Coin, double pendulum, wheel, Dice, Newton cradle, Neon FX, and curves |
+| `g` | [Mini Games](./mini-games) | [Coin](./coin-toss), [pendulum](./double-pendulum), [wheel](./prize-wheel), [Dice](./dice), [Newton cradle](./newton-cradle), [Neon FX](./neon-fx), [curves](./curves) |
 | `h` | [Hardware Test](./hardware-test) | Display, IMU, Font, Icons, LED, BLE, and I2C |
