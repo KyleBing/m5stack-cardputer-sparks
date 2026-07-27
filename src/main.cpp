@@ -103,29 +103,28 @@ struct MenuItem {
 
 // Cardputer 技能 → 字母入口
 static const MenuItem MENU_ITEMS[] = {
-    // 常用 app
-    {'m', "Mij", "Mijia", AppState::MIJIA},
-    {'u', "Cfg", "Config", AppState::WEB},
-    {'w', "WiFi", "WiFi", AppState::WIFI},
-    {'t', "Time", "Time", AppState::RTC},
-    {'s', "Slp", "Sleep", AppState::SLEEP},
-    {'o', "Opt", "Options", AppState::SETTINGS},
-    {'i', "Inf", "Info", AppState::INFO},
-    {'p', "Bat", "Battery", AppState::BATTERY},
-    {'c', "Cur", "Cursor", AppState::CURSOR},
-    {'v', "Ver", "Version", AppState::VERSION},
-    {'j', "Mor", "Morse", AppState::MORSE},
-    {'x', "IR", "Infrared", AppState::IR},
+    // 常用 app（菜单显示 name_full，全大写）
+    {'m', "Mij", "MIJIA", AppState::MIJIA},
+    {'u', "Cfg", "CONFIG", AppState::WEB},
+    {'w', "WiFi", "WIFI", AppState::WIFI},
+    {'t', "Time", "TIME", AppState::RTC},
+    {'s', "Slp", "SLEEP", AppState::SLEEP},
+    {'o', "Opt", "OPTIONS", AppState::SETTINGS},
+    {'i', "Inf", "INFO", AppState::INFO},
+    {'p', "Bat", "BATTERY", AppState::BATTERY},
+    {'c', "Cur", "CURSOR", AppState::CURSOR},
+    {'v', "Ver", "VERSION", AppState::VERSION},
+    {'j', "Mor", "MORSE", AppState::MORSE},
+    {'x', "IR", "INFRARED", AppState::IR},
 
     // 系统功能测试
-    {'k', "KB", "Keyboard", AppState::HID_KEYBOARD},
-    {'r', "Mic", "Mic", AppState::MIC},
-    {'g', "Game", "Mini Games", AppState::GAMES},
-    {'h', "Test", "Hardware Test", AppState::HARDWARE_TESTS},
+    {'k', "KB", "KEYBOARD", AppState::HID_KEYBOARD},
+    {'r', "Mic", "MIC", AppState::MIC},
+    {'g', "Game", "MINI GAMES", AppState::GAMES},
+    {'h', "Test", "HARDWARE TEST", AppState::HARDWARE_TESTS},
 };
 
 static const int MENU_ITEM_COUNT = sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0]);
-const int GAP_VERTICAL = 3;
 
 AppState currentState = AppState::MENU;
 static HardwareTestMode hardwareTestMode = HardwareTestMode::HUB;
@@ -226,11 +225,15 @@ const char* getCurrentAppShotSlug() {
             return "unknown";
     }
 }
-static constexpr int MENU_COLS = 3;
-static constexpr int MENU_ROWS_PER_PAGE = 5;
+static constexpr int MENU_COLS = 2;
+static constexpr int MENU_ROWS_PER_PAGE = 4;
 static constexpr int MENU_ITEMS_PER_PAGE = MENU_COLS * MENU_ROWS_PER_PAGE;
-static constexpr int MENU_KEY_TEXT_SIZE = 2;
-static constexpr int MENU_LINE_H = 18; // 与 2 倍按键块高度一致
+static constexpr int MENU_CARD_W = 111;
+static constexpr int MENU_CARD_H = 22;
+static constexpr int MENU_CARD_GAP_X = 8;
+static constexpr int MENU_CARD_GAP_Y = 4;
+static constexpr int MENU_CARD_ORIGIN_X = 5;
+static constexpr int MENU_CARD_ORIGIN_Y = APP_CONTENT_Y - 3; // header 下方，相对默认上移 3px
 
 static int menuPage = 0;
 static bool menuNoAppPrompt = false;
@@ -238,6 +241,35 @@ static bool menuNoAppPrompt = false;
 // 计算菜单总页数
 int getMenuPageCount() {
     return (MENU_ITEM_COUNT + MENU_ITEMS_PER_PAGE - 1) / MENU_ITEMS_PER_PAGE;
+}
+
+// 主页菜单五彩强调色（按全局序号循环，翻页颜色稳定）
+static uint16_t menuAccentColor(const int index) {
+    static const uint8_t kColors[][3] = {
+        {0xE9, 0xC4, 0x6A}, // gold
+        {0xB0, 0x6C, 0xFF}, // purple
+        {0xFF, 0x9D, 0x3F}, // orange
+        {0xFF, 0x5E, 0x68}, // coral
+        {0x56, 0xA8, 0xFF}, // blue
+        {0x42, 0xD3, 0x92}, // green
+        {0xFF, 0x7A, 0xC8}, // pink
+        {0x3D, 0xC4, 0xBF}, // teal
+    };
+    constexpr int n = static_cast<int>(sizeof(kColors) / sizeof(kColors[0]));
+    const uint8_t* c = kColors[((index % n) + n) % n];
+    return M5Cardputer.Display.color565(c[0], c[1], c[2]);
+}
+
+static uint16_t menuHubBg() {
+    return M5Cardputer.Display.color565(0x05, 0x08, 0x0D);
+}
+
+static uint16_t menuCardBg() {
+    return M5Cardputer.Display.color565(0x0D, 0x16, 0x22);
+}
+
+static uint16_t menuTitleColor() {
+    return M5Cardputer.Display.color565(0xF4, 0xF1, 0xE8);
 }
 
 // 无对应 app 时在菜单态居中提示（保留主菜单 header，不显示子界面返回键）
@@ -271,16 +303,25 @@ static void showMenuNoAppPrompt(const char key) {
     M5Cardputer.Display.drawCenterString(hint, center_x, text_y + line_h + 4);
 }
 
-// 绘制单个菜单项：按键块 + 名称
-static void drawMenuItemAt(const int x, const int y, const MenuItem& item) {
-    const int badge_w = drawKeyBadge(x, y, item.key, MENU_KEY_TEXT_SIZE);
-    M5Cardputer.Display.setTextSize(MENU_KEY_TEXT_SIZE);
-    M5Cardputer.Display.setTextColor(APP_COLOR_TEXT, BLACK);
-    M5Cardputer.Display.setCursor(x + badge_w, y + 1);
-    M5Cardputer.Display.print(item.name);
+// Games/Test 风格卡片：彩色字母徽章 + 全名
+static void drawMenuItemAt(const int x, const int y, const MenuItem& item, const int index) {
+    const uint16_t accent = menuAccentColor(index);
+    const uint16_t card_bg = menuCardBg();
+    const char letter = static_cast<char>(toupper(static_cast<unsigned char>(item.key)));
+
+    M5Cardputer.Display.fillRoundRect(x, y, MENU_CARD_W, MENU_CARD_H, 4, card_bg);
+    M5Cardputer.Display.drawRoundRect(x, y, MENU_CARD_W, MENU_CARD_H, 4, accent);
+    M5Cardputer.Display.fillRoundRect(x + 4, y + 3, 18, 16, 3, accent);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(BLACK, accent);
+    M5Cardputer.Display.setCursor(x + 10, y + 7);
+    M5Cardputer.Display.print(letter);
+    M5Cardputer.Display.setTextColor(menuTitleColor(), card_bg);
+    M5Cardputer.Display.setCursor(x + 28, y + 7);
+    M5Cardputer.Display.print(item.name_full);
 }
 
-// 绘制主菜单当前页
+// 绘制主菜单当前页（2 列卡片，五彩强调色）
 void drawMenuPage() {
     const int startIdx = menuPage * MENU_ITEMS_PER_PAGE;
     const int endIdx = (startIdx + MENU_ITEMS_PER_PAGE < MENU_ITEM_COUNT)
@@ -288,17 +329,21 @@ void drawMenuPage() {
                            : MENU_ITEM_COUNT;
 
     const int screen_w = M5Cardputer.Display.width();
-    const int col_w = (screen_w - APP_CONTENT_X * 2) / MENU_COLS;
+    const int screen_h = M5Cardputer.Display.height();
+    // 背景从卡片起点铺满，避免上移后露出空隙
+    M5Cardputer.Display.fillRect(0, MENU_CARD_ORIGIN_Y, screen_w, screen_h - MENU_CARD_ORIGIN_Y,
+                                 menuHubBg());
 
     int row = 0;
     for (int i = startIdx; i < endIdx; i += MENU_COLS) {
-        const int y = APP_CONTENT_Y + row * (MENU_LINE_H + GAP_VERTICAL);
+        const int y = MENU_CARD_ORIGIN_Y + row * (MENU_CARD_H + MENU_CARD_GAP_Y);
         for (int col = 0; col < MENU_COLS; ++col) {
             const int idx = i + col;
             if (idx >= endIdx) {
                 break;
             }
-            drawMenuItemAt(APP_CONTENT_X + col * col_w, y, MENU_ITEMS[idx]);
+            const int x = MENU_CARD_ORIGIN_X + col * (MENU_CARD_W + MENU_CARD_GAP_X);
+            drawMenuItemAt(x, y, MENU_ITEMS[idx], idx);
         }
         row++;
     }
@@ -1979,34 +2024,77 @@ void handleDisplayApp(const Keyboard_Class::KeysState& status) {
 }
 
 // ===== HARDWARE TEST 二层入口 =====
+// 独有冷青主题（与 Games 暖金区分）
+static uint16_t hwHubRgb(const uint8_t r, const uint8_t g, const uint8_t b) {
+    return M5Cardputer.Display.color565(r, g, b);
+}
 
-static void drawHardwareTestHubCard(const int x, const int y, const char key,
-                                    const char* title, const uint16_t accent) {
+static uint16_t hwHubBg() {
+    return hwHubRgb(0x04, 0x0A, 0x10);
+}
+
+static uint16_t hwHubCardBg() {
+    return hwHubRgb(0x0A, 0x18, 0x22);
+}
+
+static uint16_t hwHubAccent() {
+    return hwHubRgb(0x4E, 0xC8, 0xE8); // 冷青主色
+}
+
+static uint16_t hwHubTitle() {
+    return hwHubRgb(0xD0, 0xEC, 0xF4);
+}
+
+static uint16_t hwHubMuted() {
+    return hwHubRgb(0x7A, 0x9A, 0xA8);
+}
+
+// 顶栏：左标题 + 右提示，无系统 Header
+static void drawHardwareTestTopLabel(const char* right) {
+    const uint16_t bg = hwHubBg();
+    constexpr const char* title = "HARDWARE TEST";
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(hwHubAccent(), bg);
+    M5Cardputer.Display.setCursor(4, 3);
+    M5Cardputer.Display.print(title);
+    if (right != nullptr && right[0] != '\0') {
+        const int screen_w = M5Cardputer.Display.width();
+        M5Cardputer.Display.setTextColor(hwHubMuted(), bg);
+        M5Cardputer.Display.setCursor(screen_w - static_cast<int>(strlen(right)) * 6 - 4, 3);
+        M5Cardputer.Display.print(right);
+    }
+}
+
+static void drawHardwareTestHubCard(const int x, const int y, const char key, const char* title) {
     constexpr int card_w = 111;
     constexpr int card_h = 23;
-    M5Cardputer.Display.fillRoundRect(x, y, card_w, card_h, 4, BLACK);
+    const uint16_t card_bg = hwHubCardBg();
+    const uint16_t accent = hwHubAccent();
+    M5Cardputer.Display.fillRoundRect(x, y, card_w, card_h, 4, card_bg);
     M5Cardputer.Display.drawRoundRect(x, y, card_w, card_h, 4, accent);
     M5Cardputer.Display.fillRoundRect(x + 4, y + 3, 18, 17, 3, accent);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(BLACK, accent);
     M5Cardputer.Display.setCursor(x + 10, y + 8);
     M5Cardputer.Display.print(key);
-    M5Cardputer.Display.setTextColor(APP_COLOR_TEXT, BLACK);
+    M5Cardputer.Display.setTextColor(hwHubTitle(), card_bg);
     M5Cardputer.Display.setCursor(x + 28, y + 8);
     M5Cardputer.Display.print(title);
 }
 
 static void drawHardwareTestsHub() {
     hardwareTestMode = HardwareTestMode::HUB;
-    beginAppScreen("Hardware Test");
-    drawHardwareTestHubCard(5, 16, '1', "Display", APP_COLOR_LABEL);
-    drawHardwareTestHubCard(124, 16, '2', "IMU", APP_COLOR_OK);
-    drawHardwareTestHubCard(5, 43, '3', "Font", APP_COLOR_VALUE);
-    drawHardwareTestHubCard(124, 43, '4', "Icons", APP_COLOR_WARN);
-    drawHardwareTestHubCard(5, 70, '5', "RGB LED", APP_COLOR_MENU_KEY);
-    drawHardwareTestHubCard(124, 70, '6', "BLE", APP_COLOR_LABEL);
-    drawHardwareTestHubCard(5, 97, '7', "InI2", APP_COLOR_OK);
-    drawHardwareTestHubCard(124, 97, '8', "ExI2", APP_COLOR_VALUE);
+    M5Cardputer.Display.fillScreen(hwHubBg());
+    drawHardwareTestTopLabel("1-8 SELECT");
+    // 全部卡片统一冷青，形成 Test 独有识别
+    drawHardwareTestHubCard(5, 16, '1', "DISPLAY");
+    drawHardwareTestHubCard(124, 16, '2', "IMU");
+    drawHardwareTestHubCard(5, 43, '3', "FONT");
+    drawHardwareTestHubCard(124, 43, '4', "ICONS");
+    drawHardwareTestHubCard(5, 70, '5', "RGB LED");
+    drawHardwareTestHubCard(124, 70, '6', "BLE");
+    drawHardwareTestHubCard(5, 97, '7', "INI2");
+    drawHardwareTestHubCard(124, 97, '8', "EXI2");
 }
 
 static void leaveHardwareTestChild(const HardwareTestMode mode) {

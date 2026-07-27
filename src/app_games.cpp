@@ -364,9 +364,10 @@ static void resetPendulum(const bool randomize) {
 static void stepPendulum(const float dt) {
     constexpr float g = 9.4f;
     constexpr float m1 = 1.0f;
-    constexpr float m2 = 1.0f;
+    // 末端质量更小、第二段更长，更容易走出混沌轨迹
+    constexpr float m2 = 0.35f;
     constexpr float l1 = 1.0f;
-    constexpr float l2 = 0.88f;
+    constexpr float l2 = 1.45f;
     const float delta = g_pend_a1 - g_pend_a2;
     const float den = 2.0f * m1 + m2 - m2 * cosf(2.0f * delta);
     if (fabsf(den) < 0.001f) {
@@ -396,9 +397,10 @@ static void stepPendulum(const float dt) {
 
 static void pendulumPoints(int& x1, int& y1, int& x2, int& y2) {
     constexpr int pivot_x = 120;
-    constexpr int pivot_y = 22;
-    constexpr float l1 = 38.0f;
-    constexpr float l2 = 34.0f;
+    constexpr int pivot_y = 18;
+    // 整体加长，第二段尤其更长（与物理 l2/l1 比例接近）
+    constexpr float l1 = 44.0f;
+    constexpr float l2 = 58.0f;
     x1 = pivot_x + static_cast<int>(l1 * sinf(g_pend_a1));
     y1 = pivot_y + static_cast<int>(l1 * cosf(g_pend_a1));
     x2 = x1 + static_cast<int>(l2 * sinf(g_pend_a2));
@@ -435,13 +437,14 @@ static void drawPendulum() {
 
     int x1, y1, x2, y2;
     pendulumPoints(x1, y1, x2, y2);
-    gamesCanvas.drawLine(120, 22, x1, y1, 8);
+    gamesCanvas.drawLine(120, 18, x1, y1, 8);
     gamesCanvas.drawLine(x1, y1, x2, y2, 7);
-    gamesCanvas.fillCircle(120, 22, 3, 5);
+    gamesCanvas.fillCircle(120, 18, 3, 5);
     gamesCanvas.fillCircle(x1, y1, 7, 11);
     gamesCanvas.fillCircle(x1 - 2, y1 - 2, 2, 7);
-    gamesCanvas.fillCircle(x2, y2, 8, 12);
-    gamesCanvas.fillCircle(x2 - 2, y2 - 3, 2, 7);
+    // 末端球更小，对应更轻的 m2
+    gamesCanvas.fillCircle(x2, y2, 5, 12);
+    gamesCanvas.fillCircle(x2 - 1, y2 - 2, 1, 7);
 }
 
 static void spinWheel(const float charge) {
@@ -792,13 +795,15 @@ static void drawHubCard(const int x, const int y, const int number, const char* 
 static void drawHub() {
     gamesCanvas.fillSprite(0);
     drawTopLabel("1-7 SELECT");
-    drawHubCard(5, 16, 1, "COIN", 4);
-    drawHubCard(124, 16, 2, "CHAOS", 12);
-    drawHubCard(5, 43, 3, "WHEEL", 13);
-    drawHubCard(124, 43, 4, "DICE", 10);
-    drawHubCard(5, 70, 5, "PHYS", 11);
-    drawHubCard(124, 70, 6, "NEON FX", 3);
-    drawHubCard(5, 97, 7, "CURVES", 9);
+    // 菜单统一暖金主色，形成 Games 独有识别
+    constexpr uint8_t accent = 4;
+    drawHubCard(5, 16, 1, "COIN", accent);
+    drawHubCard(124, 16, 2, "CHAOS", accent);
+    drawHubCard(5, 43, 3, "WHEEL", accent);
+    drawHubCard(124, 43, 4, "DICE", accent);
+    drawHubCard(5, 70, 5, "PHYS", accent);
+    drawHubCard(124, 70, 6, "NEON FX", accent);
+    drawHubCard(5, 97, 7, "CURVES", accent);
 }
 
 static void drawHelpLine(const int y, const char* key, const char* text) {
