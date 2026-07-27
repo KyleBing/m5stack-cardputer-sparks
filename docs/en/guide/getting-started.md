@@ -23,11 +23,8 @@ Sparks is a multi-app firmware for the [M5Stack Cardputer](https://docs.m5stack.
 | `t` | Time | [Time](/en/apps/time) | `s` | Slp | [Sleep](/en/apps/sleep) | `o` | Opt | [Options](/en/apps/options) |
 | `i` | Inf | [Info](/en/apps/info) | `p` | Bat | [Battery](/en/apps/battery) | `c` | Cur | [Cursor](/en/apps/cursor) |
 | `v` | Ver | [Version](/en/apps/version) | `j` | Mor | [Morse](/en/apps/morse) | `x` | IR | [Infrared](/en/apps/infrared) |
-| `k` | KB | [Keyboard](/en/apps/hid-keyboard) | `g` | IMU | [IMU](/en/apps/imu) | `l` | LED | [RGB LED](/en/apps/rgb-led) |
-| `r` | Mic | [Mic](/en/apps/mic) | `y` | FX | [Neon FX](/en/apps/neon-fx) | `z` | Dice | [Dice](/en/apps/dice) |
-| `q` | Phys | [Newton Cradle](/en/apps/newton-cradle) |  |  |  |  |  |  |
-| `b` | BLE | [BLE](/en/apps/ble) | `d` | Disp | [Display](/en/apps/display) | `a` | Icn | [Icons](/en/apps/icons) |
-| `f` | Fnt | [Font](/en/apps/font) | `n` | InI2 | [InI2C](/en/apps/i2c) | `e` | ExI2 | [ExI2C](/en/apps/i2c) |
+| `k` | KB | [Keyboard](/en/apps/hid-keyboard) | `r` | Mic | [Mic](/en/apps/mic) | `g` | Game | [Mini Games](/en/apps/mini-games) |
+| `h` | Test | [Hardware Test](/en/apps/hardware-test) |  |  |  |  |  |  |
 
 The menu paginates with the keyboard arrow keys; no **Fn** needed.
 

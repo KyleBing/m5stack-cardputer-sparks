@@ -36,6 +36,7 @@ static int g_height = 0;
 static int g_launch_count = 1;
 static uint32_t g_last_ms = 0;
 static Pendulum g_balls[BALL_COUNT];
+static bool g_embedded = false;
 
 static float pivotX(const int index) {
     return g_width * 0.5f + (index - (BALL_COUNT - 1) * 0.5f) * PIVOT_SPACING;
@@ -284,16 +285,19 @@ static void drawScene() {
     cradleCanvas.setCursor(g_width - static_cast<int>(strlen(status)) * 6 - 4, 3);
     cradleCanvas.print(status);
 
-    cradleCanvas.fillRect(0, 127, g_width, 8, 0);
-    cradleCanvas.setTextColor(10);
-    cradleCanvas.setCursor(4, 128);
-    cradleCanvas.print("1/2/3 launch   SPC replay");
+    if (!g_embedded) {
+        cradleCanvas.fillRect(0, 127, g_width, 8, 0);
+        cradleCanvas.setTextColor(10);
+        cradleCanvas.setCursor(4, 128);
+        cradleCanvas.print("1/2/3 launch   SPC replay");
+    }
 }
 
 } // namespace
 
-void enterNewtonCradleApp() {
+void enterNewtonCradleApp(const bool embedded) {
     leaveNewtonCradleApp();
+    g_embedded = embedded;
     g_width = M5Cardputer.Display.width();
     g_height = M5Cardputer.Display.height();
     g_last_ms = millis();
@@ -350,5 +354,11 @@ void handleNewtonCradleApp(const Keyboard_Class::KeysState& status) {
         } else if (c == 'r' || c == 'R') {
             launchBalls(1);
         }
+    }
+}
+
+void pollNewtonCradleBtnA() {
+    if (M5Cardputer.BtnA.wasPressed()) {
+        launchBalls(g_launch_count);
     }
 }

@@ -1,6 +1,6 @@
 # BLE
 
-Main menu key: `b`
+Open with main menu `h`, then Hardware Test `6`.
 
 Scan nearby Bluetooth Low Energy devices and list name, address, and type category.
 

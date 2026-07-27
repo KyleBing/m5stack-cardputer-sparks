@@ -48,27 +48,20 @@ More detail: [Getting Started · Main Menu](/en/guide/getting-started#main-menu)
 |-----|-----|-------------|
 | `c` | [Cursor](./cursor) | Cursor usage Summary, day / week / month charts |
 | `k` | [Keyboard](./hid-keyboard) | USB / BLE HID keyboard |
-| `j` | [Morse](./morse) | Morse code tones |
+| `j` | [Morse](./morse) | Morse tones, symbol highlighting, and live waveform |
 
 ## System & Info
 
 | Key | App | Description |
 |-----|-----|-------------|
 | `o` | [Options](./options) | System settings: brightness, sound, time, infrared |
-| `i` | [Info](./info) | Memory / chip / firmware / network / runtime info |
+| `i` | [Info](./info) | Memory / storage / chip / firmware / network / runtime info |
 | `v` | [Version](./version) | Version / about |
 
 ## Hardware Debug & Demos
 
 | Key | App | Description |
 |-----|-----|-------------|
-| `g` | [IMU](./imu) | IMU (BMI270) attitude visualization |
-| `l` | [RGB LED](./rgb-led) | Onboard LED test |
 | `r` | [Mic](./mic) | Live waveform + VU + gain |
-| `y` | [Neon FX](./neon-fx) | High-frame-rate palette FX + software 3D cube |
-| `z` | [Dice](./dice) | BMI270 shake-to-roll; face snaps up when still |
-| `q` | [Newton Cradle](./newton-cradle) | Constrained pendulums, near-elastic impacts, realistic steel lighting |
-| `d` | [Display](./display) | Display tests: color blocks / grids / lines |
-| `a` | [Icons](./icons) | Browse firmware icons |
-| `f` | [Font](./font) | Font preview |
-| `n` / `e` | [I2C](./i2c) | Internal / external I2C scan |
+| `g` | [Mini Games](./mini-games) | Coin, double pendulum, wheel, Dice, Newton cradle, Neon FX, and curves |
+| `h` | [Hardware Test](./hardware-test) | Display, IMU, Font, Icons, LED, BLE, and I2C |

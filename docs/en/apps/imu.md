@@ -1,6 +1,6 @@
 # IMU
 
-Main menu key: `g`
+Open with main menu `h`, then Hardware Test `2`.
 
 BMI270 accelerometer / attitude visualization (XY / Z traces).
 

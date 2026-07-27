@@ -2,7 +2,7 @@
 
 主菜单按键：`i`
 
-只读系统信息，共 5 页：Memory / Chip / Fw / Net / Run。
+只读系统信息，共 6 页：Memory / Storage / Chip / Fw / Net / Run。
 
 ## 截图
 
@@ -25,13 +25,14 @@
 | `[` `]` | 上一页 / 下一页 |
 | 方向键等翻页键 | 翻页 |
 
-底栏显示 `N/5` 页码。
+底栏显示 `N/6` 页码。
 
 ## 使用说明
 
 | 页 | 内容 |
 |----|------|
 | Memory | Heap / PSRAM / Sketch / LittleFS 用量与进度条 |
+| Storage | 本地 Flash（LittleFS）与 TF 卡已用 / 剩余；无 TF 时显示 n/a |
 | Chip | 芯片型号、特性 |
 | Fw | 固件版本、编译时间等 |
 | Net | WiFi / IP / RSSI 等 |

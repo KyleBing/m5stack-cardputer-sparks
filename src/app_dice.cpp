@@ -70,8 +70,15 @@ static float g_result_reveal = 0;
 static uint32_t g_result_hold_ms = 0;
 static bool g_lineup_active = false;
 static float g_lineup_progress = 0;
+static int g_result_order[DICE_MAX];
+static bool g_result_order_valid = false;
+static float g_lineup_target_x[DICE_MAX];
+static float g_lineup_target_z[DICE_MAX];
 static bool g_space_held = false;
 static uint32_t g_space_press_ms = 0;
+
+static void invalidateResultOrder();
+static void computeResultOrder();
 
 static const float CUBE_VERTS[8][3] = {
     {-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1},
@@ -333,6 +340,7 @@ static void tossAll(const float power) {
     g_result_hold_ms = 0;
     g_lineup_active = false;
     g_lineup_progress = 0;
+    invalidateResultOrder();
     for (int i = 0; i < g_count; ++i) {
         tossDie(g_dice[i], power);
     }
@@ -340,13 +348,14 @@ static void tossAll(const float power) {
 
 static void updateSpaceToss(const uint32_t now) {
     const Keyboard_Class::KeysState keys = M5Cardputer.Keyboard.keysState();
-    const bool space_down = M5Cardputer.Keyboard.isPressed() && keys.space;
-    if (space_down && !g_space_held) {
+    const bool charge_down =
+        M5Cardputer.BtnA.isPressed() || (M5Cardputer.Keyboard.isPressed() && keys.space);
+    if (charge_down && !g_space_held) {
         g_space_held = true;
         g_space_press_ms = now;
         return;
     }
-    if (space_down || !g_space_held) {
+    if (charge_down || !g_space_held) {
         return;
     }
 
@@ -370,6 +379,7 @@ static void applyShakeImpulse(const float djx, const float djy, const float djz,
     g_result_hold_ms = 0;
     g_lineup_active = false;
     g_lineup_progress = 0;
+    invalidateResultOrder();
 
     for (int i = 0; i < g_count; ++i) {
         Die& d = g_dice[i];
@@ -725,6 +735,38 @@ static void recomputeSum() {
     }
 }
 
+// 按停稳后屏幕 X 从左到右排序，供结果展示与 lineup 使用
+static void computeResultOrder() {
+    int order[DICE_MAX];
+    float screen_x[DICE_MAX];
+    for (int i = 0; i < g_count; ++i) {
+        order[i] = i;
+        float sx = 0.0f;
+        float sy = 0.0f;
+        float depth = 0.0f;
+        projectWorld(g_dice[i].x, g_die_r, g_dice[i].z, sx, sy, depth);
+        screen_x[i] = sx;
+    }
+    for (int i = 0; i < g_count - 1; ++i) {
+        for (int j = i + 1; j < g_count; ++j) {
+            if (screen_x[order[i]] > screen_x[order[j]] ||
+                (fabsf(screen_x[order[i]] - screen_x[order[j]]) < 0.5f && order[i] > order[j])) {
+                const int t = order[i];
+                order[i] = order[j];
+                order[j] = t;
+            }
+        }
+    }
+    for (int i = 0; i < g_count; ++i) {
+        g_result_order[i] = order[i];
+    }
+    g_result_order_valid = true;
+}
+
+static void invalidateResultOrder() {
+    g_result_order_valid = false;
+}
+
 static bool allDiceSettled() {
     for (int i = 0; i < g_count; ++i) {
         if (!g_dice[i].settled) {
@@ -735,11 +777,17 @@ static bool allDiceSettled() {
 }
 
 static void startLineup() {
+    if (!g_result_order_valid) {
+        computeResultOrder();
+    }
     g_lineup_active = true;
     g_lineup_progress = 0;
-    for (int i = 0; i < g_count; ++i) {
-        g_dice[i].lineup_start_x = g_dice[i].x;
-        g_dice[i].lineup_start_z = g_dice[i].z;
+    for (int rank = 0; rank < g_count; ++rank) {
+        const int die_idx = g_result_order[rank];
+        g_dice[die_idx].lineup_start_x = g_dice[die_idx].x;
+        g_dice[die_idx].lineup_start_z = g_dice[die_idx].z;
+        g_lineup_target_x[die_idx] = (rank - (g_count - 1) * 0.5f) * 2.19f;
+        g_lineup_target_z[die_idx] = 1.65f;
     }
 }
 
@@ -752,11 +800,8 @@ static void updateLineup(const float dt) {
         g_lineup_progress * g_lineup_progress * (3.0f - 2.0f * g_lineup_progress);
     for (int i = 0; i < g_count; ++i) {
         Die& d = g_dice[i];
-        // 最终排列保持舒展，并与下方数字再增加约 3px 间距
-        const float target_x = (i - (g_count - 1) * 0.5f) * 2.19f;
-        const float target_z = 1.65f;
-        d.x = d.lineup_start_x + (target_x - d.lineup_start_x) * ease;
-        d.z = d.lineup_start_z + (target_z - d.lineup_start_z) * ease;
+        d.x = d.lineup_start_x + (g_lineup_target_x[i] - d.lineup_start_x) * ease;
+        d.z = d.lineup_start_z + (g_lineup_target_z[i] - d.lineup_start_z) * ease;
     }
 }
 
@@ -769,7 +814,9 @@ static void drawLineupValues() {
     const int badge_y = static_cast<int>(129.0f - reveal * 13.0f);
     diceCanvas.setTextSize(2);
     for (int i = 0; i < g_count; ++i) {
-        float sx, sy, depth;
+        float sx = 0.0f;
+        float sy = 0.0f;
+        float depth = 0.0f;
         projectWorld(g_dice[i].x, g_die_r, g_dice[i].z, sx, sy, depth);
         const int cx = static_cast<int>(sx);
         diceCanvas.setTextColor(19);
@@ -937,6 +984,7 @@ void enterDiceApp() {
     g_result_hold_ms = 0;
     g_lineup_active = false;
     g_lineup_progress = 0;
+    invalidateResultOrder();
     g_space_held = false;
     g_space_press_ms = 0;
     srand(static_cast<unsigned>(millis()));
@@ -1054,6 +1102,9 @@ void updateDiceApp() {
     }
     recomputeSum();
     if (g_has_rolled && allDiceSettled()) {
+        if (!g_result_order_valid) {
+            computeResultOrder();
+        }
         if (g_result_reveal < 1.0f) {
             g_result_reveal = fminf(1.0f, g_result_reveal + dt * 2.4f);
             if (g_result_reveal >= 1.0f) {
@@ -1067,6 +1118,7 @@ void updateDiceApp() {
     } else {
         g_result_reveal = 0;
         g_result_hold_ms = 0;
+        invalidateResultOrder();
     }
 
     drawArena();
@@ -1129,6 +1181,7 @@ void handleDiceApp(const Keyboard_Class::KeysState& status) {
                 g_result_hold_ms = 0;
                 g_lineup_active = false;
                 g_lineup_progress = 0;
+                invalidateResultOrder();
             }
         } else if (c == '=' || c == '+' || c == '.') {
             if (g_count < DICE_MAX) {
@@ -1140,6 +1193,7 @@ void handleDiceApp(const Keyboard_Class::KeysState& status) {
                 g_result_hold_ms = 0;
                 g_lineup_active = false;
                 g_lineup_progress = 0;
+                invalidateResultOrder();
             }
         }
     }

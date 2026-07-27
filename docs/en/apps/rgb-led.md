@@ -1,6 +1,6 @@
 # RGB LED
 
-Main menu key: `l`
+Open with main menu `h`, then Hardware Test `5`.
 
 Test the onboard RGB LED: on/off, color, brightness. Shares power with the LCD backlight; leaving the App turns the LED off and restores backlight logic.
 

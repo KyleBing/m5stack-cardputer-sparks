@@ -1,6 +1,6 @@
 # Newton Cradle
 
-Main menu key: `q`
+Open with main menu `g`, then Games `5`.
 
 A five-ball Newton's cradle simulation. The steel balls swing under gravity, transfer momentum through constrained impulse collisions, and lose energy gradually through light air damping and near-elastic impacts.
 
@@ -9,7 +9,7 @@ A five-ball Newton's cradle simulation. The steel balls swing under gravity, tra
 | Key | Action |
 |-----|--------|
 | `1` / `2` / `3` | Release that many balls from the left |
-| `Space` | Replay the current launch |
+| `Space` / `GO` | Replay the current launch |
 | `r` | Reset to a one-ball launch |
 
 ## Simulation and rendering

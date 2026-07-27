@@ -1,6 +1,6 @@
 # Icons
 
-Main menu key: `a`
+Open with main menu `h`, then Hardware Test `4`.
 
 Browse firmware UI / Mijia device / IR AC icon assets (including off/on and fan-speed variants).
 

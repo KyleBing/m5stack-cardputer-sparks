@@ -1,6 +1,6 @@
 # RGB LED
 
-主菜单按键：`l`
+进入方式：主菜单 `h` → Hardware Test `5`
 
 测试板载 RGB LED：开关、颜色、亮度。与 LCD 背光电源相关，离开 App 会关灯并恢复背光逻辑。
 

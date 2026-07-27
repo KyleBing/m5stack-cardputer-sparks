@@ -1,6 +1,6 @@
 # Font
 
-Main menu key: `f`
+Open with main menu `h`, then Hardware Test `3`.
 
 Page the font catalog and preview available sizes / glyphs.
 

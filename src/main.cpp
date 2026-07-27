@@ -22,6 +22,7 @@
 #include "app_neon_fx.h"
 #include "app_dice.h"
 #include "app_newton_cradle.h"
+#include "app_games.h"
 #include "app_battery.h"
 #include "app_info.h"
 #include "app_hid_keyboard.h"
@@ -57,6 +58,8 @@ enum class AppState {
     NEON_FX,
     DICE,
     NEWTON_CRADLE,
+    GAMES,
+    HARDWARE_TESTS,
     SETTINGS,
     RTC,
     IN_I2C,
@@ -76,6 +79,18 @@ enum class AppState {
     BATTERY,
     HID_KEYBOARD,
     INFO, // 系统信息 / 内存（字母 i）
+};
+
+enum class HardwareTestMode {
+    HUB,
+    SCREEN,
+    IMU,
+    FONT,
+    ICONS,
+    LED,
+    BLE,
+    IN_I2C,
+    EX_I2C,
 };
 
 struct MenuItem {
@@ -104,24 +119,16 @@ static const MenuItem MENU_ITEMS[] = {
 
     // 系统功能测试
     {'k', "KB", "Keyboard", AppState::HID_KEYBOARD},
-    {'g', "IMU", "IMU", AppState::BMI},
-    {'l', "LED", "RGB LED", AppState::LED},
     {'r', "Mic", "Mic", AppState::MIC},
-    {'y', "FX", "Neon FX", AppState::NEON_FX},
-    {'d', "Dice", "Dice", AppState::DICE},
-    {'q', "Phys", "Newton Cradle", AppState::NEWTON_CRADLE},
-    {'b', "BLE", "BLE", AppState::BLE},
-    {'z', "Disp", "Display", AppState::DISP},
-    {'a', "Icn", "Icons", AppState::ICONS},
-    {'f', "Fnt", "Font", AppState::FONT_DEMO},
-    {'n', "InI2", "InI2", AppState::IN_I2C},
-    {'e', "ExI2", "ExI2", AppState::EX_I2C},
+    {'g', "Game", "Mini Games", AppState::GAMES},
+    {'h', "Test", "Hardware Test", AppState::HARDWARE_TESTS},
 };
 
 static const int MENU_ITEM_COUNT = sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0]);
 const int GAP_VERTICAL = 3;
 
 AppState currentState = AppState::MENU;
+static HardwareTestMode hardwareTestMode = HardwareTestMode::HUB;
 static bool bmiScreenReady = false;
 static int bmiPrevDotX[2] = {-1, -1};
 static int bmiPrevDotY[2] = {-1, -1};
@@ -173,6 +180,10 @@ const char* getCurrentAppShotSlug() {
             return "dice";
         case AppState::NEWTON_CRADLE:
             return "newton";
+        case AppState::GAMES:
+            return "games";
+        case AppState::HARDWARE_TESTS:
+            return "hardware";
         case AppState::SETTINGS:
             return "options";
         case AppState::RTC:
@@ -304,6 +315,8 @@ void showMenu() {
     leaveNeonFxApp();
     leaveDiceApp();
     leaveNewtonCradleApp();
+    leaveGamesApp();
+    leaveMorseApp();
     leaveLedApp();
     leaveHidKeyboardApp();
     leaveIrApp(); // 释放红外图标 RAM 缓存
@@ -1965,6 +1978,112 @@ void handleDisplayApp(const Keyboard_Class::KeysState& status) {
     drawDisplayApp(dispPatternIndex + delta);
 }
 
+// ===== HARDWARE TEST 二层入口 =====
+
+static void drawHardwareTestHubCard(const int x, const int y, const char key,
+                                    const char* title, const uint16_t accent) {
+    constexpr int card_w = 111;
+    constexpr int card_h = 23;
+    M5Cardputer.Display.fillRoundRect(x, y, card_w, card_h, 4, BLACK);
+    M5Cardputer.Display.drawRoundRect(x, y, card_w, card_h, 4, accent);
+    M5Cardputer.Display.fillRoundRect(x + 4, y + 3, 18, 17, 3, accent);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(BLACK, accent);
+    M5Cardputer.Display.setCursor(x + 10, y + 8);
+    M5Cardputer.Display.print(key);
+    M5Cardputer.Display.setTextColor(APP_COLOR_TEXT, BLACK);
+    M5Cardputer.Display.setCursor(x + 28, y + 8);
+    M5Cardputer.Display.print(title);
+}
+
+static void drawHardwareTestsHub() {
+    hardwareTestMode = HardwareTestMode::HUB;
+    beginAppScreen("Hardware Test");
+    drawHardwareTestHubCard(5, 16, '1', "Display", APP_COLOR_LABEL);
+    drawHardwareTestHubCard(124, 16, '2', "IMU", APP_COLOR_OK);
+    drawHardwareTestHubCard(5, 43, '3', "Font", APP_COLOR_VALUE);
+    drawHardwareTestHubCard(124, 43, '4', "Icons", APP_COLOR_WARN);
+    drawHardwareTestHubCard(5, 70, '5', "RGB LED", APP_COLOR_MENU_KEY);
+    drawHardwareTestHubCard(124, 70, '6', "BLE", APP_COLOR_LABEL);
+    drawHardwareTestHubCard(5, 97, '7', "InI2", APP_COLOR_OK);
+    drawHardwareTestHubCard(124, 97, '8', "ExI2", APP_COLOR_VALUE);
+}
+
+static void leaveHardwareTestChild(const HardwareTestMode mode) {
+    if (mode == HardwareTestMode::LED) {
+        leaveLedApp();
+    }
+    g_i2c_help_visible = false;
+}
+
+static void enterHardwareTestsApp() {
+    drawHardwareTestsHub();
+}
+
+static void selectHardwareTest(const HardwareTestMode mode) {
+    hardwareTestMode = mode;
+    if (mode == HardwareTestMode::SCREEN) {
+        dispPatternIndex = 0;
+        drawDisplayApp(0);
+    } else if (mode == HardwareTestMode::IMU) {
+        bmiScreenReady = false;
+        drawBmiApp();
+    } else if (mode == HardwareTestMode::FONT) {
+        enterFontDemoApp();
+    } else if (mode == HardwareTestMode::ICONS) {
+        enterIconDemoApp();
+    } else if (mode == HardwareTestMode::LED) {
+        enterLedApp();
+    } else if (mode == HardwareTestMode::BLE) {
+        enterBleApp();
+    } else if (mode == HardwareTestMode::IN_I2C) {
+        g_i2c_help_visible = false;
+        drawI2cScanApp(M5Cardputer.In_I2C, "InI2");
+    } else if (mode == HardwareTestMode::EX_I2C) {
+        g_i2c_help_visible = false;
+        drawI2cScanApp(M5Cardputer.Ex_I2C, "ExI2");
+    }
+}
+
+static bool handleHardwareTestsBack() {
+    if (hardwareTestMode == HardwareTestMode::HUB) {
+        return false;
+    }
+    leaveHardwareTestChild(hardwareTestMode);
+    drawHardwareTestsHub();
+    return true;
+}
+
+static void handleHardwareTestsApp(const Keyboard_Class::KeysState& status) {
+    if (hardwareTestMode == HardwareTestMode::HUB) {
+        for (const char c : status.word) {
+            if (c >= '1' && c <= '8') {
+                selectHardwareTest(static_cast<HardwareTestMode>(
+                    static_cast<int>(HardwareTestMode::SCREEN) + (c - '1')));
+                return;
+            }
+        }
+        return;
+    }
+    if (hardwareTestMode == HardwareTestMode::SCREEN) {
+        handleDisplayApp(status);
+    } else if (hardwareTestMode == HardwareTestMode::FONT) {
+        handleFontDemoNav(status);
+    } else if (hardwareTestMode == HardwareTestMode::ICONS) {
+        handleIconDemoNav(status);
+    } else if (hardwareTestMode == HardwareTestMode::LED) {
+        handleLedApp(getPressedKey());
+    } else if (hardwareTestMode == HardwareTestMode::BLE) {
+        if (!handleBlePageNav(status)) {
+            handleBleApp(getPressedKey());
+        }
+    } else if (hardwareTestMode == HardwareTestMode::IN_I2C) {
+        handleI2cScanApp(getPressedKey(), M5Cardputer.In_I2C, "InI2", true);
+    } else if (hardwareTestMode == HardwareTestMode::EX_I2C) {
+        handleI2cScanApp(getPressedKey(), M5Cardputer.Ex_I2C, "ExI2", false);
+    }
+}
+
 // ===== SLEEP =====
 
 enum class SleepPhase {
@@ -2183,6 +2302,15 @@ void enterApp(const AppState state) {
     if (currentState == AppState::NEWTON_CRADLE && state != AppState::NEWTON_CRADLE) {
         leaveNewtonCradleApp();
     }
+    if (currentState == AppState::GAMES && state != AppState::GAMES) {
+        leaveGamesApp();
+    }
+    if (currentState == AppState::HARDWARE_TESTS && state != AppState::HARDWARE_TESTS) {
+        leaveHardwareTestChild(hardwareTestMode);
+    }
+    if (currentState == AppState::MORSE && state != AppState::MORSE) {
+        leaveMorseApp();
+    }
     if (currentState == AppState::HID_KEYBOARD && state != AppState::HID_KEYBOARD) {
         leaveHidKeyboardApp();
     }
@@ -2222,6 +2350,12 @@ void enterApp(const AppState state) {
             break;
         case AppState::NEWTON_CRADLE:
             enterNewtonCradleApp();
+            break;
+        case AppState::GAMES:
+            enterGamesApp();
+            break;
+        case AppState::HARDWARE_TESTS:
+            enterHardwareTestsApp();
             break;
         case AppState::RTC:
             enterRtcApp();
@@ -2398,6 +2532,12 @@ void loop() {
     // HID 键盘占用全部按键（含 ESC），改由侧边 BtnA 退出
     if (currentState != AppState::HID_KEYBOARD && wasBtnGoPressed()) {
         if (menuNoAppPrompt || currentState != AppState::MENU) {
+            if (currentState == AppState::GAMES && handleGamesBack()) {
+                return;
+            }
+            if (currentState == AppState::HARDWARE_TESTS && handleHardwareTestsBack()) {
+                return;
+            }
             if (currentState == AppState::MIC) {
                 leaveMicApp();
             }
@@ -2409,6 +2549,12 @@ void loop() {
             }
             if (currentState == AppState::NEWTON_CRADLE) {
                 leaveNewtonCradleApp();
+            }
+            if (currentState == AppState::GAMES) {
+                leaveGamesApp();
+            }
+            if (currentState == AppState::MORSE) {
+                leaveMorseApp();
             }
             showMenu();
             return;
@@ -2428,7 +2574,8 @@ void loop() {
             updateMenuHeaderStatus(getMenuPageCount());
         } else if (currentState != AppState::SLEEP && currentState != AppState::DISP &&
                    currentState != AppState::NEON_FX && currentState != AppState::DICE &&
-                   currentState != AppState::NEWTON_CRADLE &&
+                   currentState != AppState::NEWTON_CRADLE && currentState != AppState::GAMES &&
+                   currentState != AppState::HARDWARE_TESTS &&
                    !(currentState == AppState::RTC && isTimePureMode()) &&
                    !(currentState == AppState::CURSOR && isCursorDisplayBlanked()) &&
                    !(currentState == AppState::MIJIA && mijiaAppSuppressesHeader())) {
@@ -2446,12 +2593,31 @@ void loop() {
         // 每帧拉取：Mic.record 异步双槽，40ms 节流会造成断流破音
         updateMicApp();
     } else if (currentState == AppState::NEON_FX) {
+        pollNeonFxBtnA();
         // 调色板动画不节流，用屏幕实际吞吐量跑满刷新率。
         updateNeonFxApp();
     } else if (currentState == AppState::DICE) {
         updateDiceApp();
     } else if (currentState == AppState::NEWTON_CRADLE) {
+        pollNewtonCradleBtnA();
         updateNewtonCradleApp();
+    } else if (currentState == AppState::GAMES) {
+        pollGamesBtnA();
+        updateGamesApp();
+    } else if (currentState == AppState::HARDWARE_TESTS &&
+               hardwareTestMode == HardwareTestMode::IMU) {
+        static uint32_t lastHardwareImuUpdateMs = 0;
+        if (now - lastHardwareImuUpdateMs >= 100) {
+            lastHardwareImuUpdateMs = now;
+            drawBmiApp();
+        }
+    } else if (currentState == AppState::HARDWARE_TESTS &&
+               hardwareTestMode == HardwareTestMode::BLE) {
+        static uint32_t lastHardwareBleUpdateMs = 0;
+        if (now - lastHardwareBleUpdateMs >= 500) {
+            lastHardwareBleUpdateMs = now;
+            updateBleApp();
+        }
     } else if (currentState == AppState::BATTERY) {
         static uint32_t lastBatUpdateMs = 0;
         // 后台 NTP 时 250ms 轮询；平时 1s 刷新电量
@@ -2570,6 +2736,16 @@ void loop() {
                     handleNewtonCradleApp(M5Cardputer.Keyboard.keysState());
                 }
                 break;
+            case AppState::GAMES:
+                if (M5Cardputer.Keyboard.isPressed()) {
+                    handleGamesApp(M5Cardputer.Keyboard.keysState());
+                }
+                break;
+            case AppState::HARDWARE_TESTS:
+                if (M5Cardputer.Keyboard.isPressed()) {
+                    handleHardwareTestsApp(M5Cardputer.Keyboard.keysState());
+                }
+                break;
             case AppState::WIFI:
                 if (M5Cardputer.Keyboard.isPressed()) {
                     handleWifiApp(M5Cardputer.Keyboard.keysState());
@@ -2672,7 +2848,8 @@ void loop() {
     if (currentState == AppState::CURSOR && isCursorIdleSlowLoop()) {
         delay(1000);
     } else if ((currentState == AppState::NEON_FX && isNeonFxHelpVisible()) ||
-               (currentState == AppState::DICE && isDiceHelpVisible())) {
+               (currentState == AppState::DICE && isDiceHelpVisible()) ||
+               (currentState == AppState::GAMES && isGamesHelpVisible())) {
         // Help 页静态展示，节流到 ~30ms 节省 CPU
         delay(30);
     } else if (currentState == AppState::HID_KEYBOARD) {
@@ -2680,7 +2857,7 @@ void loop() {
         delay(2);
     } else if (currentState != AppState::BMI && currentState != AppState::MIC &&
                currentState != AppState::NEON_FX && currentState != AppState::DICE &&
-               currentState != AppState::NEWTON_CRADLE &&
+               currentState != AppState::NEWTON_CRADLE && currentState != AppState::GAMES &&
                currentState != AppState::RTC) {
         delay(10);
     }

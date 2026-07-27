@@ -570,3 +570,12 @@ void handleNeonFxApp(const Keyboard_Class::KeysState& status) {
         }
     }
 }
+
+void pollNeonFxBtnA() {
+    if (g_help_visible) {
+        return;
+    }
+    if (M5Cardputer.BtnA.wasPressed()) {
+        fxPulseMs = millis();
+    }
+}

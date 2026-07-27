@@ -1,6 +1,6 @@
 # Display
 
-Main menu key: `d`
+Open with main menu `h`, then Hardware Test `1`.
 
 Page through display test patterns: solid colors, checkerboards, lines, and more.
 

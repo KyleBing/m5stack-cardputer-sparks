@@ -1,6 +1,6 @@
 # Neon FX
 
-Main menu key: `y`
+Open with main menu `g`, then Games `6`.
 
 A high-frame-rate neon animation demo. Full-screen 8-bit palette Sprite: the pixel-index field is generated only when changing the pattern or moving the core; normal frames rotate the 256-color palette and push the canvas to the display. Also includes a software-rendered rotating cube (`CUBE`).
 
@@ -13,7 +13,7 @@ A high-frame-rate neon animation demo. Full-screen 8-bit palette Sprite: the pix
 | `m` or `,` `.` | Cycle Vortex / Plasma / Tunnel / Cube |
 | `-` `=` | Decrease / increase speed |
 | `r` | Reverse flow / rotation |
-| `Space` | Trigger a bright pulse |
+| `Space` / `GO` | Trigger a bright pulse |
 | `h` | Help (includes measured FPS) |
 
 ## Notes

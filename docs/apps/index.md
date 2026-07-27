@@ -32,7 +32,6 @@
 |----|-----|------|
 | `u` | [Config](./config) | 通过 AP、LAN 局域网 web 配置固件配置 config.json |
 | `w` | [WiFi](./wifi) | 连接、扫描、切换已保存 wifi（最多 5 条） |
-| `b` | [BLE](./ble) | 扫描附近 BLE 设备列表 |
 
 ## 时间与电源
 
@@ -48,27 +47,20 @@
 |----|-----|------|
 | `c` | [Cursor](./cursor) | Cursor 用量摘要、日、星期、月用量图表 |
 | `k` | [Keyboard](./hid-keyboard) | USB / BLE HID 键盘 |
-| `j` | [Morse](./morse) | 摩斯电码发声 |
+| `j` | [Morse](./morse) | 摩斯电码发声、点划高亮与实时波形 |
 
 ## 系统与信息
 
 | 键 | App | 说明 |
 |----|-----|------|
 | `o` | [Options](./options) | 系统层面的配置，屏幕亮度、声音、时间、红外 |
-| `i` | [Info](./info) | 查看 内存 / 芯片 / 固件 / 网络 / 运行信息 |
+| `i` | [Info](./info) | 查看 内存 / 存储 / 芯片 / 固件 / 网络 / 运行信息 |
 | `v` | [Version](./version) | 版本 关于 |
 
 ## 硬件调试与演示
 
 | 键 | App | 说明 |
 |----|-----|------|
-| `g` | [IMU](./imu) | IMU(芯片BMI270) 姿态可视化 |
-| `l` | [RGB LED](./rgb-led) | 板载 LED 测试 |
 | `r` | [Mic](./mic) | 实时波形 + VU + 增益 展示 |
-| `y` | [Neon FX](./neon-fx) | 高帧率调色板动画 + 软渲染立方体 |
-| `z` | [Dice](./dice) | BMI270 摇晃掷骰，静止后面朝上 |
-| `q` | [Newton Cradle](./newton-cradle) | 约束摆、近弹性碰撞与真实钢球光照 |
-| `d` | [Display](./display) | 屏幕显示测试，色块 / 格 / 线条 |
-| `a` | [Icons](./icons) | 固件内的图标查看 |
-| `f` | [Font](./font) | 字体预览 |
-| `n` / `e` | [I2C](./i2c) | 内部 / 外部 I2C 扫描 |
+| `g` | [Mini Games](./mini-games) | 硬币、双摆、抽奖轮、Dice、牛顿摆、Neon FX 与曲线 |
+| `h` | [Hardware Test](./hardware-test) | Display、IMU、Font、Icons、LED、BLE 与 I2C |

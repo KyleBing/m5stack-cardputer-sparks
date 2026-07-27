@@ -2,7 +2,7 @@
 
 Main menu key: `i`
 
-Read-only system info across 5 pages: Memory / Chip / Fw / Net / Run.
+Read-only system info across 6 pages: Memory / Storage / Chip / Fw / Net / Run.
 
 ## Screenshots
 
@@ -25,13 +25,14 @@ Read-only system info across 5 pages: Memory / Chip / Fw / Net / Run.
 | `[` `]` | Previous / next page |
 | Arrow and other page keys | Page |
 
-Footer shows `N/5` page index.
+Footer shows `N/6` page index.
 
 ## Usage
 
 | Page | Contents |
 |------|----------|
 | Memory | Heap / PSRAM / Sketch / LittleFS usage and bars |
+| Storage | Local Flash (LittleFS) and TF used / free; n/a when no TF |
 | Chip | Chip model and features |
 | Fw | Firmware version, build time, etc. |
 | Net | WiFi / IP / RSSI, etc. |

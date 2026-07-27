@@ -1,6 +1,7 @@
 #include "app_info.h"
 #include "app_common.h"
 #include "app_header.h"
+#include "app_screenshot.h"
 #include <FS.h>
 #include <LittleFS.h>
 #include <WiFi.h>
@@ -16,16 +17,17 @@ static constexpr int INFO_MAX_LINES = 8;
 static constexpr int INFO_BAR_H = 8;
 static constexpr int INFO_BAR_GAP = 3;
 static constexpr uint32_t INFO_REFRESH_MS = 500;
-// LittleFS / WiFi 查询较慢，单独降频，避免卡住刷新
+// LittleFS / WiFi / 存储查询较慢，单独降频，避免卡住刷新
 static constexpr uint32_t INFO_SLOW_SAMPLE_MS = 2000;
 
 enum class InfoPage : uint8_t {
     Mem = 0,
-    Chip = 1,
-    Fw = 2,
-    Net = 3,
-    Run = 4,
-    Count = 5,
+    Storage = 1,
+    Chip = 2,
+    Fw = 3,
+    Net = 4,
+    Run = 5,
+    Count = 6,
 };
 
 struct InfoLine {
@@ -62,6 +64,18 @@ static char g_mem_maxa[20] = "-";
 static char g_mem_hmin[20] = "-";
 static bool g_mem_cache_valid = false;
 
+// Storage 页：Flash(LittleFS) + TF；无卡时只探测一次，避免反复 SD.begin
+static uint32_t g_sto_flash_used = 0;
+static uint32_t g_sto_flash_total = 0;
+static uint32_t g_sto_flash_free = 0;
+static bool g_sto_flash_ok = false;
+static uint32_t g_sto_tf_used = 0;
+static uint32_t g_sto_tf_total = 0;
+static uint32_t g_sto_tf_free = 0;
+static bool g_sto_tf_ok = false;
+static bool g_sto_tf_probed = false;
+static bool g_sto_cache_valid = false;
+
 // 文字页静态缓冲（build 时写入，draw 时读）
 static char g_buf_model[24];
 static char g_buf_rev[8];
@@ -86,6 +100,8 @@ static const char* infoPageAccent(const int page) {
     switch (static_cast<InfoPage>(page)) {
         case InfoPage::Mem:
             return "Memory";
+        case InfoPage::Storage:
+            return "Storage";
         case InfoPage::Chip:
             return "Chip";
         case InfoPage::Fw:
@@ -223,6 +239,30 @@ static void formatMemPair(char* out, const size_t out_size, const uint32_t used,
     }
 }
 
+// 单段容量短文案（已用 / 剩余）
+static void formatSizeShort(char* out, const size_t out_size, const uint32_t bytes) {
+    if (bytes >= 1024u * 1024u * 1024u) {
+        // TF 大卡：一位小数 GB
+        const double gb = static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0);
+        snprintf(out, out_size, "%.1f GB", gb);
+    } else if (bytes >= 1024u * 1024u) {
+        snprintf(out, out_size, "%lu MB",
+                 static_cast<unsigned long>((bytes + 512u * 1024u) / (1024u * 1024u)));
+    } else {
+        snprintf(out, out_size, "%lu KB", static_cast<unsigned long>((bytes + 512u) / 1024u));
+    }
+}
+
+// 已用 · 剩余（Storage 页右侧）
+static void formatUsedFree(char* out, const size_t out_size, const uint32_t used,
+                           const uint32_t free_n) {
+    char u[16];
+    char f[16];
+    formatSizeShort(u, sizeof(u), used);
+    formatSizeShort(f, sizeof(f), free_n);
+    snprintf(out, out_size, "%s · free %s", u, f);
+}
+
 // 单行内存占用：标签 + used/total + 百分比 + 进度条
 // total==0 且 shell：空壳进度条（进页先画，避免空白）
 static int drawMemBarRow(const int x, const int y, const int w, const char* label,
@@ -243,6 +283,38 @@ static int drawMemBarRow(const int x, const int y, const int w, const char* labe
     static char pair[28];
     static char right[40];
     formatMemPair(pair, sizeof(pair), used, total);
+    snprintf(right, sizeof(right), "%s %d%%", pair, pct);
+
+    drawInfoLineAt(x, y, label, right, INFO_BODY_SIZE);
+
+    M5Cardputer.Display.drawRoundRect(x, bar_y, w, INFO_BAR_H, 2, APP_COLOR_MUTED);
+    const int fill_w = (w - 2) * pct / 100;
+    if (fill_w > 0) {
+        M5Cardputer.Display.fillRoundRect(x + 1, bar_y + 1, fill_w, INFO_BAR_H - 2, 1,
+                                          memUsedBarColor(pct));
+    }
+    return bar_y + INFO_BAR_H + INFO_BAR_GAP;
+}
+
+// Storage 行：已用 · 剩余 + 百分比 + 进度条
+static int drawStorageBarRow(const int x, const int y, const int w, const char* label,
+                             const uint32_t used, const uint32_t free_n, const uint32_t total,
+                             const bool shell = false) {
+    M5Cardputer.Display.fillRect(x, y, w, INFO_LINE_H + INFO_BAR_H + INFO_BAR_GAP, BLACK);
+
+    const int bar_y = y + INFO_LINE_H;
+    if (shell || total == 0) {
+        drawInfoLineAt(x, y, label, shell ? "--" : "n/a", INFO_BODY_SIZE);
+        M5Cardputer.Display.drawRoundRect(x, bar_y, w, INFO_BAR_H, 2, APP_COLOR_MUTED);
+        return bar_y + INFO_BAR_H + INFO_BAR_GAP;
+    }
+
+    const int used_pct = static_cast<int>((static_cast<uint64_t>(used) * 100ull) / total);
+    const int pct = constrain(used_pct, 0, 100);
+
+    static char pair[36];
+    static char right[48];
+    formatUsedFree(pair, sizeof(pair), used, free_n);
     snprintf(right, sizeof(right), "%s %d%%", pair, pct);
 
     drawInfoLineAt(x, y, label, right, INFO_BODY_SIZE);
@@ -341,6 +413,79 @@ static void drawInfoMemPage(const int x, const int y, const int w) {
     drawInfoLineAt(x, cy, "Max Alloc", g_mem_maxa, INFO_BODY_SIZE);
     cy += INFO_LINE_H;
     drawInfoLineAt(x, cy, "Min Free", g_mem_hmin, INFO_BODY_SIZE);
+}
+
+// Storage 空壳
+static void drawInfoStorageShell(const int x, const int y, const int w) {
+    int cy = y;
+    cy = drawStorageBarRow(x, cy, w, "Flash", 0, 0, 0, true);
+    cy = drawStorageBarRow(x, cy, w, "TF", 0, 0, 0, true);
+
+    // 补充两行说明，避免内容区太空
+    M5Cardputer.Display.fillRect(x, cy, w, INFO_LINE_H * 2, BLACK);
+    drawInfoLineAt(x, cy, "Flash", "LittleFS", INFO_BODY_SIZE);
+    cy += INFO_LINE_H;
+    drawInfoLineAt(x, cy, "TF", "optional", INFO_BODY_SIZE);
+}
+
+// 采样 Storage（Flash/TF 均降频；无 TF 时本页内不反复挂载）
+static void sampleInfoStorage(const bool force_slow) {
+    const uint32_t now = millis();
+    if (!force_slow && now - g_info_last_slow_ms < INFO_SLOW_SAMPLE_MS && g_sto_cache_valid) {
+        return;
+    }
+    g_info_last_slow_ms = now;
+
+    size_t flash_total = 0;
+    size_t flash_used = 0;
+    size_t flash_free = 0;
+    getFlashDataSpace(&flash_total, &flash_used, &flash_free);
+    g_sto_flash_total = static_cast<uint32_t>(flash_total);
+    g_sto_flash_used = static_cast<uint32_t>(flash_used);
+    g_sto_flash_free = static_cast<uint32_t>(flash_free);
+    g_sto_flash_ok = g_sto_flash_total > 0;
+
+    // 进页强制探测；已确认无卡则跳过，避免反复 SD.begin
+    if (force_slow || !g_sto_tf_probed || g_sto_tf_ok) {
+        size_t tf_total = 0;
+        size_t tf_used = 0;
+        size_t tf_free = 0;
+        getSdDataSpace(&tf_total, &tf_used, &tf_free);
+        g_sto_tf_total = static_cast<uint32_t>(tf_total);
+        g_sto_tf_used = static_cast<uint32_t>(tf_used);
+        g_sto_tf_free = static_cast<uint32_t>(tf_free);
+        g_sto_tf_ok = g_sto_tf_total > 0;
+        g_sto_tf_probed = true;
+    }
+
+    g_sto_cache_valid = true;
+}
+
+static void drawInfoStoragePage(const int x, const int y, const int w) {
+    if (!g_sto_cache_valid) {
+        drawInfoStorageShell(x, y, w);
+        return;
+    }
+
+    int cy = y;
+    if (g_sto_flash_ok) {
+        cy = drawStorageBarRow(x, cy, w, "Flash", g_sto_flash_used, g_sto_flash_free,
+                               g_sto_flash_total);
+    } else {
+        cy = drawStorageBarRow(x, cy, w, "Flash", 0, 0, 0, true);
+    }
+
+    if (g_sto_tf_ok) {
+        cy = drawStorageBarRow(x, cy, w, "TF", g_sto_tf_used, g_sto_tf_free, g_sto_tf_total);
+    } else {
+        // 无卡：n/a（非空壳 --）
+        cy = drawStorageBarRow(x, cy, w, "TF", 0, 0, 0, false);
+    }
+
+    M5Cardputer.Display.fillRect(x, cy, w, INFO_LINE_H * 2, BLACK);
+    drawInfoLineAt(x, cy, "Flash", "LittleFS", INFO_BODY_SIZE);
+    cy += INFO_LINE_H;
+    drawInfoLineAt(x, cy, "TF", g_sto_tf_ok ? "mounted" : "not present", INFO_BODY_SIZE);
 }
 
 // 采样当前文字页到 g_sec_cache（仅本页字段）
@@ -464,6 +609,8 @@ static void drawInfoHints() {
 static void sampleInfoCurrentPage(const bool force_slow) {
     if (g_info_page == static_cast<int>(InfoPage::Mem)) {
         sampleInfoMem(force_slow);
+    } else if (g_info_page == static_cast<int>(InfoPage::Storage)) {
+        sampleInfoStorage(force_slow);
     } else {
         sampleInfoTextPage(g_info_page, force_slow);
     }
@@ -477,6 +624,8 @@ static void drawInfoContent() {
 
     if (g_info_page == static_cast<int>(InfoPage::Mem)) {
         drawInfoMemPage(x, y, w);
+    } else if (g_info_page == static_cast<int>(InfoPage::Storage)) {
+        drawInfoStoragePage(x, y, w);
     } else if (g_sec_cache_valid) {
         drawInfoSectionAt(g_sec_cache, x, y, w);
     }
@@ -504,12 +653,21 @@ static void drawInfoApp(const bool full) {
         M5Cardputer.Display.fillRect(0, APP_HEADER_H, screen_w, screen_h - APP_HEADER_H, BLACK);
     }
 
-    // 进页/翻到 Memory：先画空壳，再采样填数（避免 LittleFS 查询导致空白）
-    if ((first_paint || page_changed) && g_info_page == static_cast<int>(InfoPage::Mem)) {
+    // 进页/翻到 Memory / Storage：先画空壳，再采样填数（避免文件系统查询导致空白）
+    if ((first_paint || page_changed) &&
+        (g_info_page == static_cast<int>(InfoPage::Mem) ||
+         g_info_page == static_cast<int>(InfoPage::Storage))) {
         const int x = APP_CONTENT_X;
         const int y = APP_CONTENT_Y;
         const int w = M5Cardputer.Display.width() - APP_CONTENT_X * 2;
-        drawInfoMemShell(x, y, w);
+        if (g_info_page == static_cast<int>(InfoPage::Mem)) {
+            drawInfoMemShell(x, y, w);
+        } else {
+            // 翻到 Storage 重新探测 TF（插拔后可再试）
+            g_sto_tf_probed = false;
+            g_sto_cache_valid = false;
+            drawInfoStorageShell(x, y, w);
+        }
         drawInfoHints();
         updateAppHeaderStatus();
     }
@@ -531,6 +689,7 @@ static bool advanceInfoPage(const int delta) {
     g_info_page = (g_info_page + delta + count) % count;
     g_sec_cache_valid = false;
     g_mem_cache_valid = false;
+    g_sto_cache_valid = false;
     return true;
 }
 
@@ -552,6 +711,8 @@ void enterInfoApp() {
     g_screen_ready = false;
     g_sec_cache_valid = false;
     g_mem_cache_valid = false;
+    g_sto_cache_valid = false;
+    g_sto_tf_probed = false;
     g_info_last_slow_ms = 0;
     drawInfoApp(true);
 }

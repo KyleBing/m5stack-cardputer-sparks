@@ -10,14 +10,19 @@
 
 ### 新增
 
+- **Mini Games**（`g`）：硬币、双摆、抽奖轮、骰子、牛顿摆、Neon FX、曲线七合一选择页；子游戏内 `ESC` / `GO` 回选择页
+- **Info Storage 页**：本地 Flash（LittleFS）与 TF 卡已用 / 剩余；无 TF 时显示 n/a
 - **Neon FX**（`y`）：全屏 8-bit 调色板高帧率动画（Vortex / Plasma / Tunnel）+ 软渲染立方体；左上角实测 FPS
-- **Dice**（`z`）：桌面物理骰子；IMU 晃动强度驱动滚动幅度；停稳后最短弧缓动面朝上；金色 TOTAL 结果牌；约 1s 后横排展示各骰点数
+- **Dice**（`z`）：桌面物理骰子；IMU 晃动强度驱动滚动幅度；停稳后最短弧缓动面朝上；金色 TOTAL 结果牌
 - **Newton Cradle**（`q`）：五球牛顿摆；固定摆长约束、重力、近弹性冲量碰撞与抛光钢球光照
 - **Time Pure 大号时钟**：Pure 模式下按 `b` 切换自动适配屏幕的最大默认字体时:分时钟
-- **文档**：中 / 英文 Neon FX、Dice、Newton Cradle 页；功能目录、入门主菜单表、VitePress 侧栏同步
+- **文档**：中 / 英文 Mini Games、Info Storage、Neon FX、Dice、Newton Cradle 页；功能目录、入门主菜单表、VitePress 侧栏同步
 
 ### 改进
 
+- **Prize Wheel**：长按 `Space` / `GO` 蓄力旋转；转动中 `-` / `=` 改格数会重置状态；金色 `#N` 结果牌并高亮中奖格
+- **Dice**：停稳后排布与点数按屏幕从左到右顺序；`TOTAL` 结果牌保持不变；`GO` 与空格同效蓄力投掷
+- **Mini Games**：硬币 / 双摆 / 曲线等触发同步响应侧边 `GO`（BtnA）；牛顿摆重放、Neon 脉冲等同效
 - **Font**：演示列表去掉不可用的 efontCN 占位项
 - **Dice**：骰子与点数放大；空格改为带 `POWER` 状态条的长按蓄力投掷，力度提升；缩短停止缓动与结果排列等待，放大并拉开最终点数展示
 
