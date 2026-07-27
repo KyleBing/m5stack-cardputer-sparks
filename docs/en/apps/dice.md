@@ -2,20 +2,21 @@
 
 Main menu key: `z`
 
-Warm ivory dice with tabletop physics. Shake or press Space to toss; IMU shake strength directly controls motion amplitude, then each die eases smoothly into its face-up pose.
+Warm ivory dice with tabletop physics. Shake the device or hold Space to charge a toss; IMU shake strength and Space hold time directly control motion amplitude, then each die quickly eases into its face-up pose.
 
 ## Shortcuts
 
 | Key | Action |
 |-----|--------|
 | `-` `=` | Dice count − / + (1–5) |
-| `Space` | Toss |
+| Hold `Space` | Charge, then toss on release (full power at 1.8 s) |
 | Shake device | Toss (rising-edge trigger) |
 | `h` | Help |
 
 ## Notes
 
 - Dice roll, bounce, and collide across a full-screen green felt tabletop.
+- While Space is held, a bottom `POWER` bar shows the live 0–100% charge.
 - Gentle shakes create small disturbances; hard shakes continuously add stronger translation, bounce, and spin impulses.
-- Final poses use smooth easing instead of snapping. A dynamic gold result banner reveals the total after all dice settle.
-- Perspective-positioned, enlarged pips remain readable while the dice roll.
+- Final poses use fast, smooth easing instead of snapping. A dynamic gold banner reveals the total, followed by a spaced row showing each die's value.
+- The enlarged dice use a prominent red 3 px pip for one and consistent 2 px black pips for all other values.

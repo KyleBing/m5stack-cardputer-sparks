@@ -11,11 +11,12 @@ namespace {
 static constexpr int DICE_MAX = 5;
 static constexpr int DICE_MIN = 1;
 static constexpr float REST = 0.48f;
-static constexpr float LINEAR_DRAG = 1.45f; // 每秒衰减率，不能按帧直接相乘
-static constexpr float ANGULAR_DRAG = 2.10f;
+static constexpr float LINEAR_DRAG = 1.90f; // 更强力投掷后仍能自然及时停下
+static constexpr float ANGULAR_DRAG = 2.80f;
 static constexpr float SETTLE_V = 0.16f;
 static constexpr float GRAVITY = 18.0f;
 static constexpr float FLOOR_BOUNCE = 0.38f;
+static constexpr uint32_t SPACE_FULL_POWER_MS = 1800;
 
 static constexpr int FACE_PX = 1;
 static constexpr int FACE_NX = 6;
@@ -69,6 +70,8 @@ static float g_result_reveal = 0;
 static uint32_t g_result_hold_ms = 0;
 static bool g_lineup_active = false;
 static float g_lineup_progress = 0;
+static bool g_space_held = false;
+static uint32_t g_space_press_ms = 0;
 
 static const float CUBE_VERTS[8][3] = {
     {-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1},
@@ -119,7 +122,8 @@ static void setupRoom() {
     g_width = M5Cardputer.Display.width();
     g_height = M5Cardputer.Display.height();
     // 扩大桌面边界，让骰子中心能够抵达四周屏幕边缘
-    g_die_r = 0.60f;
+    // 投影后的骰子边长增加约 4px
+    g_die_r = 0.71f;
     g_room_x = 6.2f;
     g_room_z = 4.6f;
     g_focal = 265.0f;
@@ -334,6 +338,27 @@ static void tossAll(const float power) {
     }
 }
 
+static void updateSpaceToss(const uint32_t now) {
+    const Keyboard_Class::KeysState keys = M5Cardputer.Keyboard.keysState();
+    const bool space_down = M5Cardputer.Keyboard.isPressed() && keys.space;
+    if (space_down && !g_space_held) {
+        g_space_held = true;
+        g_space_press_ms = now;
+        return;
+    }
+    if (space_down || !g_space_held) {
+        return;
+    }
+
+    // 松开后投掷；长按 1.8 秒达到最大力度，避免速度无限增大
+    const uint32_t held_ms = now - g_space_press_ms;
+    const float charge =
+        fminf(1.0f, static_cast<float>(held_ms) / static_cast<float>(SPACE_FULL_POWER_MS));
+    // 空格投掷力度提升为原来的三倍
+    tossAll((0.70f + charge * 1.50f) * 3.0f);
+    g_space_held = false;
+}
+
 static void applyShakeImpulse(const float djx, const float djy, const float djz,
                               const float intensity) {
     const float horizontal = sqrtf(djx * djx + djy * djy);
@@ -476,7 +501,7 @@ static void stepPhysics(const float dt) {
     for (int i = 0; i < g_count; ++i) {
         Die& d = g_dice[i];
         if (d.snapping) {
-            d.settle_t = fminf(1.0f, d.settle_t + dt / 0.48f);
+            d.settle_t = fminf(1.0f, d.settle_t + dt / 0.28f);
             const float ease = d.settle_t * d.settle_t * (3.0f - 2.0f * d.settle_t);
             const Quat current = quatSlerp(d.settle_start_q, d.settle_target_q, ease);
             quatToEuler(current, d.yaw, d.pitch, d.roll);
@@ -583,12 +608,8 @@ static void drawPips(const int x0, const int y0, const int x1, const int y1, con
     if (face < 1 || face > 6) {
         return;
     }
-    // 正面保持清晰大点，透视压缩明显的侧面改用小点避免糊成一片
-    const float edge_a =
-        sqrtf(static_cast<float>((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)));
-    const float edge_b =
-        sqrtf(static_cast<float>((x3 - x0) * (x3 - x0) + (y3 - y0) * (y3 - y0)));
-    const int r = (fminf(edge_a, edge_b) < 11.0f) ? 1 : 2;
+    // 一点保留醒目的红色大点，其余点数统一使用 2px 点
+    const int r = (face == 1) ? 3 : 2;
     for (int i = 0; i < face; ++i) {
         const float u = (offs[face][i][0] + 1.0f) * 0.5f;
         const float v = (offs[face][i][1] + 1.0f) * 0.5f;
@@ -731,9 +752,9 @@ static void updateLineup(const float dt) {
         g_lineup_progress * g_lineup_progress * (3.0f - 2.0f * g_lineup_progress);
     for (int i = 0; i < g_count; ++i) {
         Die& d = g_dice[i];
-        // 在原有间距上增加约 5px，最终结果横排更舒展
-        const float target_x = (i - (g_count - 1) * 0.5f) * 1.96f;
-        const float target_z = 2.45f;
+        // 最终排列再增加约 4px 间距，并整体上移约 4px
+        const float target_x = (i - (g_count - 1) * 0.5f) * 2.19f;
+        const float target_z = 2.13f;
         d.x = d.lineup_start_x + (target_x - d.lineup_start_x) * ease;
         d.z = d.lineup_start_z + (target_z - d.lineup_start_z) * ease;
     }
@@ -745,16 +766,16 @@ static void drawLineupValues() {
     }
     const float reveal = fminf(1.0f, (g_lineup_progress - 0.36f) / 0.34f);
     const int badge_y = static_cast<int>(132.0f - reveal * 13.0f);
-    diceCanvas.setTextSize(1);
+    diceCanvas.setTextSize(2);
     for (int i = 0; i < g_count; ++i) {
         float sx, sy, depth;
         projectWorld(g_dice[i].x, g_die_r, g_dice[i].z, sx, sy, depth);
         const int cx = static_cast<int>(sx);
-        diceCanvas.fillCircle(cx, badge_y, 7, 17);
-        diceCanvas.drawCircle(cx, badge_y, 7, 18);
+        diceCanvas.fillCircle(cx, badge_y, 10, 17);
+        diceCanvas.drawCircle(cx, badge_y, 10, 18);
         diceCanvas.setTextColor(19);
         char value[2] = {static_cast<char>('0' + g_dice[i].up_face), '\0'};
-        diceCanvas.drawCenterString(value, cx + 1, badge_y - 3);
+        diceCanvas.drawCenterString(value, cx + 1, badge_y - 7);
     }
 }
 
@@ -786,6 +807,38 @@ static void drawResultBanner() {
         const int glint_x = panel_x + 5 + static_cast<int>(ease * (panel_w - 10));
         diceCanvas.drawFastVLine(glint_x, panel_y + 4, panel_h - 8, 20);
     }
+}
+
+static void drawChargeIndicator(const uint32_t now) {
+    if (!g_space_held) {
+        return;
+    }
+
+    const uint32_t held_ms = now - g_space_press_ms;
+    const float charge =
+        fminf(1.0f, static_cast<float>(held_ms) / static_cast<float>(SPACE_FULL_POWER_MS));
+    constexpr int panel_w = 116;
+    constexpr int panel_h = 14;
+    constexpr int bar_w = 48;
+    const int panel_x = (g_width - panel_w) / 2;
+    const int panel_y = g_height - panel_h - 4;
+    const int bar_x = panel_x + 38;
+    const int bar_y = panel_y + 4;
+
+    diceCanvas.fillRoundRect(panel_x, panel_y, panel_w, panel_h, 4, 16);
+    diceCanvas.drawRoundRect(panel_x, panel_y, panel_w, panel_h, 4, 18);
+    diceCanvas.setTextSize(1);
+    diceCanvas.setTextColor(19);
+    diceCanvas.setCursor(panel_x + 5, panel_y + 3);
+    diceCanvas.print("POWER");
+    diceCanvas.drawRect(bar_x, bar_y, bar_w, 6, 18);
+    diceCanvas.fillRect(bar_x + 1, bar_y + 1,
+                        static_cast<int>((bar_w - 2) * charge), 4, 19);
+
+    char percent[6];
+    snprintf(percent, sizeof(percent), "%3d%%", static_cast<int>(charge * 100.0f));
+    diceCanvas.setCursor(panel_x + 89, panel_y + 3);
+    diceCanvas.print(percent);
 }
 
 static int drawHelpColHeader(const int x, const int y, const int w, const char* title) {
@@ -835,7 +888,7 @@ static void drawHelpPage() {
 
     int y = drawHelpColHeader(0, col_y, col_w, "keymap");
     y = drawHelpBadge(2, y, "-=", "dice - / +");
-    y = drawHelpBadge(2, y, "SPC", "toss");
+    y = drawHelpBadge(2, y, "SPC", "hold = power");
     y = drawHelpKey(2, y, 'h', "help / close");
     y = drawHelpBadge(2, y, "IMU", "shake = toss");
 
@@ -885,6 +938,8 @@ void enterDiceApp() {
     g_result_hold_ms = 0;
     g_lineup_active = false;
     g_lineup_progress = 0;
+    g_space_held = false;
+    g_space_press_ms = 0;
     srand(static_cast<unsigned>(millis()));
 
     M5Cardputer.Display.wakeup();
@@ -918,6 +973,8 @@ void enterDiceApp() {
 
 void leaveDiceApp() {
     g_help = false;
+    g_space_held = false;
+    g_space_press_ms = 0;
     if (diceCanvasOk) {
         diceCanvas.deleteSprite();
         diceCanvasOk = false;
@@ -954,6 +1011,7 @@ void updateDiceApp() {
         dt = 0.033f;
     }
     g_last_ms = now;
+    updateSpaceToss(now);
 
     float djx = 0;
     float djy = 0;
@@ -1003,7 +1061,7 @@ void updateDiceApp() {
                 g_result_hold_ms = now;
             }
         } else if (!g_lineup_active && g_result_hold_ms != 0 &&
-                   now - g_result_hold_ms >= 1000) {
+                   now - g_result_hold_ms >= 400) {
             startLineup();
         }
         updateLineup(dt);
@@ -1041,6 +1099,7 @@ void updateDiceApp() {
 
     drawLineupValues();
     drawResultBanner();
+    drawChargeIndicator(now);
     diceCanvas.pushSprite(0, 0);
 }
 
@@ -1049,6 +1108,7 @@ void handleDiceApp(const Keyboard_Class::KeysState& status) {
         if (c == 'h' || c == 'H') {
             g_help = !g_help;
             if (g_help) {
+                g_space_held = false;
                 drawHelpPage();
             } else {
                 M5Cardputer.Display.clear();
@@ -1061,9 +1121,7 @@ void handleDiceApp(const Keyboard_Class::KeysState& status) {
         if (g_help) {
             continue;
         }
-        if (c == ' ') {
-            tossAll(1.35f);
-        } else if (c == '-' || c == ',') {
+        if (c == '-' || c == ',') {
             if (g_count > DICE_MIN) {
                 --g_count;
                 recomputeSum();
