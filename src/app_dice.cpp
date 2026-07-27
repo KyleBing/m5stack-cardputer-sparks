@@ -752,9 +752,9 @@ static void updateLineup(const float dt) {
         g_lineup_progress * g_lineup_progress * (3.0f - 2.0f * g_lineup_progress);
     for (int i = 0; i < g_count; ++i) {
         Die& d = g_dice[i];
-        // 最终排列再增加约 4px 间距，并整体上移约 4px
+        // 最终排列保持舒展，并与下方数字再增加约 3px 间距
         const float target_x = (i - (g_count - 1) * 0.5f) * 2.19f;
-        const float target_z = 2.13f;
+        const float target_z = 1.65f;
         d.x = d.lineup_start_x + (target_x - d.lineup_start_x) * ease;
         d.z = d.lineup_start_z + (target_z - d.lineup_start_z) * ease;
     }
@@ -765,14 +765,13 @@ static void drawLineupValues() {
         return;
     }
     const float reveal = fminf(1.0f, (g_lineup_progress - 0.36f) / 0.34f);
-    const int badge_y = static_cast<int>(132.0f - reveal * 13.0f);
+    // 最终数字靠近底边显示，并保留安全留白
+    const int badge_y = static_cast<int>(129.0f - reveal * 13.0f);
     diceCanvas.setTextSize(2);
     for (int i = 0; i < g_count; ++i) {
         float sx, sy, depth;
         projectWorld(g_dice[i].x, g_die_r, g_dice[i].z, sx, sy, depth);
         const int cx = static_cast<int>(sx);
-        diceCanvas.fillCircle(cx, badge_y, 10, 17);
-        diceCanvas.drawCircle(cx, badge_y, 10, 18);
         diceCanvas.setTextColor(19);
         char value[2] = {static_cast<char>('0' + g_dice[i].up_face), '\0'};
         diceCanvas.drawCenterString(value, cx + 1, badge_y - 7);
