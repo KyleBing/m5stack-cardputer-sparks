@@ -32,7 +32,6 @@ More detail: [Getting Started · Main Menu](/en/guide/getting-started#main-menu)
 |-----|-----|-------------|
 | `u` | [Config](./config) | Edit firmware `config.json` via AP or LAN Web |
 | `w` | [WiFi](./wifi) | Connect, scan, switch saved WiFi profiles (up to 5) |
-| `b` | [BLE](./ble) | Scan nearby BLE devices |
 
 ## Time & Power
 

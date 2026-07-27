@@ -6,6 +6,14 @@
 
 ---
 
+## 2026-07-28 — Docs
+
+### 改进
+
+- **文档侧栏**：Dice / Newton Cradle / Neon FX 归入 Mini Games；Display / IMU / Font / Icons / RGB LED / BLE / I2C 归入 Hardware Test（中 / 英）；集合页表格补子页链接
+
+---
+
 ## 2026-07-27 — v1.03
 
 ### 新增

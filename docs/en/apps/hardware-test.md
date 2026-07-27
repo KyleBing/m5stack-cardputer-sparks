@@ -6,11 +6,11 @@ A second-level entry for display, sensor, and peripheral tests. `ESC` / `GO` ret
 
 | Key | Tool | Description |
 |-----|------|-------------|
-| `1` | Display | Color, checkerboard, and pixel-line tests |
-| `2` | IMU | BMI270 acceleration and attitude visualization |
-| `3` | Font | Font preview |
-| `4` | Icons | Firmware icon browser |
-| `5` | RGB LED | Onboard LED on/off, color, and brightness |
-| `6` | BLE | Scan nearby BLE devices |
-| `7` | InI2 | Internal I2C bus scan |
-| `8` | ExI2 | External I2C bus scan |
+| `1` | [Display](./display) | Color, checkerboard, and pixel-line tests |
+| `2` | [IMU](./imu) | BMI270 acceleration and attitude visualization |
+| `3` | [Font](./font) | Font preview |
+| `4` | [Icons](./icons) | Firmware icon browser |
+| `5` | [RGB LED](./rgb-led) | Onboard LED on/off, color, and brightness |
+| `6` | [BLE](./ble) | Scan nearby BLE devices |
+| `7` | [InI2](./i2c) | Internal I2C bus scan |
+| `8` | [ExI2](./i2c) | External I2C bus scan |

@@ -124,7 +124,6 @@ export default defineConfig({
             items: [
               { text: 'Config 配网', link: '/apps/config' },
               { text: 'WiFi', link: '/apps/wifi' },
-              { text: 'BLE', link: '/apps/ble' },
               { text: 'Options 选项', link: '/apps/options' },
               { text: 'Info 信息', link: '/apps/info' },
               { text: 'Version 版本', link: '/apps/version' },
@@ -133,18 +132,31 @@ export default defineConfig({
           {
             text: '硬件调试与演示',
             items: [
-              { text: 'IMU', link: '/apps/imu' },
-              { text: 'RGB LED', link: '/apps/rgb-led' },
               { text: 'Mic 麦克风', link: '/apps/mic' },
-              { text: 'Neon FX 动画', link: '/apps/neon-fx' },
-              { text: 'Dice 骰子', link: '/apps/dice' },
-              { text: 'Newton Cradle 牛顿摆', link: '/apps/newton-cradle' },
-              { text: 'Mini Games 小游戏', link: '/apps/mini-games' },
-              { text: 'Hardware Test 硬件测试', link: '/apps/hardware-test' },
-              { text: 'Display 显示', link: '/apps/display' },
-              { text: 'Icons 图标', link: '/apps/icons' },
-              { text: 'Font 字体', link: '/apps/font' },
-              { text: 'I2C 扫描', link: '/apps/i2c' },
+              {
+                text: 'Mini Games 小游戏',
+                link: '/apps/mini-games',
+                collapsed: false,
+                items: [
+                  { text: 'Dice 骰子', link: '/apps/dice' },
+                  { text: 'Newton Cradle 牛顿摆', link: '/apps/newton-cradle' },
+                  { text: 'Neon FX 动画', link: '/apps/neon-fx' },
+                ],
+              },
+              {
+                text: 'Hardware Test 硬件测试',
+                link: '/apps/hardware-test',
+                collapsed: false,
+                items: [
+                  { text: 'Display 显示', link: '/apps/display' },
+                  { text: 'IMU', link: '/apps/imu' },
+                  { text: 'Font 字体', link: '/apps/font' },
+                  { text: 'Icons 图标', link: '/apps/icons' },
+                  { text: 'RGB LED', link: '/apps/rgb-led' },
+                  { text: 'BLE', link: '/apps/ble' },
+                  { text: 'I2C 扫描', link: '/apps/i2c' },
+                ],
+              },
             ],
           },
           {
@@ -234,7 +246,6 @@ export default defineConfig({
             items: [
               { text: 'Config', link: '/en/apps/config' },
               { text: 'WiFi', link: '/en/apps/wifi' },
-              { text: 'BLE', link: '/en/apps/ble' },
               { text: 'Options', link: '/en/apps/options' },
               { text: 'Info', link: '/en/apps/info' },
               { text: 'Version', link: '/en/apps/version' },
@@ -243,18 +254,31 @@ export default defineConfig({
           {
             text: 'Hardware Demos',
             items: [
-              { text: 'IMU', link: '/en/apps/imu' },
-              { text: 'RGB LED', link: '/en/apps/rgb-led' },
               { text: 'Mic', link: '/en/apps/mic' },
-              { text: 'Neon FX', link: '/en/apps/neon-fx' },
-              { text: 'Dice', link: '/en/apps/dice' },
-              { text: 'Newton Cradle', link: '/en/apps/newton-cradle' },
-              { text: 'Mini Games', link: '/en/apps/mini-games' },
-              { text: 'Hardware Test', link: '/en/apps/hardware-test' },
-              { text: 'Display', link: '/en/apps/display' },
-              { text: 'Icons', link: '/en/apps/icons' },
-              { text: 'Font', link: '/en/apps/font' },
-              { text: 'I2C Scan', link: '/en/apps/i2c' },
+              {
+                text: 'Mini Games',
+                link: '/en/apps/mini-games',
+                collapsed: false,
+                items: [
+                  { text: 'Dice', link: '/en/apps/dice' },
+                  { text: 'Newton Cradle', link: '/en/apps/newton-cradle' },
+                  { text: 'Neon FX', link: '/en/apps/neon-fx' },
+                ],
+              },
+              {
+                text: 'Hardware Test',
+                link: '/en/apps/hardware-test',
+                collapsed: false,
+                items: [
+                  { text: 'Display', link: '/en/apps/display' },
+                  { text: 'IMU', link: '/en/apps/imu' },
+                  { text: 'Font', link: '/en/apps/font' },
+                  { text: 'Icons', link: '/en/apps/icons' },
+                  { text: 'RGB LED', link: '/en/apps/rgb-led' },
+                  { text: 'BLE', link: '/en/apps/ble' },
+                  { text: 'I2C Scan', link: '/en/apps/i2c' },
+                ],
+              },
             ],
           },
           {
