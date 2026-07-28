@@ -1,4 +1,4 @@
-# push main 或手动触发：构建 VitePress 并发布 GitHub Pages（产物不进仓库）
+# 推送 main（文档相关）/ v* tag / 手动：多版本 VitePress → GitHub Pages
 name: Deploy Docs
 
 on:
@@ -7,7 +7,11 @@ on:
     paths:
       - 'docs/**'
       - 'package.json'
+      - 'scripts/docs-build-multiversion.mjs'
+      - 'include/app_version.h'
       - '.github/workflows/docs.yml'
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -25,6 +29,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # 需要全部 v* tag 才能归档历史文档
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -35,10 +43,12 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build VitePress
-        run: npm run docs:build
+      - name: Build multi-version docs
+        run: npm run docs:build:versions
         env:
           GITHUB_ACTIONS: true
+          # 控制归档 tag 数量，避免 CI 过久
+          DOCS_VERSION_LIMIT: '20'
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

@@ -1,10 +1,11 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitepress'
 
 // 与固件同源：只改 include/app_version.h，文档 nav / footer / md 占位符自动同步
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+const vpDir = dirname(fileURLToPath(import.meta.url))
 const versionH = readFileSync(resolve(rootDir, 'include/app_version.h'), 'utf-8')
 const pick = (key: string, fallback = '') =>
   versionH.match(new RegExp(`${key}\\s*=\\s*"([^"]+)"`))?.[1] ?? fallback
@@ -14,8 +15,34 @@ const APP_UPDATE_TIME = pick('APP_UPDATE_TIME')
 const APP_AUTHOR = pick('APP_AUTHOR', 'KyleBing')
 const DOC_VERSION = `v${APP_VERSION}`
 
-// GitHub Pages 项目站 base 须与仓库名一致（非 ./，VitePress 不支持相对 base）
-const base = process.env.GITHUB_ACTIONS ? '/m5stack-cardputer-sparks/' : '/'
+// GitHub Pages 项目站 base；多版本时 DOCS_VERSION_PATH=v/1.02 → .../v/1.02/
+const SITE_ROOT = process.env.GITHUB_ACTIONS ? '/m5stack-cardputer-sparks' : ''
+const VERSION_PATH = (process.env.DOCS_VERSION_PATH || '').replace(/^\/|\/$/g, '')
+const base = SITE_ROOT
+  ? `${SITE_ROOT}/${VERSION_PATH ? `${VERSION_PATH}/` : ''}`
+  : VERSION_PATH
+    ? `/${VERSION_PATH}/`
+    : '/'
+
+// 多版本构建脚本写入；缺失时仅当前版本（本地 docs:dev）
+type DocVersionEntry = {
+  label: string
+  version: string
+  path: string
+  latest?: boolean
+}
+function loadDocVersions(): DocVersionEntry[] {
+  const p = resolve(vpDir, 'versions.generated.json')
+  if (!existsSync(p)) {
+    return [{ label: `${DOC_VERSION} (latest)`, version: DOC_VERSION, path: '', latest: true }]
+  }
+  try {
+    return JSON.parse(readFileSync(p, 'utf-8')) as DocVersionEntry[]
+  } catch {
+    return [{ label: `${DOC_VERSION} (latest)`, version: DOC_VERSION, path: '', latest: true }]
+  }
+}
+const DOC_VERSIONS = loadDocVersions()
 
 const sharedTheme = {
   logo: '/assets/logo_60.png',
@@ -30,12 +57,21 @@ const sharedTheme = {
     message: 'Sparks for M5Stack Cardputer',
     copyright: `${DOC_VERSION} · ${APP_AUTHOR}`,
   },
+  // VersionSwitcher 读取（用 currentPath 高亮，避免 tag 与 APP_VERSION 不一致）
+  docVersions: {
+    siteRoot: SITE_ROOT,
+    current: DOC_VERSION,
+    currentPath: VERSION_PATH,
+    versions: DOC_VERSIONS,
+  },
 }
 
 export default defineConfig({
   title: 'Sparks',
   description: 'M5Stack Cardputer multi-app firmware docs',
   base,
+  // 多版本构建时由脚本传入绝对 outDir，避免互相覆盖
+  outDir: process.env.DOCS_OUT_DIR || '.vitepress/dist',
   lastUpdated: true,
   cleanUrls: true,
 
@@ -76,13 +112,7 @@ export default defineConfig({
           { text: '功能目录', link: '/apps/' },
           { text: '截图', link: '/apps/shots' },
           { text: '快捷键', link: '/guide/shortcuts' },
-          {
-            text: DOC_VERSION,
-            items: [
-              { text: '入门', link: '/guide/getting-started' },
-              { text: 'CHANGELOG', link: 'https://github.com/KyleBing/m5stack-cardputer-sparks/blob/main/CHANGELOG.md' },
-            ],
-          },
+          { component: 'VersionSwitcher' },
         ],
         sidebar: [
           {
@@ -202,13 +232,7 @@ export default defineConfig({
           { text: 'Apps', link: '/en/apps/' },
           { text: 'Screenshots', link: '/en/apps/shots' },
           { text: 'Shortcuts', link: '/en/guide/shortcuts' },
-          {
-            text: DOC_VERSION,
-            items: [
-              { text: 'Getting Started', link: '/en/guide/getting-started' },
-              { text: 'CHANGELOG', link: 'https://github.com/KyleBing/m5stack-cardputer-sparks/blob/main/CHANGELOG.md' },
-            ],
-          },
+          { component: 'VersionSwitcher' },
         ],
         sidebar: [
           {

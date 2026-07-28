@@ -5,6 +5,7 @@
   "scripts": {
     "docs:dev": "vitepress dev docs --port 3123",
     "docs:build": "vitepress build docs",
+    "docs:build:versions": "node scripts/docs-build-multiversion.mjs",
     "docs:preview": "vitepress preview docs --port 3123"
   },
   "devDependencies": {
