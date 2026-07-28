@@ -351,11 +351,16 @@ void drawMenuPage() {
 
 // 离开 LED 测试页时关灯并恢复背光
 static void leaveLedApp();
+static void leaveHardwareTestChild(HardwareTestMode mode);
 
 // 绘制主菜单（header + 可翻页菜单区）
 void showMenu() {
     flushSpeakerVolumeSave(); // 离开 Options 等界面时落盘未写完的音量
     menuNoAppPrompt = false;
+    if (currentState == AppState::HARDWARE_TESTS && hardwareTestMode != HardwareTestMode::HUB) {
+        leaveHardwareTestChild(hardwareTestMode);
+        hardwareTestMode = HardwareTestMode::HUB;
+    }
     leaveCursorApp();
     leaveNeonFxApp();
     leaveDiceApp();
@@ -2082,8 +2087,8 @@ static void drawHardwareTestHubCard(const int x, const int y, const char key, co
     M5Cardputer.Display.print(title);
 }
 
-static void drawHardwareTestsHub() {
-    hardwareTestMode = HardwareTestMode::HUB;
+// 仅绘制 Test 顶层卡片（不改 hardwareTestMode）
+static void drawHardwareTestsHubUi() {
     M5Cardputer.Display.fillScreen(hwHubBg());
     drawHardwareTestTopLabel("1-8 SELECT");
     // 全部卡片统一冷青，形成 Test 独有识别
@@ -2101,7 +2106,43 @@ static void leaveHardwareTestChild(const HardwareTestMode mode) {
     if (mode == HardwareTestMode::LED) {
         leaveLedApp();
     }
+    if (mode == HardwareTestMode::IMU) {
+        bmiScreenReady = false;
+    }
     g_i2c_help_visible = false;
+}
+
+// 子 app 返回 Test 顶层：先切 mode，再 cleanup / 重绘
+static void returnToHardwareTestHub() {
+    if (hardwareTestMode == HardwareTestMode::HUB) {
+        return;
+    }
+    const HardwareTestMode leaving = hardwareTestMode;
+    hardwareTestMode = HardwareTestMode::HUB;
+    leaveHardwareTestChild(leaving);
+    drawHardwareTestsHubUi();
+}
+
+#if BTNGO_USE_KEYBOARD
+// ESC/` 返回（keyboard 路径备用，wasBtnGoPressed 未消费时）
+static bool isHardwareTestBackKey(const Keyboard_Class::KeysState& status) {
+    for (const uint8_t hid : status.hid_keys) {
+        if (hid == BTNGO_HID) {
+            return true;
+        }
+    }
+    for (const char c : status.word) {
+        if (c == BTNGO_KEY_CHAR || c == '~') {
+            return true;
+        }
+    }
+    return false;
+}
+#endif
+
+static void drawHardwareTestsHub() {
+    hardwareTestMode = HardwareTestMode::HUB;
+    drawHardwareTestsHubUi();
 }
 
 static void enterHardwareTestsApp() {
@@ -2137,12 +2178,20 @@ static bool handleHardwareTestsBack() {
     if (hardwareTestMode == HardwareTestMode::HUB) {
         return false;
     }
-    leaveHardwareTestChild(hardwareTestMode);
-    drawHardwareTestsHub();
+    returnToHardwareTestHub();
+    // wasBtnGo 故意不调 isChange()；返回顶层后吞掉 ESC，避免下帧仍按子 app 处理
+    (void)M5Cardputer.Keyboard.isChange();
     return true;
 }
 
 static void handleHardwareTestsApp(const Keyboard_Class::KeysState& status) {
+#if BTNGO_USE_KEYBOARD
+    if (hardwareTestMode != HardwareTestMode::HUB && isHardwareTestBackKey(status)) {
+        returnToHardwareTestHub();
+        (void)M5Cardputer.Keyboard.isChange();
+        return;
+    }
+#endif
     if (hardwareTestMode == HardwareTestMode::HUB) {
         for (const char c : status.word) {
             if (c >= '1' && c <= '8') {
@@ -2395,6 +2444,7 @@ void enterApp(const AppState state) {
     }
     if (currentState == AppState::HARDWARE_TESTS && state != AppState::HARDWARE_TESTS) {
         leaveHardwareTestChild(hardwareTestMode);
+        hardwareTestMode = HardwareTestMode::HUB;
     }
     if (currentState == AppState::MORSE && state != AppState::MORSE) {
         leaveMorseApp();
