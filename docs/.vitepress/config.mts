@@ -44,6 +44,20 @@ function loadDocVersions(): DocVersionEntry[] {
 }
 const DOC_VERSIONS = loadDocVersions()
 
+// 归档构建写入：覆盖默认侧栏，使历史版导航与该版 md 一致
+type SidebarGroup = { text?: string; link?: string; items?: SidebarGroup[]; collapsed?: boolean }
+function loadArchiveSidebars(): { root?: SidebarGroup[]; en?: SidebarGroup[] | null } | null {
+  const p = resolve(vpDir, 'sidebars.generated.json')
+  if (!existsSync(p)) return null
+  try {
+    return JSON.parse(readFileSync(p, 'utf-8')) as { root?: SidebarGroup[]; en?: SidebarGroup[] | null }
+  } catch {
+    return null
+  }
+}
+const ARCHIVE_SIDEBARS = loadArchiveSidebars()
+const HAS_EN_DOCS = existsSync(resolve(vpDir, '../en/index.md'))
+
 const sharedTheme = {
   logo: '/assets/logo_60.png',
   siteTitle: 'Sparks',
@@ -114,7 +128,7 @@ export default defineConfig({
           { text: '快捷键', link: '/guide/shortcuts' },
           { component: 'VersionSwitcher' },
         ],
-        sidebar: [
+        sidebar: ARCHIVE_SIDEBARS?.root ?? [
           {
             text: '开始',
             items: [
@@ -221,7 +235,9 @@ export default defineConfig({
       },
     },
 
-    en: {
+    ...(HAS_EN_DOCS
+      ? {
+          en: {
       label: 'English',
       lang: 'en-US',
       description: 'M5Stack Cardputer multi-app firmware docs',
@@ -234,7 +250,7 @@ export default defineConfig({
           { text: 'Shortcuts', link: '/en/guide/shortcuts' },
           { component: 'VersionSwitcher' },
         ],
-        sidebar: [
+        sidebar: ARCHIVE_SIDEBARS?.en ?? [
           {
             text: 'Start',
             items: [
@@ -340,5 +356,7 @@ export default defineConfig({
         langMenuLabel: 'Change language',
       },
     },
+        }
+      : {}),
   },
 })

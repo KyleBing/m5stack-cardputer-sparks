@@ -1,6 +1,9 @@
 /**
  * 多版本文档构建：最新版 → dist/，历史 git tag → dist/v/{slug}/
- * 仅构建含 docs/.vitepress/config.mts 的 v* tag。
+ *
+ * 归档版：保留该 tag 的 markdown，使用当前 VitePress 工具链；
+ * 侧栏从该 tag 的 config.mts 提取后写入 sidebars.generated.json，
+ * 由当前 config 读取，确保左侧导航与版本内容一致。
  */
 import { execSync, execFileSync } from 'node:child_process'
 import {
@@ -46,7 +49,7 @@ function readAppVersion(repoRoot) {
   return m?.[1] ? `v${m[1]}` : 'v0.0'
 }
 
-/** tag → URL 路径段：v1.02 → 1.02；v0.10(beta) → 0.10-beta（最终路径 /v/1.02/） */
+/** tag → URL 路径段：v1.02 → 1.02；v0.10(beta) → 0.10-beta */
 function slugifyTag(tag) {
   return tag
     .replace(/^v/i, '')
@@ -57,7 +60,6 @@ function slugifyTag(tag) {
 
 function tagHasDocs(tag) {
   try {
-    // 整段 object 需一起引号，避免 v0.10(beta) 等 tag 被 shell 拆开
     shOut(`git cat-file -e ${JSON.stringify(`${tag}:docs/.vitepress/config.mts`)}`)
     return true
   } catch {
@@ -100,7 +102,6 @@ function runVitepressBuild({ docsDir, versionPath, outDir }) {
   }
   if (process.env.GITHUB_ACTIONS) env.GITHUB_ACTIONS = 'true'
 
-  // 走 js 入口，避免 Windows 下 .cmd + execFileSync 问题
   const entry = join(ROOT, 'node_modules', 'vitepress', 'bin', 'vitepress.js')
   console.log(`→ vitepress build ${docsDir} (path=${versionPath || 'latest'} → ${outDir})`)
   execFileSync(process.execPath, [entry, 'build', docsDir], {
@@ -110,21 +111,99 @@ function runVitepressBuild({ docsDir, versionPath, outDir }) {
   })
 }
 
-/** 用当前主题/配置覆盖 worktree，保留该 tag 的 md 与 app_version.h */
+function skipString(src, i) {
+  const q = src[i]
+  i++
+  while (i < src.length) {
+    if (src[i] === '\\') {
+      i += 2
+      continue
+    }
+    if (src[i] === q) return i + 1
+    i++
+  }
+  return i
+}
+
+/** 提取所有 `sidebar: [...]` 的数组字面量（按出现顺序） */
+function extractSidebarLiterals(src) {
+  const found = []
+  let searchFrom = 0
+  while (searchFrom < src.length) {
+    const idx = src.slice(searchFrom).search(/\bsidebar\s*:\s*\[/)
+    if (idx < 0) break
+    const abs = searchFrom + idx
+    const bracketAt = src.indexOf('[', abs)
+    let i = bracketAt
+    let depth = 0
+    while (i < src.length) {
+      const c = src[i]
+      if (c === '"' || c === "'" || c === '`') {
+        i = skipString(src, i)
+        continue
+      }
+      if (c === '[') depth++
+      else if (c === ']') {
+        depth--
+        if (depth === 0) {
+          found.push(src.slice(bracketAt, i + 1))
+          searchFrom = i + 1
+          break
+        }
+      }
+      i++
+    }
+    if (i >= src.length) break
+  }
+  return found
+}
+
+/** 从 tag 的 config 提取侧栏，写成 sidebars.generated.json */
+function extractSidebarsFromConfig(configPath) {
+  const src = readFileSync(configPath, 'utf8')
+  const literals = extractSidebarLiterals(src)
+  if (literals.length === 0) {
+    throw new Error(`No sidebar found in ${configPath}`)
+  }
+
+  const evalLiteral = (lit) => {
+    // 侧栏为纯数据字面量，可安全求值
+    return new Function(`"use strict"; return (${lit})`)()
+  }
+
+  // locales：通常 root 在前、en 在后；扁平 config 只有一个
+  const root = evalLiteral(literals[0])
+  const en = literals.length > 1 ? evalLiteral(literals[1]) : null
+  return { root, en }
+}
+
+/**
+ * 归档构建准备：当前 config/theme + 该版侧栏 JSON + versions JSON。
+ * 不覆盖 markdown / app_version.h。
+ */
 function overlayBuildTooling(worktree) {
   const dstVp = join(worktree, 'docs', '.vitepress')
+  const tagConfig = join(dstVp, 'config.mts')
   mkdirSync(dstVp, { recursive: true })
+
+  const sidebars = extractSidebarsFromConfig(tagConfig)
+  writeFileSync(join(dstVp, 'sidebars.generated.json'), JSON.stringify(sidebars, null, 2) + '\n')
+
   cpSync(join(VP, 'config.mts'), join(dstVp, 'config.mts'))
   cpSync(join(VP, 'theme'), join(dstVp, 'theme'), { recursive: true })
   if (existsSync(VERSIONS_JSON)) {
     cpSync(VERSIONS_JSON, join(dstVp, 'versions.generated.json'))
   }
+
+  console.log(
+    `  sidebars: root=${sidebars.root?.length ?? 0} groups` +
+      (sidebars.en ? `, en=${sidebars.en.length} groups` : ' (no en)'),
+  )
 }
 
 function ensureWorktree(tag, slug) {
   mkdirSync(WORKTREES, { recursive: true })
   const dir = join(WORKTREES, slug)
-  // 清理可能残留的同名目录（首次 remove 失败可忽略）
   try {
     sh(`git worktree remove -f ${JSON.stringify(dir)}`, { stdio: 'ignore' })
   } catch {
@@ -181,7 +260,6 @@ function main() {
     },
     ...tags.map(({ tag, slug }) => ({
       label: tag,
-      // 与该 tag 构建时 DOC_VERSION（来自 app_version.h）对齐，供切换器高亮
       version: tag.startsWith('v') ? tag : `v${slug}`,
       path: `v/${slug}`,
       latest: false,
@@ -189,17 +267,18 @@ function main() {
     })),
   ]
 
-  // 若某 tag slug 与 current 显示名相同，归档项仍保留（路径 /v/...），latest 在根
   writeVersionsFile(versions)
 
   rmSync(STAGING, { recursive: true, force: true })
   mkdirSync(STAGING, { recursive: true })
 
-  // 1) 最新版（当前工作树）
+  // 最新版：清掉可能残留的归档侧栏覆盖
+  const latestSidebars = join(VP, 'sidebars.generated.json')
+  if (existsSync(latestSidebars)) rmSync(latestSidebars)
+
   const latestOut = join(STAGING, '_latest')
   runVitepressBuild({ docsDir: DOCS, versionPath: '', outDir: latestOut })
 
-  // 2) 历史 tag
   for (const { tag, slug } of tags) {
     const worktree = ensureWorktree(tag, slug)
     try {
@@ -210,6 +289,9 @@ function main() {
         versionPath: `v/${slug}`,
         outDir,
       })
+      if (!existsSync(join(outDir, 'index.html'))) {
+        throw new Error(`Archive build produced no index.html: ${outDir}`)
+      }
     } finally {
       try {
         sh(`git worktree remove -f ${JSON.stringify(worktree)}`)
@@ -219,7 +301,6 @@ function main() {
     }
   }
 
-  // 3) 组装 dist
   rmSync(DIST, { recursive: true, force: true })
   mkdirSync(DIST, { recursive: true })
   cpSync(latestOut, DIST, { recursive: true })
@@ -235,7 +316,6 @@ function main() {
   writeFileSync(join(DIST, 'versions.json'), JSON.stringify(versions, null, 2) + '\n')
   writeVersionsIndex(DIST, versions)
 
-  // 清理 staging / 残留 worktree 目录
   rmSync(STAGING, { recursive: true, force: true })
   if (existsSync(WORKTREES)) {
     try {
