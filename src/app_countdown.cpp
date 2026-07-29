@@ -333,91 +333,9 @@ static void drawCountdownFinishedCancelHint() {
     M5Cardputer.Display.print(label);
 }
 
-static void drawCountdownSetupBottomHints() {
-    const int y = M5Cardputer.Display.height() - TIME_HINT_ROW_H;
-    const int screen_w = M5Cardputer.Display.width();
-    M5Cardputer.Display.fillRect(APP_CONTENT_X, y, screen_w - APP_CONTENT_X * 2, TIME_HINT_ROW_H,
-                                 BLACK);
-
-    int cx = APP_CONTENT_X;
-    cx += drawArrowBadge(cx, y, 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print("adjust ");
-    cx += M5Cardputer.Display.textWidth("adjust ");
-
-    cx += drawTextBadge(cx, y, "0-9", 1);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT);
-    M5Cardputer.Display.print("input ");
-    cx += M5Cardputer.Display.textWidth("input ");
-
-    // BtnGO（侧边唤醒键）开始，替代 g
-    cx += drawTextBadge(cx, y, "BtnGO", 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print("start ");
-    cx += M5Cardputer.Display.textWidth("start ");
-
-    cx += drawKeyBadge(cx, y, 'p', 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print("pure");
-
-    drawTimeHelpHintRight("help");
-}
-
-static void drawCountdownActionHints() {
-    if (cdPhase == CountdownPhase::SETUP) {
-        drawCountdownSetupBottomHints();
-        return;
-    }
-
-    const char* go_text = "start";
-    if (cdPhase == CountdownPhase::RUNNING) {
-        go_text = "pause";
-    } else if (cdPhase == CountdownPhase::PAUSED) {
-        go_text = "resume";
-    }
-
-    const int y = M5Cardputer.Display.height() - TIME_HINT_ROW_H;
-    const int screen_w = M5Cardputer.Display.width();
-    M5Cardputer.Display.fillRect(APP_CONTENT_X, y, screen_w - APP_CONTENT_X * 2, TIME_HINT_ROW_H,
-                                 BLACK);
-
-    int cx = APP_CONTENT_X;
-    cx += drawTextBadge(cx, y, "BtnGO", 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(go_text);
-    cx += M5Cardputer.Display.textWidth(go_text);
-    M5Cardputer.Display.print(" ");
-    cx += M5Cardputer.Display.textWidth(" ");
-
-    const KeyHintItem extras[] = {{'r', "reset"}, {'p', "pure"}};
-    for (int i = 0; i < 2; i++) {
-        cx += drawKeyBadge(cx, y, extras[i].key, 1);
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(cx, y);
-        M5Cardputer.Display.print(extras[i].text);
-        cx += M5Cardputer.Display.textWidth(extras[i].text);
-        if (i != 1) {
-            M5Cardputer.Display.print(" ");
-            cx += M5Cardputer.Display.textWidth(" ");
-        }
-    }
-
-    drawTimeHelpHintRight("help");
-}
-
 static void drawCountdownChrome() {
     if (cdPhase == CountdownPhase::FINISHED) {
-        // 到点：只画大字旁提示，不画左下角 / 底栏
+        // 到点：只画大字旁取消提示（响铃需可见操作）
         drawCountdownFinishedCancelHint();
         return;
     }
@@ -427,8 +345,8 @@ static void drawCountdownChrome() {
         }
         return;
     }
+    // 按键 tip 已迁到 Help，主界面只保留 RUN / PAUSED 状态
     drawCountdownStateBanner();
-    drawCountdownActionHints();
 }
 
 static void cdInvalidateTimeCache() {

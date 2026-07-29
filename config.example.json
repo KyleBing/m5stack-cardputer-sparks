@@ -71,6 +71,9 @@
   "cursor": {
     "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
   },
+  "system": {
+    "week_start": "sunday"
+  },
   "timezone": "CST-8",
   "screen": {
     "brightness": 30,
@@ -89,5 +92,9 @@
     "default": "tv",
     "tv_brand": "samsung",
     "ac_brand": "midea"
+  },
+  "hid_keyboard": {
+    "transport": "ble",
+    "imu_sensitivity": 5
   }
 }

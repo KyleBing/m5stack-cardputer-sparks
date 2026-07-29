@@ -1,6 +1,7 @@
 #include "app_hid_keyboard.h"
 #include "app_colors.h"
 #include "app_common.h"
+#include "app_config.h"
 #include "app_connectivity.h"
 #include "app_header.h"
 
@@ -1252,6 +1253,19 @@ static void openHostsUi() {
     }
 }
 
+// 只在偏好发生变化时写盘，避免按键持续按住时重复擦写 LittleFS
+static void persistHidKeyboardSettings() {
+    const AppConfig& cfg = getAppConfig();
+    const HidKeyboardTransport transport = g_transport == HidTransport::USB
+                                                ? HidKeyboardTransport::Usb
+                                                : HidKeyboardTransport::Ble;
+    if (cfg.hid_keyboard_transport == transport &&
+        cfg.hid_keyboard_imu_sensitivity == g_imu_sens) {
+        return;
+    }
+    saveAppConfigHidKeyboard(transport, static_cast<uint8_t>(g_imu_sens));
+}
+
 static void applyTransport(const HidTransport next) {
     if (g_transport == next &&
         ((next == HidTransport::USB && g_usb_ready) || (next == HidTransport::BLE && g_ble_ready))) {
@@ -1268,6 +1282,7 @@ static void applyTransport(const HidTransport next) {
         stopUsbKeyboard();
         startBleKeyboard();
     }
+    persistHidKeyboardSettings();
 }
 
 static void drawHelpPage();
@@ -1918,14 +1933,19 @@ static bool tryHandleImuSensKey(const Keyboard_Class::KeysState& status) {
         return false;
     }
     for (const char c : status.word) {
+        int sensitivity = 0;
         if (c >= '1' && c <= '9') {
-            g_imu_sens = c - '0';
-            return true;
+            sensitivity = c - '0';
+        } else if (c == '0') {
+            sensitivity = 10;
+        } else {
+            continue;
         }
-        if (c == '0') {
-            g_imu_sens = 10;
-            return true;
+        if (g_imu_sens != sensitivity) {
+            g_imu_sens = sensitivity;
+            persistHidKeyboardSettings();
         }
+        return true;
     }
     return false;
 }
@@ -2881,8 +2901,13 @@ void enterHidKeyboardApp() {
     g_fn_long_fired = false;
     g_fn_long_cancelled = false;
     g_imu_ok = M5.Imu.isEnabled();
+    const AppConfig& cfg = getAppConfig();
+    g_transport = cfg.hid_keyboard_transport == HidKeyboardTransport::Usb
+                      ? HidTransport::USB
+                      : HidTransport::BLE;
     g_imu_mouse_on = false;
-    g_imu_sens = kImuSensDefault;
+    g_imu_sens = constrain(static_cast<int>(cfg.hid_keyboard_imu_sensitivity), kImuSensMin,
+                           kImuSensMax);
     g_imu_dx = 0;
     g_imu_dy = 0;
     g_mouse_buttons = 0;
@@ -2903,7 +2928,7 @@ void enterHidKeyboardApp() {
     g_last_kb_valid = false;
     memset(&g_last_kb_report, 0, sizeof(g_last_kb_report));
     clearBleReportQueue();
-    // 默认 BLE，不占用烧录口；需要 USB 时再 Fn+u
+    // 首次使用默认 BLE；后续恢复 config 中保存的传输方式
     applyTransport(g_transport);
     drawHidKeyboardApp(true);
 }
@@ -2917,7 +2942,7 @@ void leaveHidKeyboardApp() {
     M5Cardputer.Display.fillScreen(BLACK);
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.drawCenterString("Exiting", M5Cardputer.Display.width() / 2,
+    M5Cardputer.Display.drawCenterString("Keyboard Exiting", M5Cardputer.Display.width() / 2,
                                          M5Cardputer.Display.height() / 2 - 8);
 
     g_active = false;

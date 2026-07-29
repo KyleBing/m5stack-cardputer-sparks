@@ -100,6 +100,9 @@ static const char* DEFAULT_CONFIG = R"({
   "cursor": {
     "token": "your-cursor-session-jwt"
   },
+  "system": {
+    "week_start": "sunday"
+  },
   "timezone": "CST-8",
   "screen": {
     "brightness": 30,
@@ -327,14 +330,45 @@ static void sendHtmlPage(const String& body, const uint8_t css_flags = HTML_CSS_
     }
     if (css_flags & HTML_CSS_SYSTEM) {
         g_server.sendContent_P(PSTR(
-            ".sys-grid{max-width:480px}"
-            ".sys-grid .check-row{display:flex;align-items:center;gap:8px;margin:0 0 10px;"
+            // 左侧分项 list + 右侧设置内容
+            ".sys-wrap{display:flex;gap:14px;align-items:flex-start}"
+            ".sys-nav{flex:0 0 150px;display:flex;flex-direction:column;gap:4px;"
+            "position:sticky;top:12px}"
+            ".sys-nav button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;"
+            "width:100%;margin:0;padding:7px 10px;border:1px solid transparent;border-radius:6px;"
+            "background:transparent;color:var(--tab-fg);font-size:13px;text-align:left;"
+            "cursor:pointer;line-height:1.25}"
+            ".sys-nav button:hover{background:var(--td-hover);color:var(--fg)}"
+            ".sys-nav button.active{background:var(--tab-act);color:#fff;"
+            "border-color:var(--tab-act);font-weight:600}"
+            "@media(prefers-color-scheme:dark){.sys-nav button.active{color:#121212}}"
+            ".sys-nav .key{font-size:10px;font-weight:500;font-family:ui-monospace,monospace;"
+            "opacity:.75}"
+            ".sys-panes{flex:1 1 auto;min-width:0;max-width:520px}"
+            ".sys-sec{display:none;border:1px solid var(--tab-bd);border-radius:8px;"
+            "padding:12px 14px;background:var(--td-bg)}"
+            ".sys-sec.active{display:block}"
+            ".sys-sec h3{margin:0 0 10px;font-size:14px;font-weight:600;color:var(--fg-h);"
+            "display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}"
+            ".sys-sec h3 .key{font-size:11px;font-weight:500;font-family:ui-monospace,monospace;"
+            "color:var(--hint)}"
+            ".sys-sec label{display:block;margin:0 0 10px}"
+            ".sys-sec label:last-child{margin-bottom:0}"
+            ".sys-sec .check-row{display:flex;align-items:center;gap:8px;margin:0 0 10px;"
             "font-size:13px;color:var(--fg);cursor:pointer}"
-            ".sys-grid .check-row input{width:auto;margin:0;accent-color:#1a73e8}"
-            ".sys-grid .bright-row{display:flex;align-items:center;gap:10px}"
-            ".sys-grid .bright-row input[type=range]{flex:1;min-width:0;padding:0}"
-            ".sys-grid .bright-val{min-width:2.5em;font-variant-numeric:tabular-nums;"
+            ".sys-sec .check-row:last-child{margin-bottom:0}"
+            ".sys-sec .check-row input{width:auto;margin:0;accent-color:#1a73e8}"
+            ".sys-sec .bright-row{display:flex;align-items:center;gap:10px}"
+            ".sys-sec .bright-row input[type=range]{flex:1;min-width:0;padding:0}"
+            ".sys-sec .bright-val{min-width:2.5em;font-variant-numeric:tabular-nums;"
             "color:var(--fg)}"
+            // 窄屏：分项列表转为横排
+            "@media(max-width:640px){"
+            ".sys-wrap{flex-direction:column;gap:10px}"
+            ".sys-nav{flex:0 0 auto;flex-direction:row;flex-wrap:wrap;position:static}"
+            ".sys-nav button{width:auto;padding:6px 10px}"
+            ".sys-nav .key{display:none}"
+            ".sys-panes{max-width:100%;width:100%}}"
         ));
     }
     if (css_flags & HTML_CSS_SHOTS) {
@@ -477,9 +511,11 @@ static void appendCfgDataScript(String& body, const String& cfg) {
 // 默认 cfg 对象字面量（JS）
 static const char* JS_CFG_DEFAULT =
     "{wifis:[],wifi_active:'',devices:[],device_groups:[],cursor:{token:''},"
+    "system:{week_start:'sunday'},"
     "timezone:'CST-8',screen:{brightness:30,invert:false},"
     "sound:{time_key:true,mijia_on_off:true,volume:25},"
-    "time:{default:'up'},infrared:{default:'tv',tv_brand:'samsung',ac_brand:'midea'}}";
+    "time:{default:'up'},infrared:{default:'tv',tv_brand:'samsung',ac_brand:'midea'},"
+    "hid_keyboard:{transport:'ble',imu_sensitivity:5}}";
 
 // 加载并规范化 cfg（各编辑页共用）
 static void appendJsLoadCfg(String& body) {
@@ -500,6 +536,8 @@ static void appendJsLoadCfg(String& body) {
               "if(!cfg.devices)cfg.devices=[];"
               "if(!cfg.device_groups)cfg.device_groups=[];"
               "if(!cfg.cursor)cfg.cursor={token:''};"
+              "if(!cfg.system)cfg.system={};"
+              "if(cfg.system.week_start!=='monday')cfg.system.week_start='sunday';"
               "if(!cfg.timezone)cfg.timezone='CST-8';"
               // screen：兼容旧顶层 brightness
               "if(!cfg.screen)cfg.screen={};"
@@ -522,7 +560,12 @@ static void appendJsLoadCfg(String& body) {
               "if(!cfg.infrared)cfg.infrared={};"
               "if(!cfg.infrared.default)cfg.infrared.default='tv';"
               "if(!cfg.infrared.tv_brand)cfg.infrared.tv_brand='samsung';"
-              "if(!cfg.infrared.ac_brand)cfg.infrared.ac_brand='midea';}");
+              "if(!cfg.infrared.ac_brand)cfg.infrared.ac_brand='midea';"
+              "if(!cfg.hid_keyboard)cfg.hid_keyboard={};"
+              "if(cfg.hid_keyboard.transport!=='usb')cfg.hid_keyboard.transport='ble';"
+              "let hs=+cfg.hid_keyboard.imu_sensitivity;"
+              "if(isNaN(hs)||hs<1||hs>10)hs=5;"
+              "cfg.hid_keyboard.imu_sensitivity=Math.round(hs);}");
 }
 
 // 米家设备页（原主页设备表）
@@ -941,15 +984,44 @@ static void handleSystemPage() {
     const String cfg = sanitizeJsonForHtml(loadConfigText());
 
     String body;
-    body.reserve(cfg.length() + 2048);
+    body.reserve(cfg.length() + 3072);
     appendTopBar(body, "系统设置", WebNavTab::System);
     body += F("<form id='save-form' method='POST' action='/save'>"
               "<input type='hidden' name='config' id='config-payload'>"
-              "<p class='hint'>时区、屏幕、提示音与红外默认。亮度在 screen.brightness（0~100），"
-              "设备端会换算为背光 0~255；反色写入 screen.invert。</p>"
-              "<div class='sys-grid'>"
+              "<p class='hint'>左侧选择分项，右侧编辑对应设置。亮度 screen.brightness（0~100）"
+              "会换算为背光 0~255；反色写入 screen.invert。</p>"
+              "<div class='sys-wrap'>"
+              // 左侧分项 list
+              "<nav class='sys-nav' id='sys-nav'>"
+              "<button type='button' data-pane='system' class='active'>系统"
+              "<span class='key'>system</span></button>"
+              "<button type='button' data-pane='screen'>屏幕"
+              "<span class='key'>screen</span></button>"
+              "<button type='button' data-pane='sound'>声音"
+              "<span class='key'>sound</span></button>"
+              "<button type='button' data-pane='time'>Time"
+              "<span class='key'>time</span></button>"
+              "<button type='button' data-pane='infrared'>红外"
+              "<span class='key'>infrared</span></button>"
+              "<button type='button' data-pane='keyboard'>键盘"
+              "<span class='key'>hid_keyboard</span></button>"
+              "</nav>"
+              // 右侧设置内容
+              "<div class='sys-panes'>"
+              // 系统：timezone（顶层）+ system.week_start
+              "<section class='sys-sec active' data-pane='system'>"
+              "<h3>系统 <span class='key'>system / timezone</span></h3>"
               "<label>时区（POSIX TZ）"
               "<input id='sys-timezone' placeholder='CST-8' autocomplete='off'></label>"
+              "<label>日历每周起始日"
+              "<select id='sys-week-start'>"
+              "<option value='sunday'>周日</option>"
+              "<option value='monday'>周一</option>"
+              "</select></label>"
+              "</section>"
+              // 屏幕
+              "<section class='sys-sec' data-pane='screen'>"
+              "<h3>屏幕 <span class='key'>screen</span></h3>"
               "<label>亮度（0~100）"
               "<div class='bright-row'>"
               "<input id='sys-brightness' type='range' min='0' max='100' step='1'>"
@@ -958,30 +1030,42 @@ static void handleSystemPage() {
               "<label class='check-row'>"
               "<input id='sys-screen-invert' type='checkbox'>"
               "<span>屏幕反色（invert）</span></label>"
+              "</section>"
+              // 声音
+              "<section class='sys-sec' data-pane='sound'>"
+              "<h3>声音 <span class='key'>sound</span></h3>"
+              "<label>喇叭音量（0~100）"
+              "<div class='bright-row'>"
+              "<input id='sys-sound-volume' type='range' min='0' max='100' step='1'>"
+              "<span class='bright-val' id='sys-sound-volume-val'>25</span>"
+              "</div></label>"
               "<label class='check-row'>"
               "<input id='sys-sound-time-key' type='checkbox'>"
               "<span>Time 按键声（stopwatch / countdown）</span></label>"
               "<label class='check-row'>"
               "<input id='sys-sound-mijia' type='checkbox'>"
               "<span>米家开/关提示音</span></label>"
-              "<label>喇叭音量（0~100）"
-              "<div class='bright-row'>"
-              "<input id='sys-sound-volume' type='range' min='0' max='100' step='1'>"
-              "<span class='bright-val' id='sys-sound-volume-val'>25</span>"
-              "</div></label>"
-              "<label>Time 默认模块"
+              "</section>"
+              // Time 应用
+              "<section class='sys-sec' data-pane='time'>"
+              "<h3>Time <span class='key'>time</span></h3>"
+              "<label>默认模块"
               "<select id='sys-time-default'>"
               "<option value='up'>Uptime</option>"
               "<option value='ntp'>Clock</option>"
               "<option value='countdown'>Countdown</option>"
               "<option value='stopwatch'>Stopwatch</option>"
               "</select></label>"
-              "<label>红外默认功能块"
+              "</section>"
+              // 红外
+              "<section class='sys-sec' data-pane='infrared'>"
+              "<h3>红外 <span class='key'>infrared</span></h3>"
+              "<label>默认功能块"
               "<select id='sys-ir-default'>"
               "<option value='tv'>电视 TV</option>"
               "<option value='ac'>空调 AC</option>"
               "</select></label>"
-              "<label>红外默认电视品牌"
+              "<label>默认电视品牌"
               "<select id='sys-ir-tv-brand'>"
               "<option value='samsung'>Samsung</option>"
               "<option value='sony'>Sony</option>"
@@ -989,7 +1073,7 @@ static void handleSystemPage() {
               "<option value='panasonic'>Panasonic</option>"
               "<option value='nec'>NEC</option>"
               "</select></label>"
-              "<label>红外默认空调品牌"
+              "<label>默认空调品牌"
               "<select id='sys-ir-ac-brand'>"
               "<option value='midea'>Midea</option>"
               "<option value='gree'>Gree</option>"
@@ -998,7 +1082,22 @@ static void handleSystemPage() {
               "<option value='hisense'>Hisense</option>"
               "<option value='xiaomi'>Xiaomi</option>"
               "</select></label>"
-              "</div>"
+              "</section>"
+              // HID 键盘
+              "<section class='sys-sec' data-pane='keyboard'>"
+              "<h3>键盘 <span class='key'>hid_keyboard</span></h3>"
+              "<label>默认传输方式"
+              "<select id='sys-hid-transport'>"
+              "<option value='ble'>Bluetooth LE</option>"
+              "<option value='usb'>USB</option>"
+              "</select></label>"
+              "<label>IMU 鼠标灵敏度（1~10）"
+              "<div class='bright-row'>"
+              "<input id='sys-hid-sensitivity' type='range' min='1' max='10' step='1'>"
+              "<span class='bright-val' id='sys-hid-sensitivity-val'>5</span>"
+              "</div></label>"
+              "</section>"
+              "</div></div>"
               "<div class='save-bar'>"
               "<button type='submit' class='primary'>保存到设备</button>"
               "</div></form>");
@@ -1009,6 +1108,8 @@ static void handleSystemPage() {
     body += F(
         "function collect(){"
         "cfg.timezone=document.getElementById('sys-timezone').value||'CST-8';"
+        "if(!cfg.system)cfg.system={};"
+        "cfg.system.week_start=document.getElementById('sys-week-start').value||'sunday';"
         "if(!cfg.screen)cfg.screen={};"
         "let b=+document.getElementById('sys-brightness').value;if(isNaN(b))b=30;"
         "if(b<0)b=0;if(b>100)b=100;cfg.screen.brightness=b;"
@@ -1025,9 +1126,29 @@ static void handleSystemPage() {
         "if(!cfg.infrared)cfg.infrared={};"
         "cfg.infrared.default=document.getElementById('sys-ir-default').value||'tv';"
         "cfg.infrared.tv_brand=document.getElementById('sys-ir-tv-brand').value||'samsung';"
-        "cfg.infrared.ac_brand=document.getElementById('sys-ir-ac-brand').value||'midea';}"
+        "cfg.infrared.ac_brand=document.getElementById('sys-ir-ac-brand').value||'midea';"
+        "if(!cfg.hid_keyboard)cfg.hid_keyboard={};"
+        "cfg.hid_keyboard.transport=document.getElementById('sys-hid-transport').value||'ble';"
+        "let hs=+document.getElementById('sys-hid-sensitivity').value;"
+        "if(isNaN(hs)||hs<1||hs>10)hs=5;"
+        "cfg.hid_keyboard.imu_sensitivity=Math.round(hs);}"
+        // 切换左侧分项，右侧只显示对应分区（隐藏分区仍在表单内，保存不受影响）
+        "function showPane(name){"
+        "document.querySelectorAll('#sys-nav button').forEach(b=>{"
+        "b.classList.toggle('active',b.dataset.pane===name);});"
+        "document.querySelectorAll('.sys-panes .sys-sec').forEach(s=>{"
+        "s.classList.toggle('active',s.dataset.pane===name);});}"
+        "function initPanes(){"
+        "const nav=document.getElementById('sys-nav');"
+        "nav.onclick=e=>{const b=e.target.closest('button[data-pane]');"
+        "if(!b)return;showPane(b.dataset.pane);"
+        "history.replaceState(null,'','#'+b.dataset.pane);};"
+        "const want=(location.hash||'').slice(1);"
+        "if(/^[a-z_]+$/.test(want)&&nav.querySelector('button[data-pane=\"'+want+'\"]'))"
+        "showPane(want);}"
         "function init(){loadCfg();"
         "document.getElementById('sys-timezone').value=cfg.timezone||'CST-8';"
+        "document.getElementById('sys-week-start').value=cfg.system.week_start||'sunday';"
         "document.getElementById('sys-brightness').value=String(cfg.screen.brightness);"
         "document.getElementById('sys-brightness-val').textContent=String(cfg.screen.brightness);"
         "document.getElementById('sys-screen-invert').checked=!!cfg.screen.invert;"
@@ -1039,10 +1160,17 @@ static void handleSystemPage() {
         "document.getElementById('sys-ir-default').value=cfg.infrared.default||'tv';"
         "document.getElementById('sys-ir-tv-brand').value=cfg.infrared.tv_brand||'samsung';"
         "document.getElementById('sys-ir-ac-brand').value=cfg.infrared.ac_brand||'midea';"
+        "document.getElementById('sys-hid-transport').value=cfg.hid_keyboard.transport||'ble';"
+        "document.getElementById('sys-hid-sensitivity').value=String(cfg.hid_keyboard.imu_sensitivity);"
+        "document.getElementById('sys-hid-sensitivity-val').textContent="
+        "String(cfg.hid_keyboard.imu_sensitivity);"
         "document.getElementById('sys-brightness').oninput=e=>{"
         "document.getElementById('sys-brightness-val').textContent=e.target.value;};"
         "document.getElementById('sys-sound-volume').oninput=e=>{"
         "document.getElementById('sys-sound-volume-val').textContent=e.target.value;};"
+        "document.getElementById('sys-hid-sensitivity').oninput=e=>{"
+        "document.getElementById('sys-hid-sensitivity-val').textContent=e.target.value;};"
+        "initPanes();"
         "document.getElementById('save-form').onsubmit=()=>{collect();"
         "document.getElementById('config-payload').value=JSON.stringify(cfg,null,2);};}"
         "init();");

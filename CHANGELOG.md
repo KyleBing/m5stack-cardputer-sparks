@@ -10,10 +10,13 @@
 
 ### 新增
 
+- **Calendar**（`a`）：单月日历网格，今日高亮；`,` / `.` 翻月，`-` / `=` 翻年，`t` 回今天
 - **Keyboard**：裸按 `` ` `` 直接发 Esc；主界面无 header；左侧胶囊 Fn/Aa/Opt/Ctrl/Alt；居中大号按键回显；长按 Fn 开关 IMU（居中鼠标图标 + 右侧灵敏度条；字母 ygv|uhb 左右点击，非字母功能键仍可发；`1`–`0` 调灵敏度）；底栏状态 / 绿色设备名 / 黄底槽号
 
 ### 改进
 
+- **Mic**：从主菜单移入 Hardware Test（`h` → `9`），与其它硬件测试并列
+- **Config 网页 · 系统**：按 config 分项左侧 list（系统 / 屏幕 / 声音 / Time / 红外 / 键盘）+ 右侧设置面板；补 `hid_keyboard`（传输方式、IMU 灵敏度）
 - **Keyboard BLE 鼠标**：复合 HID 报告 + 通知启用 / Report Reference 可读；PnP 版本 bump（旧配对需重配）
 - **Keyboard 卡键**：每帧同步键位（不依赖 isChange）；松开报告优先发送；退出 / 切模式前强制全键抬起
 - **内容区布局**：`APP_CONTENT_Y` 贴齐 header 下沿铺背景；文本 / 卡片用 `APP_CONTENT_INSET_Y` 保留上内边距，避免翻页留缝

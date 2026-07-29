@@ -61,6 +61,8 @@ Letters are used for clicks (not typed). Digits set sensitivity. Other function 
 
 Center shows a mouse icon; right side is the sensitivity bar. If BLE pointer does nothing, forget the device on the host and re-pair.
 
+Transport and sensitivity are saved under `hid_keyboard` in `config.json` and restored the next time the app opens. The IMU mouse toggle is temporary and defaults to off whenever the app opens.
+
 ### BLE host list (`Fn+p`)
 
 Stores up to **5** paired hosts; only one connected at a time.

@@ -3,63 +3,11 @@
 #include "app_header.h"
 #include <cstdio>
 
-void drawTimeModeTag(const char* tag) {
-    if (tag == nullptr || tag[0] == '\0') {
-        return;
-    }
-    M5Cardputer.Display.fillRect(APP_CONTENT_X, APP_CONTENT_INSET_Y, 72, TIME_TAG_H, BLACK);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y + 2);
-    M5Cardputer.Display.print(tag);
-}
-
-static int drawKeyHintItemAt(const int x, const int y, const KeyHintItem& item, const int text_size,
-                             const uint16_t color) {
-    int cx = x;
-    cx += drawKeyBadge(cx, y, item.key, text_size);
-    M5Cardputer.Display.setTextSize(text_size);
-    M5Cardputer.Display.setTextColor(color, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(item.text);
-    cx += M5Cardputer.Display.textWidth(item.text);
-    return cx - x;
-}
-
-void drawTimeBottomHints(const KeyHintItem* action_items, const int action_count,
-                         const char* help_label) {
-    const int y = M5Cardputer.Display.height() - TIME_HINT_ROW_H;
-    const int screen_w = M5Cardputer.Display.width();
-    M5Cardputer.Display.fillRect(APP_CONTENT_X, y, screen_w - APP_CONTENT_X * 2, TIME_HINT_ROW_H,
-                                 BLACK);
-
-    int cx = APP_CONTENT_X;
-    if (action_items != nullptr && action_count > 0) {
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        for (int i = 0; i < action_count; i++) {
-            cx += drawKeyHintItemAt(cx, y, action_items[i], 1, APP_COLOR_HINT);
-            if (i != action_count - 1) {
-                M5Cardputer.Display.setCursor(cx, y);
-                M5Cardputer.Display.print(" ");
-                cx += M5Cardputer.Display.textWidth(" ");
-            }
-        }
-    }
-
-    const KeyHintItem help_item = {'h', help_label != nullptr ? help_label : "help"};
-    drawHelpHintRight(help_item.text);
-}
-
-void drawTimeHelpHintRight(const char* help_label) {
-    drawHelpHintRight(help_label != nullptr ? help_label : "help");
-}
-
 void getTimeDisplayArea(int& area_y, int& area_h) {
-    // 模式已迁到 Header accent，内容区从 header 下起算
+    // 模式在 Header accent；按键说明在 Help，内容区铺满 header 以下
     const int screen_h = M5Cardputer.Display.height();
     area_y = APP_CONTENT_INSET_Y;
-    area_h = screen_h - area_y - TIME_HINT_ROW_H;
+    area_h = screen_h - area_y;
 }
 
 void getTimePureDisplayArea(int& area_y, int& area_h) {

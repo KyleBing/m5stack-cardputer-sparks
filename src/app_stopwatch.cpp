@@ -19,47 +19,6 @@ static uint32_t swElapsedMs() {
     return swAccumMs;
 }
 
-// 底栏：BtnGO（侧边唤醒键）开始/暂停，替代原 g 键
-static void drawStopwatchActionHints() {
-    const char* go_text = "start";
-    if (swRunning) {
-        go_text = "pause";
-    } else if (swAccumMs > 0) {
-        go_text = "resume";
-    }
-
-    const int y = M5Cardputer.Display.height() - TIME_HINT_ROW_H;
-    const int screen_w = M5Cardputer.Display.width();
-    M5Cardputer.Display.fillRect(APP_CONTENT_X, y, screen_w - APP_CONTENT_X * 2, TIME_HINT_ROW_H,
-                                 BLACK);
-
-    int cx = APP_CONTENT_X;
-    cx += drawTextBadge(cx, y, "BtnGO", 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(go_text);
-    cx += M5Cardputer.Display.textWidth(go_text);
-    M5Cardputer.Display.print(" ");
-    cx += M5Cardputer.Display.textWidth(" ");
-
-    const KeyHintItem extras[] = {{'r', "reset"}, {'p', "pure"}};
-    for (int i = 0; i < 2; i++) {
-        cx += drawKeyBadge(cx, y, extras[i].key, 1);
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(cx, y);
-        M5Cardputer.Display.print(extras[i].text);
-        cx += M5Cardputer.Display.textWidth(extras[i].text);
-        if (i != 1) {
-            M5Cardputer.Display.print(" ");
-            cx += M5Cardputer.Display.textWidth(" ");
-        }
-    }
-
-    drawTimeHelpHintRight("help");
-}
-
 // 与 countdown 相同的 RUN / PAUSED 提示
 static void drawStopwatchStateBanner() {
     int area_y = 0;
@@ -86,12 +45,8 @@ static void drawStopwatchStateBanner() {
 }
 
 static void drawStopwatchChrome() {
-    if (isTimePureMode()) {
-        drawStopwatchStateBanner();
-        return;
-    }
+    // 按键 tip 已迁到 Help，主界面只保留 RUN / PAUSED 状态
     drawStopwatchStateBanner();
-    drawStopwatchActionHints();
 }
 
 static void drawStopwatchTimeArea(const int area_y, const int area_h, const bool force) {

@@ -2,7 +2,7 @@
 
 主菜单按键：`o`
 
-本机设置：屏幕亮度、反色、提示音与音量、Time 默认模式、红外默认等。修改会写入 `config.json`（音量有防抖落盘）。
+本机设置：屏幕亮度、反色、提示音与音量、Time 默认模式、日历每周起始日、红外默认等。修改会写入 `config.json`（音量有防抖落盘）。
 
 ## 截图
 
@@ -37,6 +37,7 @@
 | `sound.time_key` | 时间页按键音 |
 | `sound.mijia_on_off` | 米家开关提示音 |
 | `sound.volume` | 喇叭音量 0–100 |
+| `system.week_start` | 日历每周起始日：`sunday` / `monday` |
 | `time.default` / `time.pure` | Time 默认模式 / Pure |
 | `infrared.*` | 红外默认类别与品牌 |
 

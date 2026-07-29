@@ -14,3 +14,4 @@ A second-level entry for display, sensor, and peripheral tests. `ESC` / `GO` ret
 | `6` | [BLE](./ble) | Scan nearby BLE devices |
 | `7` | [InI2](./i2c) | Internal I2C bus scan |
 | `8` | [ExI2](./i2c) | External I2C bus scan |
+| `9` | [Mic](./mic) | Live waveform + VU + gain |

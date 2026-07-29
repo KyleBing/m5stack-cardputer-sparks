@@ -31,7 +31,6 @@ static bool uptimeScreenReady = false;
 static bool clockSyncedOnce = false;
 static char rtcLastTime[16] = "";
 static char rtcLastDate[24] = "";
-static char rtcLastSrc[8] = "";
 static char pureLastDate[24] = "";
 static char pureLargeClockLastTime[8] = "";
 static char pureLargeClockLastSec[4] = "";
@@ -68,10 +67,9 @@ static int clockContentHeight() {
 }
 
 static int rtcTimeY() {
-    // 顶部留给 NTP/RTC 来源标签
     const int block_h = RTC_TIME_LINE_H + RTC_TIME_BOTTOM_MARGIN + RTC_DATE_LINE_H;
-    const int avail_h = clockContentHeight() - TIME_TAG_H;
-    return APP_CONTENT_INSET_Y + TIME_TAG_H + (avail_h - block_h) / 2;
+    const int avail_h = clockContentHeight();
+    return APP_CONTENT_INSET_Y + (avail_h - block_h) / 2;
 }
 
 static int rtcDateY() {
@@ -124,29 +122,8 @@ static void updateRtcDateText(const char* date_buf) {
     rtcLastDate[sizeof(rtcLastDate) - 1] = '\0';
 }
 
-static void updateRtcSourceTag(const char* source) {
-    if (strcmp(source, rtcLastSrc) == 0) {
-        return;
-    }
-    drawTimeModeTag(source);
-    strncpy(rtcLastSrc, source, sizeof(rtcLastSrc) - 1);
-    rtcLastSrc[sizeof(rtcLastSrc) - 1] = '\0';
-}
-
-static void drawClockBottomHints() {
-    const KeyHintItem items[] = {{'r', "sync"}, {'p', "pure"}};
-    drawTimeBottomHints(items, 2);
-}
-
-// Help 分栏标题
-static int drawTimeHelpColHeader(const int x, const int y, const int w, const char* title) {
-    M5Cardputer.Display.fillRect(x, y, w, 11, APP_COLOR_LABEL);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(BLACK, APP_COLOR_LABEL);
-    M5Cardputer.Display.setCursor(x + 2, y + 1);
-    M5Cardputer.Display.print(title);
-    return y + 13;
-}
+// Help 行高：徽章高度 10px 的 1.3 倍
+static constexpr int TIME_HELP_LINE_H = 13;
 
 // Help 按键说明；徽章后恢复说明文字颜色
 static int drawTimeHelpKey(const int x, const int y, const char key, const char* text) {
@@ -155,7 +132,7 @@ static int drawTimeHelpKey(const int x, const int y, const char key, const char*
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.setCursor(cx, y);
     M5Cardputer.Display.print(text);
-    return y + 11;
+    return y + TIME_HELP_LINE_H;
 }
 
 static int drawTimeHelpBadge(const int x, const int y, const char* badge, const char* text) {
@@ -164,7 +141,7 @@ static int drawTimeHelpBadge(const int x, const int y, const char* badge, const 
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.setCursor(cx, y);
     M5Cardputer.Display.print(text);
-    return y + 11;
+    return y + TIME_HELP_LINE_H;
 }
 
 // Help 功能说明
@@ -173,36 +150,54 @@ static int drawTimeHelpText(const int x, const int y, const char* text) {
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.setCursor(x, y);
     M5Cardputer.Display.print(text);
-    return y + 11;
+    return y + TIME_HELP_LINE_H;
+}
+
+static const char* timeHelpModeName() {
+    switch (timeMode) {
+        case TimeMode::UPTIME:
+            return "UP";
+        case TimeMode::CLOCK:
+            return "CLK";
+        case TimeMode::COUNTDOWN:
+            return "CD";
+        case TimeMode::STOPWATCH:
+            return "SW";
+    }
+    return "";
 }
 
 static void drawTimeHelpScreen() {
-    beginAppScreen("Help");
-    constexpr int col_gap = 4;
-    const int screen_w = M5Cardputer.Display.width();
-    const int col_w = (screen_w - col_gap) / 2;
-    const int manual_x = col_w + col_gap;
-    const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
-    M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y,
-                                     M5Cardputer.Display.height() - col_y, DARKGREY);
+    beginAppScreenAccent("Help ", timeHelpModeName(), APP_COLOR_LABEL);
+    int y = APP_CONTENT_INSET_Y;
 
-    int y = drawTimeHelpColHeader(0, col_y, col_w, "keymap");
-    y = drawTimeHelpKey(2, y, 'u', "uptime");
-    y = drawTimeHelpKey(2, y, 't', "clock");
-    y = drawTimeHelpKey(2, y, 'c', "countdown");
-    y = drawTimeHelpKey(2, y, 's', "stopwatch");
-    y = drawTimeHelpKey(2, y, 'p', "pure mode");
-    y = drawTimeHelpKey(2, y, 'b', "big clock");
-    y = drawTimeHelpKey(2, y, 'r', "sync / reset");
-    y = drawTimeHelpBadge(2, y, "BtnGO", "start / pause");
-
-    y = drawTimeHelpColHeader(manual_x, col_y, screen_w - manual_x, "manual");
-    y = drawTimeHelpText(manual_x + 2, y, "uptime since boot");
-    y = drawTimeHelpText(manual_x + 2, y, "clock RTC / NTP");
-    y = drawTimeHelpText(manual_x + 2, y, "countdown + alarm");
-    y = drawTimeHelpText(manual_x + 2, y, "stopwatch 1 ms");
-    y = drawTimeHelpText(manual_x + 2, y, "CD/SW run in bg");
-    y = drawTimeHelpText(manual_x + 2, y, "while device awake");
+    // 每个 Time 子模块只显示与当前模块相关的帮助
+    switch (timeMode) {
+        case TimeMode::UPTIME:
+            y = drawTimeHelpKey(2, y, 'p', "pure mode");
+            y = drawTimeHelpText(2, y, "Shows time since device boot.");
+            break;
+        case TimeMode::CLOCK:
+            y = drawTimeHelpKey(2, y, 'r', "sync time over WiFi");
+            y = drawTimeHelpKey(2, y, 'p', "pure mode");
+            y = drawTimeHelpKey(2, y, 'b', "big clock in pure mode");
+            y = drawTimeHelpText(2, y, "Uses RTC; sync source is NTP.");
+            break;
+        case TimeMode::COUNTDOWN:
+            y = drawTimeHelpBadge(2, y, "Arrows", "select / adjust field");
+            y = drawTimeHelpBadge(2, y, "0-9", "enter duration");
+            y = drawTimeHelpBadge(2, y, "BtnGO", "start / pause / resume");
+            y = drawTimeHelpKey(2, y, 'r', "reset countdown");
+            y = drawTimeHelpKey(2, y, 'p', "pure mode");
+            y = drawTimeHelpText(2, y, "Keeps running in background.");
+            break;
+        case TimeMode::STOPWATCH:
+            y = drawTimeHelpBadge(2, y, "BtnGO", "start / pause / resume");
+            y = drawTimeHelpKey(2, y, 'r', "reset stopwatch");
+            y = drawTimeHelpKey(2, y, 'p', "pure mode");
+            y = drawTimeHelpText(2, y, "1 ms display; runs in background.");
+            break;
+    }
 
     drawHelpHintRight("close");
     updateAppHeaderStatus();
@@ -235,12 +230,10 @@ static void drawRtcBusyScreen(const char* msg) {
     rtcScreenReady = true;
     rtcLastTime[0] = '\0';
     rtcLastDate[0] = '\0';
-    rtcLastSrc[0] = '\0';
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y + 4);
     M5Cardputer.Display.println(msg);
-    drawTimeBottomHints(nullptr, 0);
 }
 
 static bool trySyncNtpTime(const uint32_t deadline_ms) {
@@ -541,7 +534,6 @@ static void drawRtcApp(const bool full_init) {
         uptimeScreenReady = false;
         rtcLastTime[0] = '\0';
         rtcLastDate[0] = '\0';
-        rtcLastSrc[0] = '\0';
         int y = APP_CONTENT_INSET_Y;
         drawInfoLineAt(APP_CONTENT_X, y, "time", "not set", RTC_FAIL_TEXT_SIZE);
         y += INFO_LINE_H_2X;
@@ -553,7 +545,6 @@ static void drawRtcApp(const bool full_init) {
         } else {
             drawInfoLineAt(APP_CONTENT_X, y, "hint", "wifi/ntp fail", RTC_FAIL_TEXT_SIZE);
         }
-        drawClockBottomHints();
         return;
     }
 
@@ -572,12 +563,10 @@ static void drawRtcApp(const bool full_init) {
         uptimeScreenReady = false;
         rtcLastTime[0] = '\0';
         rtcLastDate[0] = '\0';
-        rtcLastSrc[0] = '\0';
-        drawClockBottomHints();
     }
     updateRtcTimeText(time_buf);
     updateRtcDateText(date_buf);
-    updateRtcSourceTag(source); // 内容区顶部：NTP / RTC
+    (void)source; // 来源信息改到 Help，主界面不再画 NTP/RTC 标签
 }
 
 static void drawUptimeApp(const bool full_init) {
@@ -598,8 +587,6 @@ static void drawUptimeApp(const bool full_init) {
         uptimeScreenReady = true;
         rtcScreenReady = false;
         uptimeTimeState = BigTimeState{};
-        const KeyHintItem items[] = {{'p', "pure"}};
-        drawTimeBottomHints(items, 1);
     }
 
     drawBigTimeDisplay(uptimeTimeState, area_y, area_h, hours, minutes, seconds, frac, false,
@@ -612,7 +599,6 @@ static void enterClockMode(const bool force_sync) {
     uptimeScreenReady = false;
     rtcLastTime[0] = '\0';
     rtcLastDate[0] = '\0';
-    rtcLastSrc[0] = '\0';
     syncClockTimeIfNeeded(force_sync);
     if (timePureVisible) {
         drawRtcPureApp(true);
@@ -632,7 +618,6 @@ static void enterTimeMode(const TimeMode mode) {
         uptimeScreenReady = false;
         rtcLastTime[0] = '\0';
         rtcLastDate[0] = '\0';
-        rtcLastSrc[0] = '\0';
         syncClockTimeIfNeeded(false);
         if (timePureVisible) {
             drawRtcPureApp(true);

@@ -162,6 +162,7 @@ export default defineConfig({
             text: '时间与电源',
             items: [
               { text: 'Time 时间', link: '/apps/time' },
+              { text: 'Calendar 日历', link: '/apps/calendar' },
               { text: 'Battery 电池', link: '/apps/battery' },
               { text: 'Sleep 睡眠', link: '/apps/sleep' },
               { text: 'Cursor 用量', link: '/apps/cursor' },
@@ -182,7 +183,6 @@ export default defineConfig({
           {
             text: '硬件调试与演示',
             items: [
-              { text: 'Mic 麦克风', link: '/apps/mic' },
               {
                 text: 'Mini Games 小游戏',
                 link: '/apps/mini-games',
@@ -209,6 +209,7 @@ export default defineConfig({
                   { text: 'RGB LED', link: '/apps/rgb-led' },
                   { text: 'BLE', link: '/apps/ble' },
                   { text: 'I2C 扫描', link: '/apps/i2c' },
+                  { text: 'Mic 麦克风', link: '/apps/mic' },
                 ],
               },
             ],
@@ -290,6 +291,7 @@ export default defineConfig({
             text: 'Time & Power',
             items: [
               { text: 'Time', link: '/en/apps/time' },
+              { text: 'Calendar', link: '/en/apps/calendar' },
               { text: 'Battery', link: '/en/apps/battery' },
               { text: 'Sleep', link: '/en/apps/sleep' },
               { text: 'Cursor Usage', link: '/en/apps/cursor' },
@@ -310,7 +312,6 @@ export default defineConfig({
           {
             text: 'Hardware Demos',
             items: [
-              { text: 'Mic', link: '/en/apps/mic' },
               {
                 text: 'Mini Games',
                 link: '/en/apps/mini-games',
@@ -337,6 +338,7 @@ export default defineConfig({
                   { text: 'RGB LED', link: '/en/apps/rgb-led' },
                   { text: 'BLE', link: '/en/apps/ble' },
                   { text: 'I2C Scan', link: '/en/apps/i2c' },
+                  { text: 'Mic', link: '/en/apps/mic' },
                 ],
               },
             ],

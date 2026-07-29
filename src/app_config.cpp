@@ -138,9 +138,12 @@ bool loadAppConfig() {
     g_config.mijia_on_off_sound = true;
     g_config.time_default_mode = TimeDefaultMode::Up;
     g_config.time_pure = false;
+    g_config.week_start = WeekStartDay::Sunday;
     g_config.infrared_default = IrDefaultCategory::Tv;
     g_config.infrared_tv_brand = 0; // Samsung
     g_config.infrared_ac_brand = 0; // Midea
+    g_config.hid_keyboard_transport = HidKeyboardTransport::Ble;
+    g_config.hid_keyboard_imu_sensitivity = 5;
     copyField(g_config.timezone, sizeof(g_config.timezone), APP_TIMEZONE_DEFAULT);
 
     if (!LittleFS.exists(CONFIG_PATH)) {
@@ -251,6 +254,13 @@ bool loadAppConfig() {
         copyField(g_config.timezone, sizeof(g_config.timezone), tz);
     }
 
+    // system：系统级通用偏好
+    g_config.week_start = WeekStartDay::Sunday;
+    JsonObject system_obj = doc["system"];
+    if (!system_obj.isNull()) {
+        g_config.week_start = parseWeekStartDay(system_obj["week_start"]);
+    }
+
     // Time：time.default / time.pure
     g_config.time_default_mode = TimeDefaultMode::Up;
     g_config.time_pure = false;
@@ -272,6 +282,18 @@ bool loadAppConfig() {
         g_config.infrared_default = parseIrDefaultCategory(ir_obj["default"]);
         g_config.infrared_tv_brand = parseIrTvBrand(ir_obj["tv_brand"]);
         g_config.infrared_ac_brand = parseIrAcBrand(ir_obj["ac_brand"]);
+    }
+
+    // HID Keyboard：缺字段时保持安全默认 BLE、灵敏度 5
+    JsonObject hid_keyboard_obj = doc["hid_keyboard"];
+    if (!hid_keyboard_obj.isNull()) {
+        g_config.hid_keyboard_transport =
+            parseHidKeyboardTransport(hid_keyboard_obj["transport"]);
+        int sensitivity = hid_keyboard_obj["imu_sensitivity"] | 5;
+        if (sensitivity < 1 || sensitivity > 10) {
+            sensitivity = 5;
+        }
+        g_config.hid_keyboard_imu_sensitivity = static_cast<uint8_t>(sensitivity);
     }
 
     JsonArray devices = doc["devices"].as<JsonArray>();
@@ -881,6 +903,49 @@ bool saveAppConfigTimePure(const bool enabled) {
     return loadAppConfig();
 }
 
+const char* weekStartDayName(const WeekStartDay day) {
+    return day == WeekStartDay::Monday ? "monday" : "sunday";
+}
+
+WeekStartDay parseWeekStartDay(const char* s) {
+    if (s != nullptr && (strcasecmp(s, "monday") == 0 || strcasecmp(s, "mon") == 0)) {
+        return WeekStartDay::Monday;
+    }
+    return WeekStartDay::Sunday;
+}
+
+bool saveAppConfigWeekStart(const WeekStartDay day) {
+    JsonDocument doc;
+    if (LittleFS.exists(CONFIG_PATH)) {
+        File in = LittleFS.open(CONFIG_PATH, "r");
+        if (in) {
+            const DeserializationError err = deserializeJson(doc, in);
+            in.close();
+            if (err) {
+                doc.clear();
+            }
+        }
+    }
+
+    JsonObject system_obj = doc["system"].as<JsonObject>();
+    if (system_obj.isNull()) {
+        system_obj = doc["system"].to<JsonObject>();
+    }
+    system_obj["week_start"] = weekStartDayName(day);
+
+    if (doc["devices"].isNull()) {
+        doc["devices"].to<JsonArray>();
+    }
+
+    File out = LittleFS.open(CONFIG_PATH, "w");
+    if (!out) {
+        return false;
+    }
+    serializeJsonPretty(doc, out);
+    out.close();
+    return loadAppConfig();
+}
+
 const char* irDefaultCategoryName(const IrDefaultCategory category) {
     return category == IrDefaultCategory::Ac ? "ac" : "tv";
 }
@@ -993,6 +1058,55 @@ bool saveAppConfigInfrared(const IrDefaultCategory category, const uint8_t tv_br
     ir_obj["default"] = irDefaultCategoryName(category);
     ir_obj["tv_brand"] = irTvBrandConfigName(tv_brand);
     ir_obj["ac_brand"] = irAcBrandConfigName(ac_brand);
+
+    if (doc["devices"].isNull()) {
+        doc["devices"].to<JsonArray>();
+    }
+
+    File out = LittleFS.open(CONFIG_PATH, "w");
+    if (!out) {
+        return false;
+    }
+    serializeJsonPretty(doc, out);
+    out.close();
+    return loadAppConfig();
+}
+
+const char* hidKeyboardTransportName(const HidKeyboardTransport transport) {
+    return transport == HidKeyboardTransport::Usb ? "usb" : "ble";
+}
+
+HidKeyboardTransport parseHidKeyboardTransport(const char* s) {
+    if (s != nullptr && strcasecmp(s, "usb") == 0) {
+        return HidKeyboardTransport::Usb;
+    }
+    return HidKeyboardTransport::Ble;
+}
+
+bool saveAppConfigHidKeyboard(const HidKeyboardTransport transport,
+                              const uint8_t imu_sensitivity) {
+    JsonDocument doc;
+    if (LittleFS.exists(CONFIG_PATH)) {
+        File in = LittleFS.open(CONFIG_PATH, "r");
+        if (in) {
+            const DeserializationError err = deserializeJson(doc, in);
+            in.close();
+            if (err) {
+                doc.clear();
+            }
+        }
+    }
+
+    const uint8_t sensitivity =
+        imu_sensitivity < 1 || imu_sensitivity > 10 ? 5 : imu_sensitivity;
+    JsonObject hid_keyboard_obj = doc["hid_keyboard"].as<JsonObject>();
+    if (hid_keyboard_obj.isNull()) {
+        hid_keyboard_obj = doc["hid_keyboard"].to<JsonObject>();
+    }
+    hid_keyboard_obj["transport"] = hidKeyboardTransportName(transport);
+    // 兼容清理已写入过的旧字段；IMU 开关是临时运行状态
+    hid_keyboard_obj.remove("imu_mouse");
+    hid_keyboard_obj["imu_sensitivity"] = sensitivity;
 
     if (doc["devices"].isNull()) {
         doc["devices"].to<JsonArray>();

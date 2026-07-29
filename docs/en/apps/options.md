@@ -2,7 +2,7 @@
 
 Main menu key: `o`
 
-On-device settings: screen brightness, invert, key sounds and volume, Time default mode, IR defaults, and more. Changes write to `config.json` (volume is debounced to disk).
+On-device settings: screen brightness, invert, key sounds and volume, Time default mode, calendar week start, IR defaults, and more. Changes write to `config.json` (volume is debounced to disk).
 
 ## Screenshots
 
@@ -37,6 +37,7 @@ Common items:
 | `sound.time_key` | Time page key sound |
 | `sound.mijia_on_off` | Mijia on/off beep |
 | `sound.volume` | Speaker volume 0–100 |
+| `system.week_start` | Calendar week start: `sunday` / `monday` |
 | `time.default` / `time.pure` | Time default mode / Pure |
 | `infrared.*` | IR default category and brand |
 

@@ -22,8 +22,8 @@ Sparks is a multi-app firmware for the [M5Stack Cardputer](https://docs.m5stack.
 | `m` | Mij | [Mijia](/en/apps/mijia) | `u` | Cfg | [Config](/en/apps/config) | `w` | WiFi | [WiFi](/en/apps/wifi) |
 | `t` | Time | [Time](/en/apps/time) | `s` | Slp | [Sleep](/en/apps/sleep) | `o` | Opt | [Options](/en/apps/options) |
 | `i` | Inf | [Info](/en/apps/info) | `p` | Bat | [Battery](/en/apps/battery) | `c` | Cur | [Cursor](/en/apps/cursor) |
-| `v` | Ver | [Version](/en/apps/version) | `j` | Mor | [Morse](/en/apps/morse) | `x` | IR | [Infrared](/en/apps/infrared) |
-| `k` | KB | [Keyboard](/en/apps/hid-keyboard) | `r` | Mic | [Mic](/en/apps/mic) | `g` | Game | [Mini Games](/en/apps/mini-games) |
+| `a` | Cal | [Calendar](/en/apps/calendar) | `v` | Ver | [Version](/en/apps/version) | `j` | Mor | [Morse](/en/apps/morse) |
+| `x` | IR | [Infrared](/en/apps/infrared) | `k` | KB | [Keyboard](/en/apps/hid-keyboard) | `g` | Game | [Mini Games](/en/apps/mini-games) |
 | `h` | Test | [Hardware Test](/en/apps/hardware-test) |  |  |  |  |  |  |
 
 The menu paginates with the keyboard arrow keys; no **Fn** needed.

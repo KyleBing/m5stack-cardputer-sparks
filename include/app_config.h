@@ -39,10 +39,22 @@ enum class TimeDefaultMode : uint8_t {
     Stopwatch = 3,
 };
 
+// 每周起始日（config: system.week_start）
+enum class WeekStartDay : uint8_t {
+    Sunday = 0,
+    Monday = 1,
+};
+
 // 红外入口默认功能块（config: infrared.default）
 enum class IrDefaultCategory : uint8_t {
     Tv = 0,
     Ac = 1,
+};
+
+// HID Keyboard 默认传输方式（config: hid_keyboard.transport）
+enum class HidKeyboardTransport : uint8_t {
+    Ble = 0,
+    Usb = 1,
 };
 
 // 与 app_ir 品牌表一致
@@ -73,9 +85,12 @@ struct AppConfig {
     bool mijia_on_off_sound; // 米家开/关提示音
     TimeDefaultMode time_default_mode; // 按 T 进入 Time 时的默认模块
     bool time_pure;                    // Time 是否默认 pure 全屏
+    WeekStartDay week_start;           // 日历每周起始日
     IrDefaultCategory infrared_default; // 进入红外时默认 TV / AC
     uint8_t infrared_tv_brand;          // 0..IR_TV_BRAND_COUNT-1
     uint8_t infrared_ac_brand;          // 0..IR_AC_BRAND_COUNT-1
+    HidKeyboardTransport hid_keyboard_transport; // HID Keyboard 默认 BLE / USB
+    uint8_t hid_keyboard_imu_sensitivity;       // IMU 鼠标灵敏度 1..10
     MijiaDevice devices[MIJIA_DEVICE_MAX];
     int device_count;
     MijiaDeviceGroup device_groups[MIJIA_GROUP_MAX];
@@ -127,6 +142,13 @@ bool saveAppConfigTimeDefaultMode(TimeDefaultMode mode);
 // 更新 Time pure 偏好并写回
 bool saveAppConfigTimePure(bool enabled);
 
+// 更新日历每周起始日并写回 system.week_start
+bool saveAppConfigWeekStart(WeekStartDay day);
+
+// 每周起始日 ↔ 配置字符串
+const char* weekStartDayName(WeekStartDay day);
+WeekStartDay parseWeekStartDay(const char* s);
+
 // Time 默认模块 ↔ 配置字符串
 const char* timeDefaultModeName(TimeDefaultMode mode);
 TimeDefaultMode parseTimeDefaultMode(const char* s);
@@ -146,6 +168,13 @@ IrDefaultCategory cycleIrDefaultCategory(IrDefaultCategory cur, int delta);
 
 // 更新红外默认并写回（infrared 对象）
 bool saveAppConfigInfrared(IrDefaultCategory category, uint8_t tv_brand, uint8_t ac_brand);
+
+// HID Keyboard 传输方式 ↔ 配置字符串
+const char* hidKeyboardTransportName(HidKeyboardTransport transport);
+HidKeyboardTransport parseHidKeyboardTransport(const char* s);
+
+// 更新 HID Keyboard 偏好并写回（hid_keyboard 对象）
+bool saveAppConfigHidKeyboard(HidKeyboardTransport transport, uint8_t imu_sensitivity);
 
 // 常用时区预设（Settings 里 -= 循环）
 const char* cycleAppTimezonePreset(const char* current, int delta);

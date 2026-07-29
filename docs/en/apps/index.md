@@ -38,6 +38,7 @@ More detail: [Getting Started · Main Menu](/en/guide/getting-started#main-menu)
 | Key | App | Description |
 |-----|-----|-------------|
 | `t` | [Time](./time) | Clock tools: Uptime / Clock / countdown / stopwatch |
+| `a` | [Calendar](./calendar) | Full-month grid; month / year nav; today highlight |
 | `p` | [Battery](./battery) | Live charge level and ~1-hour history chart |
 | `s` | [Sleep](./sleep) | Enter light / deep sleep |
 
@@ -61,6 +62,5 @@ More detail: [Getting Started · Main Menu](/en/guide/getting-started#main-menu)
 
 | Key | App | Description |
 |-----|-----|-------------|
-| `r` | [Mic](./mic) | Live waveform + VU + gain |
 | `g` | [Mini Games](./mini-games) | [Coin](./coin-toss), [pendulum](./double-pendulum), [wheel](./prize-wheel), [Dice](./dice), [Newton cradle](./newton-cradle), [Neon FX](./neon-fx), [curves](./curves) |
-| `h` | [Hardware Test](./hardware-test) | Display, IMU, Font, Icons, LED, BLE, and I2C |
+| `h` | [Hardware Test](./hardware-test) | Display, IMU, Font, Icons, LED, BLE, I2C, [Mic](./mic) |

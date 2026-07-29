@@ -26,6 +26,7 @@
 #include "app_battery.h"
 #include "app_info.h"
 #include "app_hid_keyboard.h"
+#include "app_calendar.h"
 #include "app_screenshot.h"
 #include <WiFi.h>
 #include <esp_sleep.h>
@@ -79,6 +80,7 @@ enum class AppState {
     BATTERY,
     HID_KEYBOARD,
     INFO, // 系统信息 / 内存（字母 i）
+    CALENDAR,
 };
 
 enum class HardwareTestMode {
@@ -91,6 +93,7 @@ enum class HardwareTestMode {
     BLE,
     IN_I2C,
     EX_I2C,
+    MIC, // 麦克风波形（原主菜单 r）
 };
 
 struct MenuItem {
@@ -113,13 +116,13 @@ static const MenuItem MENU_ITEMS[] = {
     {'i', "Inf", "INFO", AppState::INFO},
     {'p', "Bat", "BATTERY", AppState::BATTERY},
     {'c', "Cur", "CURSOR", AppState::CURSOR},
+    {'a', "Cal", "CALENDAR", AppState::CALENDAR},
     {'v', "Ver", "VERSION", AppState::VERSION},
     {'j', "Mor", "MORSE", AppState::MORSE},
     {'x', "IR", "INFRARED", AppState::IR},
 
     // 系统功能测试
     {'k', "KB", "KEYBOARD", AppState::HID_KEYBOARD},
-    {'r', "Mic", "MIC", AppState::MIC},
     {'g', "Game", "MINI GAMES", AppState::GAMES},
     {'h', "Test", "HARDWARE TEST", AppState::HARDWARE_TESTS},
 };
@@ -182,6 +185,10 @@ const char* getCurrentAppShotSlug() {
         case AppState::GAMES:
             return "games";
         case AppState::HARDWARE_TESTS:
+            // Mic 在 Test 子项里时用 mic 截图名
+            if (hardwareTestMode == HardwareTestMode::MIC) {
+                return "mic";
+            }
             return "hardware";
         case AppState::SETTINGS:
             return "options";
@@ -221,6 +228,8 @@ const char* getCurrentAppShotSlug() {
             return "hidkeyboard";
         case AppState::INFO:
             return "info";
+        case AppState::CALENDAR:
+            return "calendar";
         default:
             return "unknown";
     }
@@ -961,7 +970,7 @@ static int settingsPanelRowCount(const SettingsModule mod) {
         case SettingsModule::Sound:
             return 3; // volume / time key / mijia pwr
         case SettingsModule::Time:
-            return 3; // default / timezone / pure
+            return 4; // default / timezone / week start / pure
         case SettingsModule::Infrared:
             return 3; // category / tv brand / ac brand
         default:
@@ -1193,8 +1202,11 @@ static void drawSettingsTimePanel(const int x, const int y, const int w) {
                          APP_COLOR_VALUE, g_settings_row == 0);
     drawSettingsRowLabel(x, y + INFO_LINE_H, w, "tz", getAppTimezone(), APP_COLOR_VALUE,
                          g_settings_row == 1);
-    drawSettingsRowLabel(x, y + INFO_LINE_H * 2, w, "pure", cfg.time_pure ? "ON" : "OFF",
-                         cfg.time_pure ? APP_COLOR_OK : APP_COLOR_HINT, g_settings_row == 2);
+    const char* week_start = cfg.week_start == WeekStartDay::Monday ? "Mon" : "Sun";
+    drawSettingsRowLabel(x, y + INFO_LINE_H * 2, w, "week", week_start, APP_COLOR_VALUE,
+                         g_settings_row == 2);
+    drawSettingsRowLabel(x, y + INFO_LINE_H * 3, w, "pure", cfg.time_pure ? "ON" : "OFF",
+                         cfg.time_pure ? APP_COLOR_OK : APP_COLOR_HINT, g_settings_row == 3);
 }
 
 static void drawSettingsInfraredPanel(const int x, const int y, const int w) {
@@ -1325,6 +1337,11 @@ static void applySettingsValueDelta(const int val_delta) {
                     applyLocalTimezone();
                 }
             } else if (g_settings_row == 2) {
+                const WeekStartDay next = getAppConfig().week_start == WeekStartDay::Monday
+                                              ? WeekStartDay::Sunday
+                                              : WeekStartDay::Monday;
+                saveAppConfigWeekStart(next);
+            } else if (g_settings_row == 3) {
                 saveAppConfigTimePure(!getAppConfig().time_pure);
             }
             break;
@@ -2046,11 +2063,12 @@ static uint16_t hwHubTitle() {
 }
 
 // Test hub 卡片：尺寸与主菜单一致
-static void drawHardwareTestHubCard(const int x, const int y, const char key, const char* title) {
+static void drawHardwareTestHubCard(const int x, const int y, const int card_w, const int card_h,
+                                    const char key, const char* title) {
     const uint16_t card_bg = hwHubCardBg();
     const uint16_t accent = hwHubAccent();
-    M5Cardputer.Display.fillRoundRect(x, y, APP_HUB_CARD_W, APP_HUB_CARD_H, 4, card_bg);
-    M5Cardputer.Display.drawRoundRect(x, y, APP_HUB_CARD_W, APP_HUB_CARD_H, 4, hwHubBorder());
+    M5Cardputer.Display.fillRoundRect(x, y, card_w, card_h, 4, card_bg);
+    M5Cardputer.Display.drawRoundRect(x, y, card_w, card_h, 4, hwHubBorder());
     M5Cardputer.Display.fillRoundRect(x + 4, y + 3, 18, 16, 3, accent);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(BLACK, accent);
@@ -2062,11 +2080,14 @@ static void drawHardwareTestHubCard(const int x, const int y, const char key, co
 }
 
 static void drawHardwareTestHubCardAt(const int index, const char key, const char* title) {
+    // 9 项需 5 行：略压卡片高度 / 行距以塞进 135 屏
+    static constexpr int HW_CARD_H = 19;
+    static constexpr int HW_GAP_Y = 2;
     const int row = index / APP_HUB_CARD_COLS;
     const int col = index % APP_HUB_CARD_COLS;
     const int x = APP_HUB_CARD_ORIGIN_X + col * (APP_HUB_CARD_W + APP_HUB_CARD_GAP_X);
-    const int y = APP_HUB_CARD_ORIGIN_Y + row * (APP_HUB_CARD_H + APP_HUB_CARD_GAP_Y);
-    drawHardwareTestHubCard(x, y, key, title);
+    const int y = APP_HUB_CARD_ORIGIN_Y + row * (HW_CARD_H + HW_GAP_Y);
+    drawHardwareTestHubCard(x, y, APP_HUB_CARD_W, HW_CARD_H, key, title);
 }
 
 static void drawHardwareTestHubCards() {
@@ -2079,6 +2100,7 @@ static void drawHardwareTestHubCards() {
     drawHardwareTestHubCardAt(5, '6', "BLE");
     drawHardwareTestHubCardAt(6, '7', "INI2");
     drawHardwareTestHubCardAt(7, '8', "EXI2");
+    drawHardwareTestHubCardAt(8, '9', "MIC");
 }
 
 static void showHardwareTestsHubScreen() {
@@ -2091,6 +2113,8 @@ static void showHardwareTestsHubScreen() {
 static void leaveHardwareTestChild(const HardwareTestMode mode) {
     if (mode == HardwareTestMode::LED) {
         leaveLedApp();
+    } else if (mode == HardwareTestMode::MIC) {
+        leaveMicApp();
     }
     g_i2c_help_visible = false;
 }
@@ -2121,6 +2145,8 @@ static void selectHardwareTest(const HardwareTestMode mode) {
     } else if (mode == HardwareTestMode::EX_I2C) {
         g_i2c_help_visible = false;
         drawI2cScanApp(M5Cardputer.Ex_I2C, "ExI2");
+    } else if (mode == HardwareTestMode::MIC) {
+        enterMicApp();
     }
 }
 
@@ -2136,7 +2162,7 @@ static bool handleHardwareTestsBack() {
 static void handleHardwareTestsApp(const Keyboard_Class::KeysState& status) {
     if (hardwareTestMode == HardwareTestMode::HUB) {
         for (const char c : status.word) {
-            if (c >= '1' && c <= '8') {
+            if (c >= '1' && c <= '9') {
                 selectHardwareTest(static_cast<HardwareTestMode>(
                     static_cast<int>(HardwareTestMode::SCREEN) + (c - '1')));
                 return;
@@ -2160,6 +2186,8 @@ static void handleHardwareTestsApp(const Keyboard_Class::KeysState& status) {
         handleI2cScanApp(getPressedKey(), M5Cardputer.In_I2C, "InI2", true);
     } else if (hardwareTestMode == HardwareTestMode::EX_I2C) {
         handleI2cScanApp(getPressedKey(), M5Cardputer.Ex_I2C, "ExI2", false);
+    } else if (hardwareTestMode == HardwareTestMode::MIC) {
+        handleMicApp(status);
     }
 }
 
@@ -2493,6 +2521,9 @@ void enterApp(const AppState state) {
         case AppState::INFO:
             enterInfoApp();
             break;
+        case AppState::CALENDAR:
+            enterCalendarApp();
+            break;
         default:
             break;
     }
@@ -2698,6 +2729,10 @@ void loop() {
             lastHardwareBleUpdateMs = now;
             updateBleApp();
         }
+    } else if (currentState == AppState::HARDWARE_TESTS &&
+               hardwareTestMode == HardwareTestMode::MIC) {
+        // 与独立 Mic 相同：每帧拉取，避免断流
+        updateMicApp();
     } else if (currentState == AppState::BATTERY) {
         static uint32_t lastBatUpdateMs = 0;
         // 后台 NTP 时 250ms 轮询；平时 1s 刷新电量
@@ -2708,6 +2743,8 @@ void loop() {
         }
     } else if (currentState == AppState::INFO) {
         updateInfoApp();
+    } else if (currentState == AppState::CALENDAR) {
+        updateCalendarApp();
     } else if (currentState == AppState::WIFI) {
         updateWifiApp();
     } else if (currentState == AppState::BLE) {
@@ -2917,6 +2954,11 @@ void loop() {
             case AppState::INFO:
                 if (M5Cardputer.Keyboard.isPressed()) {
                     handleInfoApp(M5Cardputer.Keyboard.keysState());
+                }
+                break;
+            case AppState::CALENDAR:
+                if (M5Cardputer.Keyboard.isPressed()) {
+                    handleCalendarApp(M5Cardputer.Keyboard.keysState());
                 }
                 break;
             default:

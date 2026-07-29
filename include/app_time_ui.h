@@ -4,20 +4,7 @@
 #include "app_common.h"
 #include <cstdint>
 
-static constexpr int TIME_TAG_H = 12;
-static constexpr int TIME_HINT_ROW_H = 12;
-
-// 时间子界面：内容区顶部小标签（如 Clock 的 NTP/RTC 来源）
-void drawTimeModeTag(const char* tag);
-
-// 底栏：左侧功能操作提示，右侧 h help/back
-void drawTimeBottomHints(const KeyHintItem* action_items, int action_count,
-                         const char* help_label = "help");
-
-// 底栏右侧 h help/back
-void drawTimeHelpHintRight(const char* help_label = "help");
-
-// 大字时间区（含 tag / 底栏提示）
+// 大字时间区（无底栏 tip，铺满 header 以下）
 void getTimeDisplayArea(int& area_y, int& area_h);
 
 // Pure 模式：整屏内容区

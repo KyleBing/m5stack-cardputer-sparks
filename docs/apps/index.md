@@ -38,6 +38,7 @@
 | 键 | App | 说明 |
 |----|-----|------|
 | `t` | [Time](./time) | 钟表功能，系统运行时长 / 时钟 / 倒计时 / 秒表 |
+| `a` | [Calendar](./calendar) | 单月日历网格，翻月 / 翻年，今日高亮 |
 | `p` | [Battery](./battery) | 实时电量，过去12小时的电量变化图表 |
 | `s` | [Sleep](./sleep) | 进入浅睡 / 深睡 |
 
@@ -61,6 +62,5 @@
 
 | 键 | App | 说明 |
 |----|-----|------|
-| `r` | [Mic](./mic) | 实时波形 + VU + 增益 展示 |
 | `g` | [Mini Games](./mini-games) | [硬币](./coin-toss)、[双摆](./double-pendulum)、[抽奖轮](./prize-wheel)、[Dice](./dice)、[牛顿摆](./newton-cradle)、[Neon FX](./neon-fx)、[曲线](./curves) |
-| `h` | [Hardware Test](./hardware-test) | Display、IMU、Font、Icons、LED、BLE 与 I2C |
+| `h` | [Hardware Test](./hardware-test) | Display、IMU、Font、Icons、LED、BLE、I2C、[Mic](./mic) |
