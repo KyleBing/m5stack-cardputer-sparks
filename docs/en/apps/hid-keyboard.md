@@ -2,7 +2,9 @@
 
 Main menu key: `k`
 
-Use Cardputer as a **USB** or **BLE** HID keyboard to send keys to the host. This App **cannot** return to the menu with `ESC` — use **BtnGO**.
+Use Cardputer as a **USB** or **BLE** HID keyboard / mouse. This App **cannot** return to the menu with `ESC` — use **BtnGO**.
+
+No header on the main input screen. Left pill column shows Fn / Aa / Opt / Ctrl / Alt; center shows a large last-key echo; footer shows link status, green device name, and a yellow slot badge.
 
 ## Screenshots
 
@@ -42,9 +44,22 @@ Use Cardputer as a **USB** or **BLE** HID keyboard to send keys to the host. Thi
 |------|------|
 | `Fn` + `u` | USB HID |
 | `Fn` + `b` | BLE HID |
+| **Hold `Fn`** | Toggle IMU→mouse pointer |
 | `Fn` + `p` | BLE host list (switch / pair) |
 | **BtnGO** | Exit to main menu (and disconnect BLE) |
-| `h` | Help |
+| `Fn` + `h` | Help |
+
+### IMU mouse (hold Fn)
+
+Letters are used for clicks (not typed). Digits set sensitivity. Other function keys still go to the host.
+
+| Key | Action |
+|------|------|
+| Left-half letters `qwerty asdfg zxcv` (`ygv` left) | Left click |
+| Right-half letters `uiop hjkl bnm` (`uhb` right) | Right click |
+| `1`–`9` / `0` | Sensitivity 1..10 |
+
+Center shows a mouse icon; right side is the sensitivity bar. If BLE pointer does nothing, forget the device on the host and re-pair.
 
 ### BLE host list (`Fn+p`)
 
@@ -63,7 +78,7 @@ Stores up to **5** paired hosts; only one connected at a time.
 
 | Key | Action |
 |------|------|
-| `Fn` + `` ` `` | Esc |
+| `` ` `` (bare) | Esc (to host) |
 | `Fn` + Backspace | Delete |
 | `Fn` + `;` `,` `.` `/` | Arrow keys |
 | `Fn` + `1`–`0` | F1–F10 |
@@ -76,5 +91,7 @@ Stores up to **5** paired hosts; only one connected at a time.
 1. Use a cable for USB, or `Fn+b` for BLE keyboard then pair on the host (`Fn+p` → `n`).
 2. Multiple hosts: `Fn+p` opens the list, select a slot, Enter to switch. `reconnecting #N` means waiting for the target PC to auto-reconnect (usually within a few seconds; otherwise tap `Cardputer KB` in Bluetooth again).
 3. New pairing with `n`: rejects old hosts grabbing the link, then search/pair on the new PC.
-4. Type normal characters directly; function keys use the Fn layer.
-5. Always exit with **BtnGO** (disconnects BLE); avoid confusing it with Esc sent to the host.
+4. Type normal characters directly; bare `` ` `` sends Esc; other function keys use the Fn layer.
+5. Hold `Fn` for IMU mouse; `ygv` left / `uhb` right click; `1`–`0` set sensitivity; other function keys still work.
+6. Always exit with **BtnGO** (disconnects BLE); `` ` `` is Esc to the host.
+7. BLE combo keyboard+mouse: after firmware update, forget `Cardputer KB` and re-pair if the pointer does nothing.

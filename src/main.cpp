@@ -2657,7 +2657,8 @@ void loop() {
                    currentState != AppState::HARDWARE_TESTS &&
                    !(currentState == AppState::RTC && isTimePureMode()) &&
                    !(currentState == AppState::CURSOR && isCursorDisplayBlanked()) &&
-                   !(currentState == AppState::MIJIA && mijiaAppSuppressesHeader())) {
+                   !(currentState == AppState::MIJIA && mijiaAppSuppressesHeader()) &&
+                   !(currentState == AppState::HID_KEYBOARD && hidKeyboardSuppressesHeader())) {
             updateAppHeaderStatus();
         }
     }

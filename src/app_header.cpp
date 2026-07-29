@@ -2,6 +2,7 @@
 #include "app_icons.h"
 #include "app_common.h"
 #include "app_connectivity.h"
+#include "app_hid_keyboard.h"
 #include "M5Cardputer.h"
 
 static constexpr int MENU_LOGO_SIZE = 24;
@@ -197,6 +198,10 @@ void updateMenuHeaderStatus(const int page_count) {
 }
 
 void updateAppHeaderStatus() {
+    // Keyboard 主界面 / Hosts / 退出 Exiting 期间禁止刷蓝牙等图标
+    if (hidKeyboardSuppressesHeader()) {
+        return;
+    }
     static int prev_clear_left = -1;
     const int screen_w = M5Cardputer.Display.width();
     const int status_right = screen_w - 2 - APP_BACK_BTN_W - 4;

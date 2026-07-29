@@ -126,6 +126,12 @@ export default defineConfig({
           { text: '功能目录', link: '/apps/' },
           { text: '截图', link: '/apps/shots' },
           { text: '快捷键', link: '/guide/shortcuts' },
+          {
+            text: '设计',
+            link: 'https://www.figma.com/design/0H3Bqh1L6Mc0goVGZNV8VL/M5Stack-Cardputer?node-id=0-1&t=ctF3gOUBwf6OLqQq-1',
+            target: '_blank',
+            rel: 'noopener noreferrer',
+          },
           { component: 'VersionSwitcher' },
         ],
         sidebar: ARCHIVE_SIDEBARS?.root ?? [
@@ -248,6 +254,12 @@ export default defineConfig({
           { text: 'Apps', link: '/en/apps/' },
           { text: 'Screenshots', link: '/en/apps/shots' },
           { text: 'Shortcuts', link: '/en/guide/shortcuts' },
+          {
+            text: 'Design',
+            link: 'https://www.figma.com/design/0H3Bqh1L6Mc0goVGZNV8VL/M5Stack-Cardputer?node-id=0-1&t=ctF3gOUBwf6OLqQq-1',
+            target: '_blank',
+            rel: 'noopener noreferrer',
+          },
           { component: 'VersionSwitcher' },
         ],
         sidebar: ARCHIVE_SIDEBARS?.en ?? [
