@@ -548,7 +548,7 @@ void updateBatteryApp() {
         g_last_curr[0] = '\0';
         g_last_vbus[0] = '\0';
 
-        int y = APP_CONTENT_Y;
+        int y = APP_CONTENT_INSET_Y;
         batUpdateLine(y, "bat", bat, g_last_bat, sizeof(g_last_bat));
         y += INFO_LINE_H_2X;
         batUpdateLine(y, "volt", volt, g_last_volt, sizeof(g_last_volt));
@@ -572,7 +572,7 @@ void updateBatteryApp() {
         return;
     }
 
-    int y = APP_CONTENT_Y;
+    int y = APP_CONTENT_INSET_Y;
     batUpdateLine(y, "bat", bat, g_last_bat, sizeof(g_last_bat));
     y += INFO_LINE_H_2X;
     batUpdateLine(y, "volt", volt, g_last_volt, sizeof(g_last_volt));

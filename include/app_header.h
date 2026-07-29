@@ -2,12 +2,28 @@
 
 #include <stdint.h>
 
-// 全局 header 高度与内容区起始坐标
+// 全局 header 高度与内容区坐标
 static constexpr int APP_HEADER_H = 28;
 static constexpr int APP_CONTENT_X = 4;
-// 紧贴 header 下沿的内容起始 Y（无 5px 间隙）
-static constexpr int APP_CONTENT_Y_NO_TAP_TO_HEADER = APP_HEADER_H;
-static constexpr int APP_CONTENT_Y = APP_HEADER_H + 5;
+// 内容区顶边 = header 下沿（背景填充从这里开始，含 padding 带）
+static constexpr int APP_CONTENT_Y = APP_HEADER_H;
+// 内容绘制时自行留出的上内边距（旧版 APP_CONTENT_Y 与内容区顶边的差值）
+static constexpr int APP_CONTENT_PAD_Y = 5;
+// 实际内容布局起始 Y（文本、卡片等）
+static constexpr int APP_CONTENT_INSET_Y = APP_CONTENT_Y + APP_CONTENT_PAD_Y;
+// 贴 header 下沿的满铺布局（无 padding）
+static constexpr int APP_CONTENT_Y_NO_TAP_TO_HEADER = APP_CONTENT_Y;
+
+// 主菜单 / Games / Test 等 hub 页卡片网格（尺寸一致）
+static constexpr int APP_HUB_CARD_W = 111;
+static constexpr int APP_HUB_CARD_H = 22;
+static constexpr int APP_HUB_CARD_GAP_X = 8;
+static constexpr int APP_HUB_CARD_GAP_Y = 4;
+static constexpr int APP_HUB_CARD_ORIGIN_X = 5;
+static constexpr int APP_HUB_CARD_ORIGIN_Y = APP_CONTENT_INSET_Y - 3; // 相对默认 inset 上移 3px
+static constexpr int APP_HUB_CARD_COLS = 2;
+// Hub 卡片边框 #222222（RGB565）
+static constexpr uint16_t APP_HUB_CARD_BORDER = 0x2104;
 
 // 子界面 header：应用名 + btngo 返回图标（右侧）
 void drawAppScreenHeader(const char* title, bool draw_divider = true);
@@ -47,3 +63,7 @@ void beginAppScreenAccent(const char* title, const char* accent, uint16_t accent
 
 // 仅清除 header 下方内容区（局部刷新用）
 void clearAppContentArea();
+// 填充整块内容区背景（从 header 下沿铺满，含 padding 带）
+void fillAppContentArea(uint16_t color);
+// Hub 页：header（无下边框）+ 内容区背景
+void beginAppHubScreen(const char* title, uint16_t content_bg);

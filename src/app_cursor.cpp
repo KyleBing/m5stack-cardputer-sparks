@@ -1410,7 +1410,7 @@ static void refreshChartLoadingFrame() {
     return;
   }
 
-  const int y = APP_CONTENT_Y;
+  const int y = APP_CONTENT_INSET_Y;
   const int screen_w = M5Cardputer.Display.width();
   const int chart_x = CURSOR_BAR_MARGIN_X;
   const int chart_w = screen_w - CURSOR_BAR_MARGIN_X * 2;
@@ -1841,12 +1841,12 @@ static void drawCursorSlowLoopDot() {
   const int screen_w = M5Cardputer.Display.width();
   constexpr int dot = 3;
   constexpr int inset = 3;
-  M5Cardputer.Display.fillRect(screen_w - inset - dot, APP_CONTENT_Y + inset, dot, dot,
+  M5Cardputer.Display.fillRect(screen_w - inset - dot, APP_CONTENT_INSET_Y + inset, dot, dot,
                                APP_COLOR_LABEL);
 }
 
 static void drawCursorChartPage(const int days, const float* daily_cents, const bool ready) {
-  const int y = APP_CONTENT_Y;
+  const int y = APP_CONTENT_INSET_Y;
   const int screen_w = M5Cardputer.Display.width();
   const int chart_x = CURSOR_BAR_MARGIN_X;
   const int chart_w = screen_w - CURSOR_BAR_MARGIN_X * 2;
@@ -1880,7 +1880,7 @@ void drawCursorApp() {
   }
   redrawCursorContent();
 
-  int y = APP_CONTENT_Y;
+  int y = APP_CONTENT_INSET_Y;
 
   // 静默 / 图表后台拉取时不打断摘要页；图表页在柱状图区域内显示 loading
   if (!g_silent_fetch && g_page == CursorPage::SUMMARY &&

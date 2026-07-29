@@ -254,7 +254,7 @@ static void drawWifiStatusScreen() {
     beginAppScreen("WiFi");
     M5Cardputer.Display.setTextSize(2);
 
-    int y = APP_CONTENT_Y;
+    int y = APP_CONTENT_INSET_Y;
     if (WiFi.status() == WL_CONNECTED) {
         char buf[24];
         M5Cardputer.Display.setTextColor(CYAN, BLACK);
@@ -301,7 +301,7 @@ static void drawWifiSavedScreen() {
     M5Cardputer.Display.setTextSize(1);
 
     const AppConfig& cfg = getAppConfig();
-    int y = APP_CONTENT_Y;
+    int y = APP_CONTENT_INSET_Y;
     char buf[32];
     snprintf(buf, sizeof(buf), "%d saved p%d/%d", cfg.wifi_count, wifiSavedPage + 1,
              getWifiSavedPageCount());
@@ -357,7 +357,7 @@ static void drawWifiListScreen() {
     beginAppScreen("WiFi Scan");
     M5Cardputer.Display.setTextSize(1);
 
-    int y = APP_CONTENT_Y;
+    int y = APP_CONTENT_INSET_Y;
     char buf[32];
     snprintf(buf, sizeof(buf), "%d net p%d/%d", wifiScanCount, wifiListPage + 1,
              getWifiListPageCount());
@@ -431,7 +431,7 @@ static void drawWifiListScreen() {
 static void drawWifiPasswordScreen() {
     beginAppScreen("WiFi Pass");
 
-    int y = APP_CONTENT_Y;
+    int y = APP_CONTENT_INSET_Y;
     const int content_right = M5Cardputer.Display.width() - APP_CONTENT_X;
     M5Cardputer.Display.setTextSize(2);
 
@@ -474,7 +474,7 @@ static void drawWifiConnectingScreen() {
     beginAppScreen("WiFi");
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(WHITE, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_Y);
+    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y);
     M5Cardputer.Display.println("connecting...");
 
     if (wifiConnectFromConfig) {
@@ -571,7 +571,7 @@ static void startWifiScan() {
 
     beginAppScreen("WiFi Scan");
     M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_Y);
+    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y);
     M5Cardputer.Display.println("scanning...");
 
     claimStaWifi();
@@ -695,7 +695,7 @@ void drawWifiApp() {
         case WifiAppPhase::SCANNING:
             beginAppScreen("WiFi Scan");
             M5Cardputer.Display.setTextSize(2);
-            M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_Y);
+            M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y);
             M5Cardputer.Display.println("scanning...");
             break;
         case WifiAppPhase::LIST:

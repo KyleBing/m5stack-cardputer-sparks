@@ -6,6 +6,15 @@
 
 ---
 
+## 2026-07-29
+
+### 改进
+
+- **内容区布局**：`APP_CONTENT_Y` 贴齐 header 下沿铺背景；文本 / 卡片用 `APP_CONTENT_INSET_Y` 保留上内边距，避免翻页留缝
+- **Hub 卡片**：主菜单 / Mini Games / Hardware Test 共用网格常量；Games / Test 卡片边框统一为 `#222`
+
+---
+
 ## 2026-07-28 — Docs
 
 ### 新增

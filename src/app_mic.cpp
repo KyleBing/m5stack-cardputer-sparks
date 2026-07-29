@@ -152,7 +152,7 @@ static void drawMicScope() {
 
     const int screenW = M5Cardputer.Display.width();
     const int screenH = M5Cardputer.Display.height();
-    const int statusY = APP_CONTENT_Y;
+    const int statusY = APP_CONTENT_INSET_Y;
     const int contentH = screenH - statusY;
     const int waveTop = kStatusH;
     const int waveH = contentH - waveTop - kPad;
@@ -167,7 +167,7 @@ static void drawMicScope() {
     if (!M5Cardputer.Mic.isEnabled()) {
         beginAppScreen("Mic");
         micHeaderReady = false;
-        M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_Y);
+        M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y);
         M5Cardputer.Display.println("not found");
         return;
     }

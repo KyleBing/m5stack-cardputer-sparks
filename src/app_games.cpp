@@ -1,5 +1,6 @@
 #include "app_games.h"
 #include "app_common.h"
+#include "app_header.h"
 #include "app_dice.h"
 #include "app_neon_fx.h"
 #include "app_newton_cradle.h"
@@ -778,32 +779,60 @@ static void drawCurves() {
     }
 }
 
-static void drawHubCard(const int x, const int y, const int number, const char* title,
-                        const uint8_t color) {
-    gamesCanvas.fillRoundRect(x, y, 111, 23, 4, 1);
-    gamesCanvas.drawRoundRect(x, y, 111, 23, 4, color);
-    gamesCanvas.fillRoundRect(x + 4, y + 3, 18, 17, 3, color);
-    gamesCanvas.setTextSize(1);
-    gamesCanvas.setTextColor(0);
-    gamesCanvas.setCursor(x + 10, y + 8);
-    gamesCanvas.print(number);
-    gamesCanvas.setTextColor(7);
-    gamesCanvas.setCursor(x + 28, y + 8);
-    gamesCanvas.print(title);
+static uint16_t gamesHubBg() {
+    return M5Cardputer.Display.color565(0x05, 0x08, 0x0D);
 }
 
-static void drawHub() {
-    gamesCanvas.fillSprite(0);
-    drawTopLabel("1-7 SELECT");
+static uint16_t gamesHubCardBg() {
+    return M5Cardputer.Display.color565(0x0D, 0x16, 0x22);
+}
+
+static uint16_t gamesHubAccent() {
+    return M5Cardputer.Display.color565(0xE9, 0xC4, 0x6A); // 暖金主色
+}
+
+static uint16_t gamesHubTitleColor() {
+    return M5Cardputer.Display.color565(0xF4, 0xF1, 0xE8);
+}
+
+// Games hub 卡片：尺寸与主菜单一致
+static void drawHubCard(const int x, const int y, const int number, const char* title) {
+    const uint16_t card_bg = gamesHubCardBg();
+    const uint16_t accent = gamesHubAccent();
+    M5Cardputer.Display.fillRoundRect(x, y, APP_HUB_CARD_W, APP_HUB_CARD_H, 4, card_bg);
+    M5Cardputer.Display.drawRoundRect(x, y, APP_HUB_CARD_W, APP_HUB_CARD_H, 4, APP_HUB_CARD_BORDER);
+    M5Cardputer.Display.fillRoundRect(x + 4, y + 3, 18, 16, 3, accent);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(BLACK, accent);
+    M5Cardputer.Display.setCursor(x + 10, y + 7);
+    M5Cardputer.Display.print(number);
+    M5Cardputer.Display.setTextColor(gamesHubTitleColor(), card_bg);
+    M5Cardputer.Display.setCursor(x + 28, y + 7);
+    M5Cardputer.Display.print(title);
+}
+
+static void drawHubCardAt(const int index, const int number, const char* title) {
+    const int row = index / APP_HUB_CARD_COLS;
+    const int col = index % APP_HUB_CARD_COLS;
+    const int x = APP_HUB_CARD_ORIGIN_X + col * (APP_HUB_CARD_W + APP_HUB_CARD_GAP_X);
+    const int y = APP_HUB_CARD_ORIGIN_Y + row * (APP_HUB_CARD_H + APP_HUB_CARD_GAP_Y);
+    drawHubCard(x, y, number, title);
+}
+
+static void drawHubCards() {
     // 菜单统一暖金主色，形成 Games 独有识别
-    constexpr uint8_t accent = 4;
-    drawHubCard(5, 16, 1, "COIN", accent);
-    drawHubCard(124, 16, 2, "CHAOS", accent);
-    drawHubCard(5, 43, 3, "WHEEL", accent);
-    drawHubCard(124, 43, 4, "DICE", accent);
-    drawHubCard(5, 70, 5, "PHYS", accent);
-    drawHubCard(124, 70, 6, "NEON FX", accent);
-    drawHubCard(5, 97, 7, "CURVES", accent);
+    drawHubCardAt(0, 1, "COIN");
+    drawHubCardAt(1, 2, "CHAOS");
+    drawHubCardAt(2, 3, "WHEEL");
+    drawHubCardAt(3, 4, "DICE");
+    drawHubCardAt(4, 5, "PHYS");
+    drawHubCardAt(5, 6, "NEON FX");
+    drawHubCardAt(6, 7, "CURVES");
+}
+
+static void showGamesHubScreen() {
+    beginAppHubScreen("MINI GAMES", gamesHubBg());
+    drawHubCards();
 }
 
 static void drawHelpLine(const int y, const char* key, const char* text) {
@@ -914,6 +943,12 @@ static void drawCurrent() {
         drawHelp();
         return;
     }
+    if (g_mode == GameMode::HUB) {
+        if (!g_help) {
+            showGamesHubScreen();
+        }
+        return;
+    }
     if (isExternalMode(g_mode)) {
         drawExternalFrame();
         return;
@@ -935,7 +970,6 @@ static void drawCurrent() {
             drawCurves();
             break;
         default:
-            drawHub();
             break;
     }
     gamesCanvas.pushSprite(0, 0);
@@ -975,7 +1009,12 @@ static bool sampleImu() {
 
 static void selectMode(const GameMode mode) {
     leaveModeApp(g_mode);
-    if (isExternalMode(mode)) {
+    if (mode == GameMode::HUB) {
+        if (g_canvas_ok) {
+            gamesCanvas.deleteSprite();
+            g_canvas_ok = false;
+        }
+    } else if (isExternalMode(mode)) {
         if (g_canvas_ok) {
             gamesCanvas.deleteSprite();
             g_canvas_ok = false;
@@ -1026,18 +1065,9 @@ void enterGamesApp() {
     g_az = 1.0f;
     M5Cardputer.Display.wakeup();
     M5Cardputer.Display.powerSaveOff();
-    M5Cardputer.Display.clear();
     M5.Imu.update();
     g_imu_ok = M5.Imu.isEnabled();
-
-    if (!ensureCanvas()) {
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(RED, BLACK);
-        M5Cardputer.Display.setCursor(4, 4);
-        M5Cardputer.Display.print("Games canvas OOM");
-        return;
-    }
-    drawCurrent();
+    showGamesHubScreen();
 }
 
 void leaveGamesApp() {
@@ -1144,6 +1174,10 @@ void handleGamesApp(const Keyboard_Class::KeysState& status) {
             g_help = !g_help;
             g_wheel_space_held = false;
             g_last_ms = millis();
+            if (!g_help && g_mode == GameMode::HUB) {
+                showGamesHubScreen();
+                return;
+            }
             drawCurrent();
             return;
         }

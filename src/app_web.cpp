@@ -2340,7 +2340,7 @@ void drawWebApp() {
         }
     }
 
-    int y = APP_CONTENT_Y;
+    int y = APP_CONTENT_INSET_Y;
 
     const auto drawLine1x = [&](const char* label, const char* value) {
         drawInfoLineAt(APP_CONTENT_X, y, label, value, 1);

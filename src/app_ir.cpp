@@ -463,7 +463,7 @@ static void drawAcModeIcons(const int x, const int y) {
 }
 
 static int acModeIconY() {
-    return APP_CONTENT_Y + INFO_LINE_H_2X + AC_MODE_ROW_GAP;
+    return APP_CONTENT_INSET_Y + INFO_LINE_H_2X + AC_MODE_ROW_GAP;
 }
 
 // 模式图标下方：当前模式名
@@ -1112,7 +1112,7 @@ static void drawIrMain() {
         clearAppContentArea();
     }
 
-    const int content_y = APP_CONTENT_Y;
+    const int content_y = APP_CONTENT_INSET_Y;
     if (g_category == IrCategory::TV) {
         drawTvRemotePad(content_y);
     } else {

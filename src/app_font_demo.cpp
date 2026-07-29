@@ -103,7 +103,7 @@ void drawFontDemoApp() {
     beginAppScreen("Font");
 
     const FontDemoItem& item = FONT_DEMO_ITEMS[fontDemoIndex];
-    int y = APP_CONTENT_Y;
+    int y = APP_CONTENT_INSET_Y;
 
     char buf[32];
     snprintf(buf, sizeof(buf), "%d/%d", fontDemoIndex + 1, FONT_DEMO_COUNT);

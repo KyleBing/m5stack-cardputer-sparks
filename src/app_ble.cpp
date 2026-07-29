@@ -297,7 +297,7 @@ static void scanNearbyBleDevices() {
 
 // 扫描列表（内容区），底栏 tip；支持翻页
 static void drawBleScanListFull() {
-    const int y_start = APP_CONTENT_Y;
+    const int y_start = APP_CONTENT_INSET_Y;
     const int content_h = M5Cardputer.Display.height() - y_start - BLE_HINT_H;
     M5Cardputer.Display.fillRect(APP_CONTENT_X, y_start, 236, content_h + BLE_HINT_H, BLACK);
     int y = y_start;

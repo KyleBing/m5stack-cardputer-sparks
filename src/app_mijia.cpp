@@ -368,7 +368,7 @@ static void applyMijiaControlRefresh(const bool force_full) {
     }
     const AppConfig& cfg = getAppConfig();
     const MijiaDevice* dev = getCurrentMijiaDevice();
-    const int panel_y = APP_CONTENT_Y;
+    const int panel_y = APP_CONTENT_INSET_Y;
 
     if (!cfg.loaded || dev == nullptr) {
         if (!mijiaControlInitialized) {
@@ -465,7 +465,7 @@ static void redrawMijiaScreen() {
         invalidateMijiaControlSurface();
         // Header：Mijia + Grid/List（次要色，对齐红外 TV/AC）
         beginAppScreenAccent("Mijia ", mijiaOverviewGridMode ? "Grid" : "List", APP_COLOR_LABEL);
-        int y = APP_CONTENT_Y;
+        int y = APP_CONTENT_INSET_Y;
         drawMijiaOverview(y);
         return;
     }
@@ -677,7 +677,7 @@ static void updateMijiaFryerCountdownTick() {
         if (mijiaLastFryerRemainSec >= 0) {
             mijiaLastFryerRemainSec = -2;
             // 倒计时消失：只清右侧时间区
-            const MijiaPanelLayout layout = calcMijiaPanelLayout(APP_CONTENT_Y, APP_CONTENT_X);
+            const MijiaPanelLayout layout = calcMijiaPanelLayout(APP_CONTENT_INSET_Y, APP_CONTENT_X);
             drawMijiaFryerRemainTick(mijiaUi, layout, getMijiaNetworkStatusForUi());
         }
         return;
@@ -686,7 +686,7 @@ static void updateMijiaFryerCountdownTick() {
         return;
     }
     mijiaLastFryerRemainSec = remain;
-    const MijiaPanelLayout layout = calcMijiaPanelLayout(APP_CONTENT_Y, APP_CONTENT_X);
+    const MijiaPanelLayout layout = calcMijiaPanelLayout(APP_CONTENT_INSET_Y, APP_CONTENT_X);
     drawMijiaFryerRemainTick(mijiaUi, layout, getMijiaNetworkStatusForUi());
 }
 
@@ -2297,7 +2297,7 @@ static int mijiaListSlotForIdx(const int device_idx) {
 
 // 绘制列表项间分隔线
 static void drawMijiaListDividers(const MijiaListLayout& layout, const int device_count) {
-    int item_y = APP_CONTENT_Y;
+    int item_y = APP_CONTENT_INSET_Y;
     for (int i = 0; i < MIJIA_LIST_VISIBLE_COUNT - 1; i++) {
         const int idx = mijiaOverviewScrollIdx + i;
         if (idx + 1 >= device_count) {
@@ -2391,7 +2391,7 @@ static void drawMijiaGroupBottomHints(const AppConfig& cfg) {
 static void drawMijiaGroupView() {
     const AppConfig& cfg = getAppConfig();
     if (!cfg.loaded || cfg.device_group_count <= 0) {
-        int y = APP_CONTENT_Y;
+        int y = APP_CONTENT_INSET_Y;
         drawInfoLine(APP_CONTENT_X, y, "hint", "no groups");
         y += infoLineHeight(1) + 4;
         drawInfoLine(APP_CONTENT_X, y, "hint", "add in web /advanced");
@@ -2400,7 +2400,7 @@ static void drawMijiaGroupView() {
 
     const MijiaDeviceGroup* group = getCurrentMijiaGroup();
     if (group == nullptr || group->member_count <= 0) {
-        int y = APP_CONTENT_Y;
+        int y = APP_CONTENT_INSET_Y;
         drawInfoLine(APP_CONTENT_X, y, "hint", "empty group");
         drawMijiaGroupBottomHints(cfg);
         return;
@@ -2509,7 +2509,7 @@ static void refreshMijiaListSelection(const int old_idx, const int new_idx) {
         if (idx >= cfg.device_count) {
             return;
         }
-        const int item_y = APP_CONTENT_Y + slot * (layout.item_h + layout.item_gap);
+        const int item_y = APP_CONTENT_INSET_Y + slot * (layout.item_h + layout.item_gap);
         M5Cardputer.Display.fillRect(APP_CONTENT_X, item_y, layout.line_w, layout.item_h, BLACK);
         drawMijiaOverviewItem(cfg.devices[idx], idx, APP_CONTENT_X, item_y, layout.item_h,
                               idx == mijiaDeviceIdx);
@@ -2553,7 +2553,7 @@ static void drawMijiaOverview(int& y) {
     const int item_h = getMijiaOverviewItemHeight();
     constexpr int item_gap = 4;
     const MijiaListLayout layout = getMijiaListLayout();
-    int item_y = APP_CONTENT_Y;
+    int item_y = APP_CONTENT_INSET_Y;
     for (int i = 0; i < visible; i++) {
         const int idx = mijiaOverviewScrollIdx + i;
         if (idx >= cfg.device_count) {
@@ -3371,7 +3371,7 @@ void drawMijiaApp() {
     if (mijiaOverviewMode) {
         beginAppScreenAccent("Mijia ", mijiaOverviewGridMode ? "Grid" : "List", APP_COLOR_LABEL);
         M5Cardputer.Display.setTextSize(1);
-        int y = APP_CONTENT_Y;
+        int y = APP_CONTENT_INSET_Y;
         drawMijiaOverview(y);
         return;
     }
@@ -3446,7 +3446,7 @@ void leaveMijiaApp() {
         M5Cardputer.Display.setTextSize(2);
         M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
         M5Cardputer.Display.drawCenterString("Exiting.", M5Cardputer.Display.width() / 2,
-                                             APP_CONTENT_Y + 36);
+                                             APP_CONTENT_INSET_Y + 36);
         resetBleStackFully();
     }
     // 立刻关射频

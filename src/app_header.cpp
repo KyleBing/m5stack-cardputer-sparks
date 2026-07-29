@@ -100,7 +100,9 @@ static void drawBackButton(const int screen_w) {
 }
 
 static void drawHeaderDivider(const int screen_w) {
-    M5Cardputer.Display.drawFastHLine(0, APP_HEADER_H - 1, screen_w, DARKGREY);
+    // header 底边框 #222222
+    M5Cardputer.Display.drawFastHLine(0, APP_HEADER_H - 1, screen_w,
+                                      M5Cardputer.Display.color565(0x22, 0x22, 0x22));
 }
 
 void drawAppScreenHeader(const char* title, const bool draw_divider) {
@@ -271,7 +273,19 @@ void beginAppScreenAccent(const char* title, const char* accent, const uint16_t 
 }
 
 void clearAppContentArea() {
+    fillAppContentArea(BLACK);
+}
+
+void fillAppContentArea(const uint16_t color) {
     const int screen_w = M5Cardputer.Display.width();
     const int screen_h = M5Cardputer.Display.height();
-    M5Cardputer.Display.fillRect(0, APP_CONTENT_Y, screen_w, screen_h - APP_CONTENT_Y, BLACK);
+    const int h = screen_h - APP_CONTENT_Y;
+    if (h > 0) {
+        M5Cardputer.Display.fillRect(0, APP_CONTENT_Y, screen_w, h, color);
+    }
+}
+
+void beginAppHubScreen(const char* title, const uint16_t content_bg) {
+    beginAppScreen(title, false);
+    fillAppContentArea(content_bg);
 }

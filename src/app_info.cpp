@@ -619,7 +619,7 @@ static void sampleInfoCurrentPage(const bool force_slow) {
 // 仅画内容区（用缓存；不清整屏）
 static void drawInfoContent() {
     const int x = APP_CONTENT_X;
-    const int y = APP_CONTENT_Y;
+    const int y = APP_CONTENT_INSET_Y;
     const int w = M5Cardputer.Display.width() - APP_CONTENT_X * 2;
 
     if (g_info_page == static_cast<int>(InfoPage::Mem)) {
@@ -658,7 +658,7 @@ static void drawInfoApp(const bool full) {
         (g_info_page == static_cast<int>(InfoPage::Mem) ||
          g_info_page == static_cast<int>(InfoPage::Storage))) {
         const int x = APP_CONTENT_X;
-        const int y = APP_CONTENT_Y;
+        const int y = APP_CONTENT_INSET_Y;
         const int w = M5Cardputer.Display.width() - APP_CONTENT_X * 2;
         if (g_info_page == static_cast<int>(InfoPage::Mem)) {
             drawInfoMemShell(x, y, w);

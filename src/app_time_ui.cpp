@@ -7,10 +7,10 @@ void drawTimeModeTag(const char* tag) {
     if (tag == nullptr || tag[0] == '\0') {
         return;
     }
-    M5Cardputer.Display.fillRect(APP_CONTENT_X, APP_CONTENT_Y, 72, TIME_TAG_H, BLACK);
+    M5Cardputer.Display.fillRect(APP_CONTENT_X, APP_CONTENT_INSET_Y, 72, TIME_TAG_H, BLACK);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_Y + 2);
+    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y + 2);
     M5Cardputer.Display.print(tag);
 }
 
@@ -58,7 +58,7 @@ void drawTimeHelpHintRight(const char* help_label) {
 void getTimeDisplayArea(int& area_y, int& area_h) {
     // 模式已迁到 Header accent，内容区从 header 下起算
     const int screen_h = M5Cardputer.Display.height();
-    area_y = APP_CONTENT_Y;
+    area_y = APP_CONTENT_INSET_Y;
     area_h = screen_h - area_y - TIME_HINT_ROW_H;
 }
 

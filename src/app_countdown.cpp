@@ -77,7 +77,7 @@ static void getCountdownDisplayArea(int& area_y, int& area_h) {
     }
     if (cdPhase == CountdownPhase::FINISHED) {
         const int screen_h = M5Cardputer.Display.height();
-        area_y = APP_CONTENT_Y;
+        area_y = APP_CONTENT_INSET_Y;
         area_h = screen_h - area_y;
         return;
     }

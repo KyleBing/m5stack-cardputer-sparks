@@ -262,7 +262,7 @@ static void drawIconDemoApp() {
         iconDemoPage = 0;
     }
 
-    int y = APP_CONTENT_Y;
+    int y = APP_CONTENT_INSET_Y;
     char buf[32];
     int cx = APP_CONTENT_X;
     cx += drawArrowBadge(cx, y, 1);

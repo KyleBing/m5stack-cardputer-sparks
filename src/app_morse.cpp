@@ -160,7 +160,7 @@ static void drawMorseApp(const bool full_init) {
     }
 
     // 顶部保留频率和发送状态，主体同时展示字母、点划与波形。
-    int y = APP_CONTENT_Y;
+    int y = APP_CONTENT_INSET_Y;
     char freq_buf[16];
     snprintf(freq_buf, sizeof(freq_buf), "%d Hz", g_tone_hz);
     drawInfoLineAt(APP_CONTENT_X, y, "freq", freq_buf, 1);

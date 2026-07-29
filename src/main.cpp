@@ -225,15 +225,9 @@ const char* getCurrentAppShotSlug() {
             return "unknown";
     }
 }
-static constexpr int MENU_COLS = 2;
+static constexpr int MENU_COLS = APP_HUB_CARD_COLS;
 static constexpr int MENU_ROWS_PER_PAGE = 4;
 static constexpr int MENU_ITEMS_PER_PAGE = MENU_COLS * MENU_ROWS_PER_PAGE;
-static constexpr int MENU_CARD_W = 111;
-static constexpr int MENU_CARD_H = 22;
-static constexpr int MENU_CARD_GAP_X = 8;
-static constexpr int MENU_CARD_GAP_Y = 4;
-static constexpr int MENU_CARD_ORIGIN_X = 5;
-static constexpr int MENU_CARD_ORIGIN_Y = APP_CONTENT_Y - 3; // header 下方，相对默认上移 3px
 
 static int menuPage = 0;
 static bool menuNoAppPrompt = false;
@@ -309,8 +303,8 @@ static void drawMenuItemAt(const int x, const int y, const MenuItem& item, const
     const uint16_t card_bg = menuCardBg();
     const char letter = static_cast<char>(toupper(static_cast<unsigned char>(item.key)));
 
-    M5Cardputer.Display.fillRoundRect(x, y, MENU_CARD_W, MENU_CARD_H, 4, card_bg);
-    M5Cardputer.Display.drawRoundRect(x, y, MENU_CARD_W, MENU_CARD_H, 4, accent);
+    M5Cardputer.Display.fillRoundRect(x, y, APP_HUB_CARD_W, APP_HUB_CARD_H, 4, card_bg);
+    M5Cardputer.Display.drawRoundRect(x, y, APP_HUB_CARD_W, APP_HUB_CARD_H, 4, accent);
     M5Cardputer.Display.fillRoundRect(x + 4, y + 3, 18, 16, 3, accent);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(BLACK, accent);
@@ -328,21 +322,18 @@ void drawMenuPage() {
                            ? startIdx + MENU_ITEMS_PER_PAGE
                            : MENU_ITEM_COUNT;
 
-    const int screen_w = M5Cardputer.Display.width();
-    const int screen_h = M5Cardputer.Display.height();
-    // 背景从卡片起点铺满，避免上移后露出空隙
-    M5Cardputer.Display.fillRect(0, MENU_CARD_ORIGIN_Y, screen_w, screen_h - MENU_CARD_ORIGIN_Y,
-                                 menuHubBg());
+    // 背景从 header 下沿铺满（含 padding 带）
+    fillAppContentArea(menuHubBg());
 
     int row = 0;
     for (int i = startIdx; i < endIdx; i += MENU_COLS) {
-        const int y = MENU_CARD_ORIGIN_Y + row * (MENU_CARD_H + MENU_CARD_GAP_Y);
+        const int y = APP_HUB_CARD_ORIGIN_Y + row * (APP_HUB_CARD_H + APP_HUB_CARD_GAP_Y);
         for (int col = 0; col < MENU_COLS; ++col) {
             const int idx = i + col;
             if (idx >= endIdx) {
                 break;
             }
-            const int x = MENU_CARD_ORIGIN_X + col * (MENU_CARD_W + MENU_CARD_GAP_X);
+            const int x = APP_HUB_CARD_ORIGIN_X + col * (APP_HUB_CARD_W + APP_HUB_CARD_GAP_X);
             drawMenuItemAt(x, y, MENU_ITEMS[idx], idx);
         }
         row++;
@@ -498,7 +489,7 @@ static VersionPageLayout getVersionPageLayout() {
     const int screen_w = M5Cardputer.Display.width();
 
     constexpr int logo_px = APP_LOGO_60_PX;
-    const int logo_y = APP_CONTENT_Y - 8; // logo 上移 8px
+    const int logo_y = APP_CONTENT_INSET_Y - 8; // logo 上移 8px
     const int logo_bottom = logo_y + logo_px;
     const int text_y = logo_bottom + 5; // 与文字区间隔 5px
     constexpr int line_h = 12;
@@ -556,7 +547,7 @@ static bool pickVersionFireworkSpot(const int y_min, const int y_max, const Vers
 // Version 页背景烟花（logo 四色 + 白，避开 logo / 文字区域）
 static void drawVersionFireworks() {
     const int screen_h = M5Cardputer.Display.height();
-    const int y_min = APP_CONTENT_Y;
+    const int y_min = APP_CONTENT_INSET_Y;
     const VersionPageLayout layout = getVersionPageLayout();
     constexpr int burst_margin = 26;
 
@@ -600,7 +591,7 @@ static void drawVersionOverlay() {
 
     constexpr int logo_px = APP_LOGO_60_PX;
     const int logoX = (M5Cardputer.Display.width() - logo_px) / 2;
-    const int logoY = APP_CONTENT_Y - 8; // logo 上移 8px
+    const int logoY = APP_CONTENT_INSET_Y - 8; // logo 上移 8px
     int logo_bottom = logoY + logo_px;
     if (!drawAppLogo60(logoX, logoY, 1.0f)) {
         constexpr int fallback_size = APP_LOGO_DESIGN_SIZE;
@@ -708,7 +699,7 @@ static void updateModLabelIfChanged(const int x, const int y, const char* label,
 
 // 仅重绘右侧按键内容区
 static void updateKeyboardKeyPanel() {
-    const int keyPanelY = APP_CONTENT_Y;
+    const int keyPanelY = APP_CONTENT_INSET_Y;
     const int keyPanelW = M5Cardputer.Display.width() - KEY_PANEL_X - 4;
     const int keyPanelH = M5Cardputer.Display.height() - keyPanelY;
 
@@ -749,7 +740,7 @@ void drawKeyboardApp(const Keyboard_Class::KeysState& status, const bool full_in
     }
 
     constexpr int modX = APP_CONTENT_X;
-    int modY = APP_CONTENT_Y;
+    int modY = APP_CONTENT_INSET_Y;
     updateModLabelIfChanged(modX, modY, "Fn", status.fn, keyboardLastFn, ORANGE);
     modY += KEY_MOD_LINE_H;
     updateModLabelIfChanged(modX, modY, "Aa", status.shift, keyboardLastShift, BLUE);
@@ -895,7 +886,7 @@ void drawBmiApp() {
         bmiScreenReady = false;
         bmiPrevDotX[0] = bmiPrevDotX[1] = -1;
         beginAppScreen("IMU");
-        M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_Y);
+        M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y);
         M5Cardputer.Display.println("IMU not found");
         return;
     }
@@ -903,7 +894,7 @@ void drawBmiApp() {
     const int screenW = M5Cardputer.Display.width();
     const int screenH = M5Cardputer.Display.height();
     const int panelW = screenW / 2;
-    const int contentTop = APP_CONTENT_Y;
+    const int contentTop = APP_CONTENT_INSET_Y;
     const int contentH = screenH - contentTop;
 
     // 首帧才全屏初始化，避免每帧 clear 导致闪烁
@@ -1631,7 +1622,7 @@ static uint16_t ledStateFgColor() {
 void drawLedApp() {
     beginAppScreen("RGB LED");
 
-    int y = APP_CONTENT_Y;
+    int y = APP_CONTENT_INSET_Y;
 
     // state 标签 + 对应颜色 wrap
     M5Cardputer.Display.setTextSize(2);
@@ -1822,7 +1813,7 @@ void drawI2cScanApp(m5::I2C_Class& bus, const char* title) {
     M5Cardputer.Display.clear();
     drawAppScreenHeader(title);
     M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_Y);
+    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y);
 
     if (!bus.isEnabled()) {
         M5Cardputer.Display.println("bus disabled");
@@ -2029,6 +2020,7 @@ static uint16_t hwHubRgb(const uint8_t r, const uint8_t g, const uint8_t b) {
     return M5Cardputer.Display.color565(r, g, b);
 }
 
+// 顶栏由 beginAppScreen 绘制，此处仅保留 hub 配色
 static uint16_t hwHubBg() {
     return hwHubRgb(0x04, 0x0A, 0x10);
 }
@@ -2045,56 +2037,51 @@ static uint16_t hwHubTitle() {
     return hwHubRgb(0xD0, 0xEC, 0xF4);
 }
 
-static uint16_t hwHubMuted() {
-    return hwHubRgb(0x7A, 0x9A, 0xA8);
-}
-
-// 顶栏：左标题 + 右提示，无系统 Header
-static void drawHardwareTestTopLabel(const char* right) {
-    const uint16_t bg = hwHubBg();
-    constexpr const char* title = "HARDWARE TEST";
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(hwHubAccent(), bg);
-    M5Cardputer.Display.setCursor(4, 3);
-    M5Cardputer.Display.print(title);
-    if (right != nullptr && right[0] != '\0') {
-        const int screen_w = M5Cardputer.Display.width();
-        M5Cardputer.Display.setTextColor(hwHubMuted(), bg);
-        M5Cardputer.Display.setCursor(screen_w - static_cast<int>(strlen(right)) * 6 - 4, 3);
-        M5Cardputer.Display.print(right);
-    }
-}
-
+// Test hub 卡片：尺寸与主菜单一致
 static void drawHardwareTestHubCard(const int x, const int y, const char key, const char* title) {
-    constexpr int card_w = 111;
-    constexpr int card_h = 23;
     const uint16_t card_bg = hwHubCardBg();
     const uint16_t accent = hwHubAccent();
-    M5Cardputer.Display.fillRoundRect(x, y, card_w, card_h, 4, card_bg);
-    M5Cardputer.Display.drawRoundRect(x, y, card_w, card_h, 4, accent);
-    M5Cardputer.Display.fillRoundRect(x + 4, y + 3, 18, 17, 3, accent);
+    M5Cardputer.Display.fillRoundRect(x, y, APP_HUB_CARD_W, APP_HUB_CARD_H, 4, card_bg);
+    M5Cardputer.Display.drawRoundRect(x, y, APP_HUB_CARD_W, APP_HUB_CARD_H, 4, APP_HUB_CARD_BORDER);
+    M5Cardputer.Display.fillRoundRect(x + 4, y + 3, 18, 16, 3, accent);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(BLACK, accent);
-    M5Cardputer.Display.setCursor(x + 10, y + 8);
+    M5Cardputer.Display.setCursor(x + 10, y + 7);
     M5Cardputer.Display.print(key);
     M5Cardputer.Display.setTextColor(hwHubTitle(), card_bg);
-    M5Cardputer.Display.setCursor(x + 28, y + 8);
+    M5Cardputer.Display.setCursor(x + 28, y + 7);
     M5Cardputer.Display.print(title);
+}
+
+static void drawHardwareTestHubCardAt(const int index, const char key, const char* title) {
+    const int row = index / APP_HUB_CARD_COLS;
+    const int col = index % APP_HUB_CARD_COLS;
+    const int x = APP_HUB_CARD_ORIGIN_X + col * (APP_HUB_CARD_W + APP_HUB_CARD_GAP_X);
+    const int y = APP_HUB_CARD_ORIGIN_Y + row * (APP_HUB_CARD_H + APP_HUB_CARD_GAP_Y);
+    drawHardwareTestHubCard(x, y, key, title);
+}
+
+static void drawHardwareTestHubCards() {
+    // 全部卡片统一冷青，形成 Test 独有识别
+    drawHardwareTestHubCardAt(0, '1', "DISPLAY");
+    drawHardwareTestHubCardAt(1, '2', "IMU");
+    drawHardwareTestHubCardAt(2, '3', "FONT");
+    drawHardwareTestHubCardAt(3, '4', "ICONS");
+    drawHardwareTestHubCardAt(4, '5', "RGB LED");
+    drawHardwareTestHubCardAt(5, '6', "BLE");
+    drawHardwareTestHubCardAt(6, '7', "INI2");
+    drawHardwareTestHubCardAt(7, '8', "EXI2");
+}
+
+static void showHardwareTestsHubScreen() {
+    beginAppHubScreen(getMenuItemNameFull(AppState::HARDWARE_TESTS), hwHubBg());
+    drawHardwareTestHubCards();
 }
 
 static void drawHardwareTestsHub() {
     hardwareTestMode = HardwareTestMode::HUB;
-    M5Cardputer.Display.fillScreen(hwHubBg());
-    drawHardwareTestTopLabel("1-8 SELECT");
-    // 全部卡片统一冷青，形成 Test 独有识别
-    drawHardwareTestHubCard(5, 16, '1', "DISPLAY");
-    drawHardwareTestHubCard(124, 16, '2', "IMU");
-    drawHardwareTestHubCard(5, 43, '3', "FONT");
-    drawHardwareTestHubCard(124, 43, '4', "ICONS");
-    drawHardwareTestHubCard(5, 70, '5', "RGB LED");
-    drawHardwareTestHubCard(124, 70, '6', "BLE");
-    drawHardwareTestHubCard(5, 97, '7', "INI2");
-    drawHardwareTestHubCard(124, 97, '8', "EXI2");
+    fillAppContentArea(hwHubBg());
+    drawHardwareTestHubCards();
 }
 
 static void leaveHardwareTestChild(const HardwareTestMode mode) {
@@ -2105,7 +2092,7 @@ static void leaveHardwareTestChild(const HardwareTestMode mode) {
 }
 
 static void enterHardwareTestsApp() {
-    drawHardwareTestsHub();
+    showHardwareTestsHubScreen();
 }
 
 static void selectHardwareTest(const HardwareTestMode mode) {
@@ -2138,7 +2125,7 @@ static bool handleHardwareTestsBack() {
         return false;
     }
     leaveHardwareTestChild(hardwareTestMode);
-    drawHardwareTestsHub();
+    showHardwareTestsHubScreen();
     return true;
 }
 
@@ -2271,7 +2258,7 @@ static void drawLightSleepPrompt(const int seconds_left) {
     // Header：Sleep + Light（次要色）
     beginAppScreenAccent("Sleep ", "Light", APP_COLOR_LABEL);
 
-    int y = APP_CONTENT_Y;
+    int y = APP_CONTENT_INSET_Y;
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
@@ -2306,7 +2293,7 @@ static void drawDeepSleepPrompt(const int seconds_left) {
     // Header：Sleep + Deep（次要色）
     beginAppScreenAccent("Sleep ", "Deep", APP_COLOR_LABEL);
 
-    int y = APP_CONTENT_Y;
+    int y = APP_CONTENT_INSET_Y;
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.setCursor(APP_CONTENT_X, y);

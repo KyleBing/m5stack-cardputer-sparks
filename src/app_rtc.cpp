@@ -67,7 +67,7 @@ static int rtcTimeY() {
     // 顶部留给 NTP/RTC 来源标签
     const int block_h = RTC_TIME_LINE_H + RTC_TIME_BOTTOM_MARGIN + RTC_DATE_LINE_H;
     const int avail_h = clockContentHeight() - TIME_TAG_H;
-    return APP_CONTENT_Y + TIME_TAG_H + (avail_h - block_h) / 2;
+    return APP_CONTENT_INSET_Y + TIME_TAG_H + (avail_h - block_h) / 2;
 }
 
 static int rtcDateY() {
@@ -234,7 +234,7 @@ static void drawRtcBusyScreen(const char* msg) {
     rtcLastSrc[0] = '\0';
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_Y + 4);
+    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y + 4);
     M5Cardputer.Display.println(msg);
     drawTimeBottomHints(nullptr, 0);
 }
@@ -513,7 +513,7 @@ static void drawRtcApp(const bool full_init) {
         rtcLastTime[0] = '\0';
         rtcLastDate[0] = '\0';
         rtcLastSrc[0] = '\0';
-        int y = APP_CONTENT_Y;
+        int y = APP_CONTENT_INSET_Y;
         drawInfoLineAt(APP_CONTENT_X, y, "time", "not set", RTC_FAIL_TEXT_SIZE);
         y += INFO_LINE_H_2X;
         const AppConfig& cfg = getAppConfig();

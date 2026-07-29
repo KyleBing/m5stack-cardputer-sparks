@@ -1576,7 +1576,7 @@ static int peerLineY() {
 }
 
 static int echoAreaY() {
-    return APP_CONTENT_Y + INFO_LINE_H_2X + 4 + 5;  // 输入回显相对状态行再下移 5px
+    return APP_CONTENT_INSET_Y + INFO_LINE_H_2X + 4 + 5;  // 输入回显相对状态行再下移 5px
 }
 
 static void drawPeerLine() {
@@ -1619,7 +1619,7 @@ static void drawSlotBadge() {
     constexpr int clear_w = 28;
     constexpr int clear_h = 20;
     const int clear_x = screen_w - clear_w - 2;
-    const int y = APP_CONTENT_Y;
+    const int y = APP_CONTENT_INSET_Y;
     M5Cardputer.Display.fillRect(clear_x, y, clear_w, clear_h, BLACK);
     if (num >= 1 && num <= 9) {
         const char key = static_cast<char>('0' + num);
@@ -1639,7 +1639,7 @@ static void drawLinkStatus() {
     if (strcmp(g_drawn_link_status, text) == 0) {
         return;
     }
-    const int y = APP_CONTENT_Y;
+    const int y = APP_CONTENT_INSET_Y;
     // 留给右侧槽号徽章
     const int clear_w = M5Cardputer.Display.width() - 32;
     M5Cardputer.Display.fillRect(0, y, clear_w, INFO_LINE_H_2X, BLACK);
@@ -1923,13 +1923,13 @@ static void formatHostsStatusLine(char* out, size_t out_len, uint16_t* color_out
 }
 
 static int hostsListStatusY() {
-    return APP_CONTENT_Y + kBleHostSlots * 10 + 2;
+    return APP_CONTENT_INSET_Y + kBleHostSlots * 10 + 2;
 }
 
 // 只重绘列表行 + 状态行（不清屏、不重画 header/tip，避免切换时狂闪）
 static void redrawHostsListAndStatus() {
     M5Cardputer.Display.setTextSize(1);
-    int y = APP_CONTENT_Y;
+    int y = APP_CONTENT_INSET_Y;
     const int screen_w = M5Cardputer.Display.width();
     for (int i = 0; i < kBleHostSlots; i++) {
         M5Cardputer.Display.fillRect(0, y, screen_w, 10, BLACK);
@@ -2043,7 +2043,7 @@ void leaveHidKeyboardApp() {
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.drawCenterString("Exiting.", M5Cardputer.Display.width() / 2,
-                                         APP_CONTENT_Y + 36);
+                                         APP_CONTENT_INSET_Y + 36);
 
     stopBleKeyboard();
     // 退出应用时务必把 USB 还给 JTAG，否则无法 upload
