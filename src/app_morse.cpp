@@ -207,6 +207,7 @@ void enterMorseApp() {
 }
 
 void leaveMorseApp() {
+    // 停播并卸功放（仅应由真正离开 Morse 的路径调用）
     M5Cardputer.Speaker.stop();
     g_play_phase = MorsePhase::IDLE;
     g_play_pattern = nullptr;

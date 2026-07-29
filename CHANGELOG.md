@@ -11,7 +11,13 @@
 ### 改进
 
 - **内容区布局**：`APP_CONTENT_Y` 贴齐 header 下沿铺背景；文本 / 卡片用 `APP_CONTENT_INSET_Y` 保留上内边距，避免翻页留缝
-- **Hub 卡片**：主菜单 / Mini Games / Hardware Test 共用网格常量；Games / Test 卡片边框统一为 `#222`
+- **Hub 卡片**：主菜单 / Mini Games / Hardware Test 共用网格常量；Games / Test 子项恢复主题色边框（浅暖金 / 浅冷青，弱于徽章主色）
+- **Time**：日期行补星期简写；Pure Big 时钟在大字右下角显示秒
+
+### 修复
+
+- **回主页破音**：`showMenu` 不再无条件 `leaveMorseApp` 卸喇叭；`releaseSpeakerQuiet` 已 hold 时跳过，避免重复 `gpio_reset` 触发 NS4168 破音
+- **Hardware Test**：回 hub 时重置 `hardwareTestMode`，避免 ESC 后仍走子 app 盖住菜单
 
 ---
 

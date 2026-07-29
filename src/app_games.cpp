@@ -791,6 +791,11 @@ static uint16_t gamesHubAccent() {
     return M5Cardputer.Display.color565(0xE9, 0xC4, 0x6A); // 暖金主色
 }
 
+// 边框用浅暖金，弱于徽章主色
+static uint16_t gamesHubBorder() {
+    return M5Cardputer.Display.color565(0x9A, 0x82, 0x48);
+}
+
 static uint16_t gamesHubTitleColor() {
     return M5Cardputer.Display.color565(0xF4, 0xF1, 0xE8);
 }
@@ -800,7 +805,7 @@ static void drawHubCard(const int x, const int y, const int number, const char* 
     const uint16_t card_bg = gamesHubCardBg();
     const uint16_t accent = gamesHubAccent();
     M5Cardputer.Display.fillRoundRect(x, y, APP_HUB_CARD_W, APP_HUB_CARD_H, 4, card_bg);
-    M5Cardputer.Display.drawRoundRect(x, y, APP_HUB_CARD_W, APP_HUB_CARD_H, 4, APP_HUB_CARD_BORDER);
+    M5Cardputer.Display.drawRoundRect(x, y, APP_HUB_CARD_W, APP_HUB_CARD_H, 4, gamesHubBorder());
     M5Cardputer.Display.fillRoundRect(x + 4, y + 3, 18, 16, 3, accent);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(BLACK, accent);

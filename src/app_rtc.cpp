@@ -30,10 +30,11 @@ static bool rtcScreenReady = false;
 static bool uptimeScreenReady = false;
 static bool clockSyncedOnce = false;
 static char rtcLastTime[16] = "";
-static char rtcLastDate[20] = "";
+static char rtcLastDate[24] = "";
 static char rtcLastSrc[8] = "";
-static char pureLastDate[20] = "";
+static char pureLastDate[24] = "";
 static char pureLargeClockLastTime[8] = "";
+static char pureLargeClockLastSec[4] = "";
 static BigTimeState uptimeTimeState{};
 static BigTimeState uptimePureTimeState{};
 static BigTimeState pureTimeState{};
@@ -46,8 +47,11 @@ static constexpr int RTC_TIME_LINE_H = 8 * RTC_TIME_TEXT_SIZE;
 static constexpr int RTC_DATE_LINE_H = 8 * RTC_DATE_TEXT_SIZE;
 static constexpr int RTC_TIME_BOTTOM_MARGIN = 5;
 static constexpr int RTC_FAIL_TEXT_SIZE = 2;
+static constexpr int RTC_BIG_SEC_TEXT_SIZE = 2; // Big 模式秒数字号
 static constexpr uint32_t RTC_SYNC_TIMEOUT_MS = 10000;  // 超时时间 10 seconds
 static constexpr uint32_t UPTIME_UPDATE_MS = 1000;       // 更新间隔 1 second
+// tm_wday: 0=Sun .. 6=Sat
+static constexpr const char* RTC_WEEKDAY_ABBR[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 
 static void drawUptimeApp(const bool full_init);
 static void drawRtcApp(const bool full_init);
@@ -403,11 +407,14 @@ static void drawRtcPureLargeClockApp(const bool full_init) {
     }
 
     char time_buf[8];
+    char sec_buf[4];
     snprintf(time_buf, sizeof(time_buf), "%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+    snprintf(sec_buf, sizeof(sec_buf), "%02d", timeinfo.tm_sec);
 
     if (full_init) {
         M5Cardputer.Display.fillScreen(BLACK);
         pureLargeClockLastTime[0] = '\0';
+        pureLargeClockLastSec[0] = '\0';
     }
 
     const int screen_w = M5Cardputer.Display.width();
@@ -435,12 +442,21 @@ static void drawRtcPureLargeClockApp(const bool full_init) {
         time_w = M5Cardputer.Display.textWidth("00:00");
         time_h = M5Cardputer.Display.fontHeight();
     }
-    M5Cardputer.Display.setTextSize(large_text_size);
-
+    // 大字本身居中；秒数 x2 贴在外侧右下角
     const int time_x = (screen_w - time_w) / 2;
     const int time_y = (screen_h - time_h) / 2;
+    M5Cardputer.Display.setTextSize(RTC_BIG_SEC_TEXT_SIZE);
+    const int sec_w = M5Cardputer.Display.textWidth("00");
+    const int sec_h = M5Cardputer.Display.fontHeight();
+    constexpr int sec_gap = 2;
+    const int sec_x = time_x + time_w - sec_w;
+    const int sec_y = time_y + time_h + sec_gap;
 
-    if (full_init || strcmp(time_buf, pureLargeClockLastTime) != 0) {
+    const bool time_changed =
+        full_init || strcmp(time_buf, pureLargeClockLastTime) != 0;
+    const bool sec_changed = full_init || strcmp(sec_buf, pureLargeClockLastSec) != 0;
+
+    if (time_changed) {
         M5Cardputer.Display.fillRect(0, time_y, screen_w, time_h, BLACK);
         M5Cardputer.Display.setFont(nullptr);
         M5Cardputer.Display.setTextSize(large_text_size);
@@ -449,6 +465,17 @@ static void drawRtcPureLargeClockApp(const bool full_init) {
         M5Cardputer.Display.print(time_buf);
         strncpy(pureLargeClockLastTime, time_buf, sizeof(pureLargeClockLastTime) - 1);
         pureLargeClockLastTime[sizeof(pureLargeClockLastTime) - 1] = '\0';
+    }
+
+    if (time_changed || sec_changed) {
+        M5Cardputer.Display.fillRect(sec_x, sec_y, sec_w, sec_h, BLACK);
+        M5Cardputer.Display.setFont(nullptr);
+        M5Cardputer.Display.setTextSize(RTC_BIG_SEC_TEXT_SIZE);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(sec_x, sec_y);
+        M5Cardputer.Display.print(sec_buf);
+        strncpy(pureLargeClockLastSec, sec_buf, sizeof(pureLargeClockLastSec) - 1);
+        pureLargeClockLastSec[sizeof(pureLargeClockLastSec) - 1] = '\0';
     }
 
     // 内置字体是全局显示状态，避免影响其它 Time 界面
@@ -470,9 +497,11 @@ static void drawRtcPureApp(const bool full_init) {
         return;
     }
 
-    char date_buf[20];
-    snprintf(date_buf, sizeof(date_buf), "%04d-%02d-%02d", timeinfo.tm_year + 1900,
-             timeinfo.tm_mon + 1, timeinfo.tm_mday);
+    char date_buf[24];
+    const int wday = (timeinfo.tm_wday >= 0 && timeinfo.tm_wday <= 6) ? timeinfo.tm_wday : 0;
+    // 日期 + 星期简写
+    snprintf(date_buf, sizeof(date_buf), "%04d-%02d-%02d %s", timeinfo.tm_year + 1900,
+             timeinfo.tm_mon + 1, timeinfo.tm_mday, RTC_WEEKDAY_ABBR[wday]);
 
     if (full_init) {
         M5Cardputer.Display.fillScreen(BLACK);
@@ -529,11 +558,13 @@ static void drawRtcApp(const bool full_init) {
     }
 
     char time_buf[16];
-    char date_buf[20];
+    char date_buf[24];
+    const int wday = (timeinfo.tm_wday >= 0 && timeinfo.tm_wday <= 6) ? timeinfo.tm_wday : 0;
     snprintf(time_buf, sizeof(time_buf), "%02d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min,
              timeinfo.tm_sec);
-    snprintf(date_buf, sizeof(date_buf), "%04d-%02d-%02d", timeinfo.tm_year + 1900,
-             timeinfo.tm_mon + 1, timeinfo.tm_mday);
+    // 日期 + 星期简写
+    snprintf(date_buf, sizeof(date_buf), "%04d-%02d-%02d %s", timeinfo.tm_year + 1900,
+             timeinfo.tm_mon + 1, timeinfo.tm_mday, RTC_WEEKDAY_ABBR[wday]);
 
     if (full_init || !rtcScreenReady) {
         beginAppScreenAccent("Time ", "CLK", APP_COLOR_LABEL);

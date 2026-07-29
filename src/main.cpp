@@ -352,7 +352,10 @@ void showMenu() {
     leaveDiceApp();
     leaveNewtonCradleApp();
     leaveGamesApp();
-    leaveMorseApp();
+    // Morse leave 会卸喇叭；仅真正离开 Morse 时调用，避免 Test/Game 回主页破音
+    if (currentState == AppState::MORSE) {
+        leaveMorseApp();
+    }
     leaveLedApp();
     leaveHidKeyboardApp();
     leaveIrApp(); // 释放红外图标 RAM 缓存
@@ -2033,6 +2036,11 @@ static uint16_t hwHubAccent() {
     return hwHubRgb(0x4E, 0xC8, 0xE8); // 冷青主色
 }
 
+// 边框用浅冷青，弱于徽章主色
+static uint16_t hwHubBorder() {
+    return hwHubRgb(0x36, 0x8C, 0xA0);
+}
+
 static uint16_t hwHubTitle() {
     return hwHubRgb(0xD0, 0xEC, 0xF4);
 }
@@ -2042,7 +2050,7 @@ static void drawHardwareTestHubCard(const int x, const int y, const char key, co
     const uint16_t card_bg = hwHubCardBg();
     const uint16_t accent = hwHubAccent();
     M5Cardputer.Display.fillRoundRect(x, y, APP_HUB_CARD_W, APP_HUB_CARD_H, 4, card_bg);
-    M5Cardputer.Display.drawRoundRect(x, y, APP_HUB_CARD_W, APP_HUB_CARD_H, 4, APP_HUB_CARD_BORDER);
+    M5Cardputer.Display.drawRoundRect(x, y, APP_HUB_CARD_W, APP_HUB_CARD_H, 4, hwHubBorder());
     M5Cardputer.Display.fillRoundRect(x + 4, y + 3, 18, 16, 3, accent);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(BLACK, accent);
@@ -2074,13 +2082,9 @@ static void drawHardwareTestHubCards() {
 }
 
 static void showHardwareTestsHubScreen() {
-    beginAppHubScreen(getMenuItemNameFull(AppState::HARDWARE_TESTS), hwHubBg());
-    drawHardwareTestHubCards();
-}
-
-static void drawHardwareTestsHub() {
+    // 回到 hub 时必须清子模式，否则按键/刷新仍走子 app 并盖住主菜单
     hardwareTestMode = HardwareTestMode::HUB;
-    fillAppContentArea(hwHubBg());
+    beginAppHubScreen(getMenuItemNameFull(AppState::HARDWARE_TESTS), hwHubBg());
     drawHardwareTestHubCards();
 }
 

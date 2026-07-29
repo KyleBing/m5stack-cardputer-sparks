@@ -368,6 +368,8 @@ static bool g_spk_vol_dirty = false;
 static uint32_t g_spk_vol_dirty_ms = 0;
 // 提示音结束后延后关功放（0=无待释放）
 static uint32_t g_spk_quiet_at_ms = 0;
+// 喇叭脚已拉低 hold：再 release 会 gpio_reset 瞬间浮空 → NS4168 破音
+static bool g_spk_pins_held = false;
 
 static void holdSpkPinLow(const int pin) {
     if (pin < 0) {
@@ -394,6 +396,7 @@ void releaseAudioPinHolds() {
     dis(spk.pin_bck);
     dis(spk.pin_ws);
     dis(mic.pin_data_in);
+    g_spk_pins_held = false;
 }
 
 uint8_t getAppSpeakerVolumePercent() {
@@ -446,8 +449,14 @@ void pollSpeakerVolumeSave() {
 // 关 I2S 并把喇叭脚拉低：Cardputer NS4168 在 BCLK/SDATA/LRCLK 悬空时会嗡嗡
 void releaseSpeakerQuiet() {
     g_spk_quiet_at_ms = 0;
+    const bool spk_running = M5Cardputer.Speaker.isRunning();
+    // 已静音且脚已 hold：跳过，避免 showMenu 等路径重复 gpio_reset 破音
+    if (!spk_running && g_spk_pins_held) {
+        g_spk_last_ready_ms = 0;
+        return;
+    }
     // 已在跑：先静音再卸，减轻 end 瞬间破音；未 begin 则只拉脚
-    if (M5Cardputer.Speaker.isRunning()) {
+    if (spk_running) {
         M5Cardputer.Speaker.setVolume(0);
         M5Cardputer.Speaker.stop();
         M5Cardputer.Speaker.end();
@@ -460,6 +469,10 @@ void releaseSpeakerQuiet() {
     if (!M5Cardputer.Mic.isRunning()) {
         holdSpkPinLow(cfg.pin_ws);
         holdSpkPinLow(mic.pin_data_in); // G46 一并拉住，避免浮空耦合
+        g_spk_pins_held = true;
+    } else {
+        // Mic 占用 WS 时未 hold 全套脚，下次仍需再走一遍
+        g_spk_pins_held = false;
     }
     g_spk_last_ready_ms = 0;
 }
@@ -501,7 +514,7 @@ void cancelSpeakerQuietRelease() {
 // 需要出声时 begin 并套用音量（不再静音预热，避免 end/冷启动破音）
 void warmUpSpeakerIfNeeded() {
     g_spk_quiet_at_ms = 0;
-    releaseAudioPinHolds();
+    releaseAudioPinHolds(); // 内含 g_spk_pins_held = false
     if (!M5Cardputer.Speaker.isRunning()) {
         M5Cardputer.Speaker.begin();
     }
