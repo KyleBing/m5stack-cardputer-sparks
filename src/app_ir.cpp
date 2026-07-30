@@ -137,6 +137,34 @@ static uint8_t g_ac_temp = 26;
 static stdAc::fanspeed_t g_ac_fan = stdAc::fanspeed_t::kAuto;
 
 static bool g_help_visible = false;
+// 品牌/类别先完成重绘，再合并连续切换并延后写 LittleFS
+static constexpr uint32_t IR_CONFIG_SAVE_DELAY_MS = 250;
+static bool g_config_dirty = false;
+static uint32_t g_config_save_due_ms = 0;
+
+static void markIrConfigDirty() {
+    g_config_dirty = true;
+    g_config_save_due_ms = millis() + IR_CONFIG_SAVE_DELAY_MS;
+}
+
+static void flushIrConfigSave(const bool force = false) {
+    if (!g_config_dirty ||
+        (!force && static_cast<int32_t>(millis() - g_config_save_due_ms) < 0)) {
+        return;
+    }
+
+    const IrDefaultCategory category =
+        g_category == IrCategory::AC ? IrDefaultCategory::Ac : IrDefaultCategory::Tv;
+    const uint8_t tv_brand = static_cast<uint8_t>(g_tv_brand);
+    const uint8_t ac_brand = static_cast<uint8_t>(g_ac_brand);
+    const AppConfig& cfg = getAppConfig();
+    g_config_dirty = false;
+    if (cfg.infrared_default == category && cfg.infrared_tv_brand == tv_brand &&
+        cfg.infrared_ac_brand == ac_brand) {
+        return;
+    }
+    saveAppConfigInfrared(category, tv_brand, ac_brand);
+}
 
 static const char* g_tx_status = "";
 static uint32_t g_tx_status_until_ms = 0;
@@ -1132,6 +1160,7 @@ static void redrawIr() {
 void enterIrApp() {
     g_screen_ready = false;
     g_help_visible = false;
+    g_config_dirty = false;
     g_tx_status = "";
     g_press_ac = IrAcBtn::None;
     g_press_tv = IrTvBtn::None;
@@ -1154,10 +1183,12 @@ void enterIrApp() {
 }
 
 void leaveIrApp() {
+    flushIrConfigSave(true);
     freeAcIconCache();
 }
 
 void updateIrApp() {
+    flushIrConfigSave();
     if (g_help_visible) {
         return;
     }
@@ -1208,6 +1239,7 @@ void handleIrApp(const Keyboard_Class::KeysState& status) {
             g_ac_brand = (g_ac_brand + 1) % n;
         }
         drawIrMain();
+        markIrConfigDirty();
         return;
     }
 
@@ -1216,6 +1248,7 @@ void handleIrApp(const Keyboard_Class::KeysState& status) {
             g_category = (g_category == IrCategory::TV) ? IrCategory::AC : IrCategory::TV;
             g_screen_ready = false; // 刷新 header 中的 TV/AC
             drawIrMain();
+            markIrConfigDirty();
             return;
         }
     }

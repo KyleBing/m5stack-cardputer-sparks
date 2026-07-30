@@ -87,7 +87,7 @@
 ## 使用说明
 
 1. 默认进入模式由配置 `time.default`（如 `up`）决定；`time.pure` 可默认开启 Pure。
-2. 时钟依赖 RTC；有网时可 `r` 做 NTP，时区见配置 `timezone`（如 `CST-8`）。
+2. 时钟依赖 RTC；有网时可 `r` 做 NTP，时区见配置 `time.timezone`（如 `CST-8`）。
 3. Pure 适合把 Cardputer 当桌面时钟 / 秒表使用。
 4. **Countdown / Stopwatch** 可在离开 Time App 或切换到其它子模式后继续计时，详见下文。
 

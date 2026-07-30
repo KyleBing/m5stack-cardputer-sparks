@@ -100,10 +100,6 @@ static const char* DEFAULT_CONFIG = R"({
   "cursor": {
     "token": "your-cursor-session-jwt"
   },
-  "system": {
-    "week_start": "sunday"
-  },
-  "timezone": "CST-8",
   "screen": {
     "brightness": 30,
     "invert": false
@@ -114,7 +110,12 @@ static const char* DEFAULT_CONFIG = R"({
     "volume": 25
   },
   "time": {
-    "default": "up"
+    "default": "up",
+    "pure": false,
+    "timezone": "CST-8"
+  },
+  "calendar": {
+    "week_start": "sunday"
   },
   "infrared": {
     "default": "tv",
@@ -511,10 +512,10 @@ static void appendCfgDataScript(String& body, const String& cfg) {
 // 默认 cfg 对象字面量（JS）
 static const char* JS_CFG_DEFAULT =
     "{wifis:[],wifi_active:'',devices:[],device_groups:[],cursor:{token:''},"
-    "system:{week_start:'sunday'},"
-    "timezone:'CST-8',screen:{brightness:30,invert:false},"
+    "screen:{brightness:30,invert:false},"
     "sound:{time_key:true,mijia_on_off:true,volume:25},"
-    "time:{default:'up'},infrared:{default:'tv',tv_brand:'samsung',ac_brand:'midea'},"
+    "time:{default:'up',pure:false,timezone:'CST-8'},calendar:{week_start:'sunday'},"
+    "infrared:{default:'tv',tv_brand:'samsung',ac_brand:'midea'},"
     "hid_keyboard:{transport:'ble',imu_sensitivity:5}}";
 
 // 加载并规范化 cfg（各编辑页共用）
@@ -536,9 +537,6 @@ static void appendJsLoadCfg(String& body) {
               "if(!cfg.devices)cfg.devices=[];"
               "if(!cfg.device_groups)cfg.device_groups=[];"
               "if(!cfg.cursor)cfg.cursor={token:''};"
-              "if(!cfg.system)cfg.system={};"
-              "if(cfg.system.week_start!=='monday')cfg.system.week_start='sunday';"
-              "if(!cfg.timezone)cfg.timezone='CST-8';"
               // screen：兼容旧顶层 brightness
               "if(!cfg.screen)cfg.screen={};"
               "if(cfg.screen.brightness==null&&cfg.brightness!=null)cfg.screen.brightness=cfg.brightness;"
@@ -554,6 +552,16 @@ static void appendJsLoadCfg(String& body) {
               "svol=+svol;if(svol<0)svol=0;if(svol>100)svol=100;cfg.sound.volume=svol;"
               "if(!cfg.time)cfg.time={};"
               "if(!cfg.time.default)cfg.time.default='up';"
+              "if(cfg.time.pure==null)cfg.time.pure=false;"
+              // timezone / week_start：迁移旧路径后只保留新对象
+              "if(!cfg.time.timezone)cfg.time.timezone=cfg.timezone||'CST-8';"
+              "delete cfg.timezone;"
+              "if(!cfg.calendar)cfg.calendar={};"
+              "if(!cfg.calendar.week_start&&cfg.system)"
+              "cfg.calendar.week_start=cfg.system.week_start;"
+              "if(cfg.calendar.week_start!=='monday')cfg.calendar.week_start='sunday';"
+              "if(cfg.system){delete cfg.system.week_start;"
+              "if(Object.keys(cfg.system).length===0)delete cfg.system;}"
               // infrared：兼容旧大写 Infrared
               "if(!cfg.infrared&&cfg.Infrared){cfg.infrared=cfg.Infrared;}"
               "delete cfg.Infrared;"
@@ -993,14 +1001,14 @@ static void handleSystemPage() {
               "<div class='sys-wrap'>"
               // 左侧分项 list
               "<nav class='sys-nav' id='sys-nav'>"
-              "<button type='button' data-pane='system' class='active'>系统"
-              "<span class='key'>system</span></button>"
-              "<button type='button' data-pane='screen'>屏幕"
+              "<button type='button' data-pane='screen' class='active'>屏幕"
               "<span class='key'>screen</span></button>"
               "<button type='button' data-pane='sound'>声音"
               "<span class='key'>sound</span></button>"
               "<button type='button' data-pane='time'>Time"
               "<span class='key'>time</span></button>"
+              "<button type='button' data-pane='calendar'>日历"
+              "<span class='key'>calendar</span></button>"
               "<button type='button' data-pane='infrared'>红外"
               "<span class='key'>infrared</span></button>"
               "<button type='button' data-pane='keyboard'>键盘"
@@ -1008,19 +1016,8 @@ static void handleSystemPage() {
               "</nav>"
               // 右侧设置内容
               "<div class='sys-panes'>"
-              // 系统：timezone（顶层）+ system.week_start
-              "<section class='sys-sec active' data-pane='system'>"
-              "<h3>系统 <span class='key'>system / timezone</span></h3>"
-              "<label>时区（POSIX TZ）"
-              "<input id='sys-timezone' placeholder='CST-8' autocomplete='off'></label>"
-              "<label>日历每周起始日"
-              "<select id='sys-week-start'>"
-              "<option value='sunday'>周日</option>"
-              "<option value='monday'>周一</option>"
-              "</select></label>"
-              "</section>"
               // 屏幕
-              "<section class='sys-sec' data-pane='screen'>"
+              "<section class='sys-sec active' data-pane='screen'>"
               "<h3>屏幕 <span class='key'>screen</span></h3>"
               "<label>亮度（0~100）"
               "<div class='bright-row'>"
@@ -1055,6 +1052,20 @@ static void handleSystemPage() {
               "<option value='ntp'>Clock</option>"
               "<option value='countdown'>Countdown</option>"
               "<option value='stopwatch'>Stopwatch</option>"
+              "</select></label>"
+              "<label>时区（POSIX TZ）"
+              "<input id='sys-timezone' placeholder='CST-8' autocomplete='off'></label>"
+              "<label class='check-row'>"
+              "<input id='sys-time-pure' type='checkbox'>"
+              "<span>默认 Pure 全屏</span></label>"
+              "</section>"
+              // Calendar 应用
+              "<section class='sys-sec' data-pane='calendar'>"
+              "<h3>日历 <span class='key'>calendar</span></h3>"
+              "<label>每周起始日"
+              "<select id='sys-week-start'>"
+              "<option value='sunday'>周日</option>"
+              "<option value='monday'>周一</option>"
               "</select></label>"
               "</section>"
               // 红外
@@ -1107,9 +1118,6 @@ static void handleSystemPage() {
     appendJsLoadCfg(body);
     body += F(
         "function collect(){"
-        "cfg.timezone=document.getElementById('sys-timezone').value||'CST-8';"
-        "if(!cfg.system)cfg.system={};"
-        "cfg.system.week_start=document.getElementById('sys-week-start').value||'sunday';"
         "if(!cfg.screen)cfg.screen={};"
         "let b=+document.getElementById('sys-brightness').value;if(isNaN(b))b=30;"
         "if(b<0)b=0;if(b>100)b=100;cfg.screen.brightness=b;"
@@ -1122,6 +1130,13 @@ static void handleSystemPage() {
         "if(v<0)v=0;if(v>100)v=100;cfg.sound.volume=v;"
         "if(!cfg.time)cfg.time={};"
         "cfg.time.default=document.getElementById('sys-time-default').value||'up';"
+        "cfg.time.timezone=document.getElementById('sys-timezone').value||'CST-8';"
+        "cfg.time.pure=document.getElementById('sys-time-pure').checked;"
+        "delete cfg.timezone;"
+        "if(!cfg.calendar)cfg.calendar={};"
+        "cfg.calendar.week_start=document.getElementById('sys-week-start').value||'sunday';"
+        "if(cfg.system){delete cfg.system.week_start;"
+        "if(Object.keys(cfg.system).length===0)delete cfg.system;}"
         "delete cfg.Infrared;"
         "if(!cfg.infrared)cfg.infrared={};"
         "cfg.infrared.default=document.getElementById('sys-ir-default').value||'tv';"
@@ -1147,8 +1162,6 @@ static void handleSystemPage() {
         "if(/^[a-z_]+$/.test(want)&&nav.querySelector('button[data-pane=\"'+want+'\"]'))"
         "showPane(want);}"
         "function init(){loadCfg();"
-        "document.getElementById('sys-timezone').value=cfg.timezone||'CST-8';"
-        "document.getElementById('sys-week-start').value=cfg.system.week_start||'sunday';"
         "document.getElementById('sys-brightness').value=String(cfg.screen.brightness);"
         "document.getElementById('sys-brightness-val').textContent=String(cfg.screen.brightness);"
         "document.getElementById('sys-screen-invert').checked=!!cfg.screen.invert;"
@@ -1157,6 +1170,9 @@ static void handleSystemPage() {
         "document.getElementById('sys-sound-volume').value=String(cfg.sound.volume);"
         "document.getElementById('sys-sound-volume-val').textContent=String(cfg.sound.volume);"
         "document.getElementById('sys-time-default').value=cfg.time.default||'up';"
+        "document.getElementById('sys-timezone').value=cfg.time.timezone||'CST-8';"
+        "document.getElementById('sys-time-pure').checked=!!cfg.time.pure;"
+        "document.getElementById('sys-week-start').value=cfg.calendar.week_start||'sunday';"
         "document.getElementById('sys-ir-default').value=cfg.infrared.default||'tv';"
         "document.getElementById('sys-ir-tv-brand').value=cfg.infrared.tv_brand||'samsung';"
         "document.getElementById('sys-ir-ac-brand').value=cfg.infrared.ac_brand||'midea';"

@@ -18,7 +18,7 @@
 
 1. `getLocalTime(&tm)` → 本地 `struct tm`
 2. 可选写入硬件 RTC（**UTC**）
-3. `saveAppConfigTimezone(tz)`
+3. `saveAppConfigTimezone(tz)` → 写入 `config.json` 的 `time.timezone`
 4. UI：`HH:MM:SS` + `YYYY-MM-DD`，顶部标签 `NTP` 或之后读时钟为 `RTC`
 
 有效 epoch：`> 1600000000`。总超时：`RTC_SYNC_TIMEOUT_MS` = **10s**（含连 WiFi）。

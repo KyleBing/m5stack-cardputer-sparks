@@ -131,6 +131,7 @@ static const int MENU_ITEM_COUNT = sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0]);
 
 AppState currentState = AppState::MENU;
 static HardwareTestMode hardwareTestMode = HardwareTestMode::HUB;
+static int hardwareTestHubPage = 0;
 static bool bmiScreenReady = false;
 static int bmiPrevDotX[2] = {-1, -1};
 static int bmiPrevDotY[2] = {-1, -1};
@@ -934,8 +935,9 @@ enum class SettingsModule : uint8_t {
     Screen = 0,
     Sound = 1,
     Time = 2,
-    Infrared = 3,
-    Count = 4,
+    Calendar = 3,
+    Infrared = 4,
+    Count = 5,
 };
 
 enum class SettingsFocus : uint8_t { List = 0, Panel = 1 };
@@ -956,6 +958,8 @@ static const char* settingsModuleName(const SettingsModule mod) {
             return "sound";
         case SettingsModule::Time:
             return "clock";
+        case SettingsModule::Calendar:
+            return "calendar";
         case SettingsModule::Infrared:
             return "infrared";
         default:
@@ -970,7 +974,9 @@ static int settingsPanelRowCount(const SettingsModule mod) {
         case SettingsModule::Sound:
             return 3; // volume / time key / mijia pwr
         case SettingsModule::Time:
-            return 4; // default / timezone / week start / pure
+            return 3; // default / timezone / pure
+        case SettingsModule::Calendar:
+            return 1; // week start
         case SettingsModule::Infrared:
             return 3; // category / tv brand / ac brand
         default:
@@ -1202,11 +1208,14 @@ static void drawSettingsTimePanel(const int x, const int y, const int w) {
                          APP_COLOR_VALUE, g_settings_row == 0);
     drawSettingsRowLabel(x, y + INFO_LINE_H, w, "tz", getAppTimezone(), APP_COLOR_VALUE,
                          g_settings_row == 1);
+    drawSettingsRowLabel(x, y + INFO_LINE_H * 2, w, "pure", cfg.time_pure ? "ON" : "OFF",
+                         cfg.time_pure ? APP_COLOR_OK : APP_COLOR_HINT, g_settings_row == 2);
+}
+
+static void drawSettingsCalendarPanel(const int x, const int y, const int w) {
+    const AppConfig& cfg = getAppConfig();
     const char* week_start = cfg.week_start == WeekStartDay::Monday ? "Mon" : "Sun";
-    drawSettingsRowLabel(x, y + INFO_LINE_H * 2, w, "week", week_start, APP_COLOR_VALUE,
-                         g_settings_row == 2);
-    drawSettingsRowLabel(x, y + INFO_LINE_H * 3, w, "pure", cfg.time_pure ? "ON" : "OFF",
-                         cfg.time_pure ? APP_COLOR_OK : APP_COLOR_HINT, g_settings_row == 3);
+    drawSettingsRowLabel(x, y, w, "week", week_start, APP_COLOR_VALUE, g_settings_row == 0);
 }
 
 static void drawSettingsInfraredPanel(const int x, const int y, const int w) {
@@ -1285,6 +1294,9 @@ void drawSettingsApp() {
         case SettingsModule::Time:
             drawSettingsTimePanel(panel_content_x, panel_content_y, panel_content_w);
             break;
+        case SettingsModule::Calendar:
+            drawSettingsCalendarPanel(panel_content_x, panel_content_y, panel_content_w);
+            break;
         case SettingsModule::Infrared:
             drawSettingsInfraredPanel(panel_content_x, panel_content_y, panel_content_w);
             break;
@@ -1337,12 +1349,15 @@ static void applySettingsValueDelta(const int val_delta) {
                     applyLocalTimezone();
                 }
             } else if (g_settings_row == 2) {
+                saveAppConfigTimePure(!getAppConfig().time_pure);
+            }
+            break;
+        case SettingsModule::Calendar:
+            if (g_settings_row == 0) {
                 const WeekStartDay next = getAppConfig().week_start == WeekStartDay::Monday
                                               ? WeekStartDay::Sunday
                                               : WeekStartDay::Monday;
                 saveAppConfigWeekStart(next);
-            } else if (g_settings_row == 3) {
-                saveAppConfigTimePure(!getAppConfig().time_pure);
             }
             break;
         case SettingsModule::Infrared: {
@@ -2035,6 +2050,27 @@ void handleDisplayApp(const Keyboard_Class::KeysState& status) {
 }
 
 // ===== HARDWARE TEST 二层入口 =====
+static constexpr int HW_HUB_ITEMS_PER_PAGE = 8;
+
+struct HardwareTestHubItem {
+    const char* title;
+    HardwareTestMode mode;
+};
+
+static constexpr HardwareTestHubItem HW_HUB_ITEMS[] = {
+    {"DISPLAY", HardwareTestMode::SCREEN},
+    {"IMU", HardwareTestMode::IMU},
+    {"FONT", HardwareTestMode::FONT},
+    {"ICONS", HardwareTestMode::ICONS},
+    {"RGB LED", HardwareTestMode::LED},
+    {"BLE", HardwareTestMode::BLE},
+    {"INI2", HardwareTestMode::IN_I2C},
+    {"EXI2", HardwareTestMode::EX_I2C},
+    {"MIC", HardwareTestMode::MIC},
+};
+static constexpr int HW_HUB_ITEM_COUNT =
+    static_cast<int>(sizeof(HW_HUB_ITEMS) / sizeof(HW_HUB_ITEMS[0]));
+
 // 独有冷青主题（与 Games 暖金区分）
 static uint16_t hwHubRgb(const uint8_t r, const uint8_t g, const uint8_t b) {
     return M5Cardputer.Display.color565(r, g, b);
@@ -2080,33 +2116,32 @@ static void drawHardwareTestHubCard(const int x, const int y, const int card_w, 
 }
 
 static void drawHardwareTestHubCardAt(const int index, const char key, const char* title) {
-    // 9 项需 5 行：略压卡片高度 / 行距以塞进 135 屏
-    static constexpr int HW_CARD_H = 19;
-    static constexpr int HW_GAP_Y = 2;
     const int row = index / APP_HUB_CARD_COLS;
     const int col = index % APP_HUB_CARD_COLS;
     const int x = APP_HUB_CARD_ORIGIN_X + col * (APP_HUB_CARD_W + APP_HUB_CARD_GAP_X);
-    const int y = APP_HUB_CARD_ORIGIN_Y + row * (HW_CARD_H + HW_GAP_Y);
-    drawHardwareTestHubCard(x, y, APP_HUB_CARD_W, HW_CARD_H, key, title);
+    const int y = APP_HUB_CARD_ORIGIN_Y + row * (APP_HUB_CARD_H + APP_HUB_CARD_GAP_Y);
+    drawHardwareTestHubCard(x, y, APP_HUB_CARD_W, APP_HUB_CARD_H, key, title);
+}
+
+static int getHardwareTestHubPageCount() {
+    return (HW_HUB_ITEM_COUNT + HW_HUB_ITEMS_PER_PAGE - 1) / HW_HUB_ITEMS_PER_PAGE;
 }
 
 static void drawHardwareTestHubCards() {
-    // 全部卡片统一冷青，形成 Test 独有识别
-    drawHardwareTestHubCardAt(0, '1', "DISPLAY");
-    drawHardwareTestHubCardAt(1, '2', "IMU");
-    drawHardwareTestHubCardAt(2, '3', "FONT");
-    drawHardwareTestHubCardAt(3, '4', "ICONS");
-    drawHardwareTestHubCardAt(4, '5', "RGB LED");
-    drawHardwareTestHubCardAt(5, '6', "BLE");
-    drawHardwareTestHubCardAt(6, '7', "INI2");
-    drawHardwareTestHubCardAt(7, '8', "EXI2");
-    drawHardwareTestHubCardAt(8, '9', "MIC");
+    // 每页最多四行八项，数字键按当前页从 1 重新编号。
+    const int start = hardwareTestHubPage * HW_HUB_ITEMS_PER_PAGE;
+    const int end = min(start + HW_HUB_ITEMS_PER_PAGE, HW_HUB_ITEM_COUNT);
+    for (int item = start; item < end; ++item) {
+        const int slot = item - start;
+        drawHardwareTestHubCardAt(slot, static_cast<char>('1' + slot), HW_HUB_ITEMS[item].title);
+    }
 }
 
 static void showHardwareTestsHubScreen() {
     // 回到 hub 时必须清子模式，否则按键/刷新仍走子 app 并盖住主菜单
     hardwareTestMode = HardwareTestMode::HUB;
-    beginAppHubScreen(getMenuItemNameFull(AppState::HARDWARE_TESTS), hwHubBg());
+    beginAppHubScreen(getMenuItemNameFull(AppState::HARDWARE_TESTS), hwHubBg(),
+                      hardwareTestHubPage, getHardwareTestHubPageCount());
     drawHardwareTestHubCards();
 }
 
@@ -2120,6 +2155,7 @@ static void leaveHardwareTestChild(const HardwareTestMode mode) {
 }
 
 static void enterHardwareTestsApp() {
+    hardwareTestHubPage = 0;
     showHardwareTestsHubScreen();
 }
 
@@ -2161,11 +2197,21 @@ static bool handleHardwareTestsBack() {
 
 static void handleHardwareTestsApp(const Keyboard_Class::KeysState& status) {
     if (hardwareTestMode == HardwareTestMode::HUB) {
+        const int delta = getMenuNavDelta(status);
+        const int page_count = getHardwareTestHubPageCount();
+        if (delta != 0 && page_count > 1) {
+            hardwareTestHubPage =
+                (hardwareTestHubPage + delta + page_count) % page_count;
+            showHardwareTestsHubScreen();
+            return;
+        }
         for (const char c : status.word) {
-            if (c >= '1' && c <= '9') {
-                selectHardwareTest(static_cast<HardwareTestMode>(
-                    static_cast<int>(HardwareTestMode::SCREEN) + (c - '1')));
-                return;
+            if (c >= '1' && c <= '8') {
+                const int item = hardwareTestHubPage * HW_HUB_ITEMS_PER_PAGE + (c - '1');
+                if (item < HW_HUB_ITEM_COUNT) {
+                    selectHardwareTest(HW_HUB_ITEMS[item].mode);
+                    return;
+                }
             }
         }
         return;
@@ -2239,7 +2285,7 @@ static void prepareBtnAWake() {
 
 // 浅休眠：关屏后 CPU 暂停，BtnA 唤醒并回到主菜单（不重启）
 static void enterLightSleep() {
-    batteryLogPrepareSleep();
+    batteryLogPrepareSleep(BatterySleepMode::Light);
     sleepSavedBrightness = M5Cardputer.Display.getBrightness();
     M5Cardputer.Display.sleep();
     M5Cardputer.Display.waitDisplay();
@@ -2260,7 +2306,7 @@ static void enterLightSleep() {
 
 // 深度休眠：关屏关无线后 CPU 断电，仅 BtnA 可唤醒（唤醒后重启）
 static void enterDeepSleep() {
-    batteryLogPrepareSleep();
+    batteryLogPrepareSleep(BatterySleepMode::Deep);
     M5Cardputer.Display.sleep();
     M5Cardputer.Display.waitDisplay();
     M5Cardputer.Display.setBrightness(0);

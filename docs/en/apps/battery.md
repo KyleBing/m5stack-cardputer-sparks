@@ -20,7 +20,8 @@ This App’s footer is mainly legend text; there are no dedicated letter action 
 |--------|---------|
 | 1h log | Historical samples |
 | live | Live segment |
-| sleep | During sleep |
+| light | During light sleep |
+| deep | During deep sleep |
 | now | Current point |
 
 Back: `ESC` / `GO`. Page keys do nothing when there is no extra page.
@@ -28,5 +29,5 @@ Back: `ESC` / `GO`. Page keys do nothing when there is no extra page.
 ## Usage
 
 1. Open to see current percentage and the curve.
-2. History is sampled in the background; deep sleep and similar states are marked on the curve.
+2. History is sampled in the background; light and deep sleep use different curve colors.
 3. Useful for spotting runtime and sleep drain trends — not a precision fuel-gauge calibration tool.

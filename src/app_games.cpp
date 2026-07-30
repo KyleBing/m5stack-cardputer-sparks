@@ -38,6 +38,26 @@ static int g_width = 0;
 static int g_height = 0;
 static uint32_t g_last_ms = 0;
 static GameMode g_mode = GameMode::HUB;
+static int g_hub_page = 0;
+
+static constexpr int GAMES_HUB_ITEMS_PER_PAGE = 8;
+
+struct GamesHubItem {
+    const char* title;
+    GameMode mode;
+};
+
+static constexpr GamesHubItem GAMES_HUB_ITEMS[] = {
+    {"COIN", GameMode::COIN},
+    {"CHAOS", GameMode::DOUBLE_PENDULUM},
+    {"WHEEL", GameMode::WHEEL},
+    {"DICE", GameMode::DICE},
+    {"PHYS", GameMode::NEWTON_CRADLE},
+    {"NEON FX", GameMode::NEON_FX},
+    {"CURVES", GameMode::CURVES},
+};
+static constexpr int GAMES_HUB_ITEM_COUNT =
+    static_cast<int>(sizeof(GAMES_HUB_ITEMS) / sizeof(GAMES_HUB_ITEMS[0]));
 
 // IMU 滤波与摇晃边沿由硬币、迷宫和转盘共用。
 static float g_ax = 0.0f;
@@ -816,6 +836,10 @@ static void drawHubCard(const int x, const int y, const int number, const char* 
     M5Cardputer.Display.print(title);
 }
 
+static int getGamesHubPageCount() {
+    return (GAMES_HUB_ITEM_COUNT + GAMES_HUB_ITEMS_PER_PAGE - 1) / GAMES_HUB_ITEMS_PER_PAGE;
+}
+
 static void drawHubCardAt(const int index, const int number, const char* title) {
     const int row = index / APP_HUB_CARD_COLS;
     const int col = index % APP_HUB_CARD_COLS;
@@ -825,18 +849,17 @@ static void drawHubCardAt(const int index, const int number, const char* title) 
 }
 
 static void drawHubCards() {
-    // 菜单统一暖金主色，形成 Games 独有识别
-    drawHubCardAt(0, 1, "COIN");
-    drawHubCardAt(1, 2, "CHAOS");
-    drawHubCardAt(2, 3, "WHEEL");
-    drawHubCardAt(3, 4, "DICE");
-    drawHubCardAt(4, 5, "PHYS");
-    drawHubCardAt(5, 6, "NEON FX");
-    drawHubCardAt(6, 7, "CURVES");
+    // 每页最多四行八项，数字键按当前页从 1 重新编号。
+    const int start = g_hub_page * GAMES_HUB_ITEMS_PER_PAGE;
+    const int end = min(start + GAMES_HUB_ITEMS_PER_PAGE, GAMES_HUB_ITEM_COUNT);
+    for (int item = start; item < end; ++item) {
+        const int slot = item - start;
+        drawHubCardAt(slot, slot + 1, GAMES_HUB_ITEMS[item].title);
+    }
 }
 
 static void showGamesHubScreen() {
-    beginAppHubScreen("MINI GAMES", gamesHubBg());
+    beginAppHubScreen("MINI GAMES", gamesHubBg(), g_hub_page, getGamesHubPageCount());
     drawHubCards();
 }
 
@@ -1061,6 +1084,7 @@ void enterGamesApp() {
     g_width = M5Cardputer.Display.width();
     g_height = M5Cardputer.Display.height();
     g_mode = GameMode::HUB;
+    g_hub_page = 0;
     g_help = false;
     g_last_ms = millis();
     g_imu_sample_ready = false;
@@ -1189,9 +1213,12 @@ void handleGamesApp(const Keyboard_Class::KeysState& status) {
         if (g_help) {
             continue;
         }
-        if (g_mode == GameMode::HUB && c >= '1' && c <= '7') {
-            selectMode(static_cast<GameMode>(static_cast<int>(GameMode::COIN) + (c - '1')));
-            return;
+        if (g_mode == GameMode::HUB && c >= '1' && c <= '8') {
+            const int item = g_hub_page * GAMES_HUB_ITEMS_PER_PAGE + (c - '1');
+            if (item < GAMES_HUB_ITEM_COUNT) {
+                selectMode(GAMES_HUB_ITEMS[item].mode);
+                return;
+            }
         }
         if (c == '0' && g_mode != GameMode::CURVES) {
             selectMode(GameMode::HUB);
@@ -1231,6 +1258,15 @@ void handleGamesApp(const Keyboard_Class::KeysState& status) {
                 g_curve_animate = true;
             }
         }
+    }
+    if (g_mode == GameMode::HUB) {
+        const int delta = getMenuNavDelta(status);
+        const int page_count = getGamesHubPageCount();
+        if (delta != 0 && page_count > 1) {
+            g_hub_page = (g_hub_page + delta + page_count) % page_count;
+            showGamesHubScreen();
+        }
+        return;
     }
     if (g_mode == GameMode::DICE) {
         handleDiceApp(status);

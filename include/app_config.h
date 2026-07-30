@@ -39,7 +39,7 @@ enum class TimeDefaultMode : uint8_t {
     Stopwatch = 3,
 };
 
-// 每周起始日（config: system.week_start）
+// 每周起始日（config: calendar.week_start）
 enum class WeekStartDay : uint8_t {
     Sunday = 0,
     Monday = 1,
@@ -133,7 +133,7 @@ bool saveAppConfigTimeKeySound(bool enabled);
 // 更新米家开/关提示音开关并写回
 bool saveAppConfigMijiaOnOffSound(bool enabled);
 
-// 更新时区（POSIX TZ）并写回
+// 更新时区（POSIX TZ）并写回 time.timezone
 bool saveAppConfigTimezone(const char* timezone);
 
 // 更新 Time 默认模块并写回
@@ -142,7 +142,7 @@ bool saveAppConfigTimeDefaultMode(TimeDefaultMode mode);
 // 更新 Time pure 偏好并写回
 bool saveAppConfigTimePure(bool enabled);
 
-// 更新日历每周起始日并写回 system.week_start
+// 更新日历每周起始日并写回 calendar.week_start
 bool saveAppConfigWeekStart(WeekStartDay day);
 
 // 每周起始日 ↔ 配置字符串

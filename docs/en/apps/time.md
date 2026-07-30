@@ -86,7 +86,7 @@ Four sub-modes: **Uptime**, **Clock**, **Countdown**, **Stopwatch**; supports Pu
 ## Usage
 
 1. Default mode comes from config `time.default` (e.g. `up`); `time.pure` can enable Pure by default.
-2. Clock uses RTC; with network, `r` does NTP. Timezone is `timezone` in config (e.g. `CST-8`).
+2. Clock uses RTC; with network, `r` does NTP. Timezone is `time.timezone` in config (e.g. `CST-8`).
 3. Pure works well as a desk clock / stopwatch.
 4. **Countdown / Stopwatch** keep timing after leaving the Time App or switching sub-modes — see below.
 

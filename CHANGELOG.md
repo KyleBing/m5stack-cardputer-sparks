@@ -6,6 +6,19 @@
 
 ---
 
+## 2026-07-30
+
+### 改进
+
+- **config 归属**：`timezone` → `time.timezone`，`system.week_start` → `calendar.week_start`；加载兼容旧路径，保存写新路径并清理旧键
+- **Options**：新增 calendar 模块（week）；clock 保留 default / tz / pure
+- **Infrared**：应用内 `t` / `Tab` 切换后延后写入 config（先刷新界面，再合并落盘，避免卡顿）
+- **Config Web**：系统页按 time / calendar 分栏，不再写顶层 `timezone` / `system.week_start`
+- **Mini Games**：Hub 分页（每页最多 8 项）+ header 分页圆点
+- **Battery**：浅睡 / 深睡类型记入日志
+
+---
+
 ## 2026-07-29
 
 ### 新增

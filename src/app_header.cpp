@@ -11,18 +11,43 @@ static constexpr int APP_BACK_BTN_W = ICON_BACK_W;
 static constexpr int HEADER_STATUS_CLEAR_PAD = 2;
 static bool s_app_header_draw_divider = true;
 static bool s_app_header_include_battery = false;
+// 子界面 header 分页圆点（hub 页用）；page_count <= 1 表示不显示
+static int s_app_header_page = 0;
+static int s_app_header_page_count = 1;
+static constexpr int HEADER_DOT_R = 2;
+static constexpr int HEADER_DOT_GAP = 6;
 
 static int headerStatusIconY(const int icon_h) {
     // 图标几何中心对齐 header 垂直中线（避免奇偶高度差 1px）
     return APP_HEADER_H / 2 - icon_h / 2;
 }
 
+static int headerPageDotsWidth(const int page_count) {
+    if (page_count <= 1) {
+        return 0;
+    }
+    return page_count * HEADER_DOT_R * 2 + (page_count - 1) * HEADER_DOT_GAP;
+}
+
 static int getMenuStatusRightX(const int screen_w, const int page_count) {
     int right = screen_w - 4;
-    if (page_count > 1) {
-        constexpr int dot_r = 2;
-        constexpr int dot_gap = 6;
-        const int dots_w = page_count * dot_r * 2 + (page_count - 1) * dot_gap;
+    const int dots_w = headerPageDotsWidth(page_count);
+    if (dots_w > 0) {
+        right -= dots_w + 6;
+    }
+    return right;
+}
+
+// 子界面分页圆点画在返回图标左侧
+static int getAppPageDotsX(const int screen_w) {
+    return screen_w - 2 - APP_BACK_BTN_W - 4 - headerPageDotsWidth(s_app_header_page_count);
+}
+
+// 子界面状态图标右边界；有分页圆点时为其让位
+static int getAppStatusRightX(const int screen_w) {
+    int right = screen_w - 2 - APP_BACK_BTN_W - 4;
+    const int dots_w = headerPageDotsWidth(s_app_header_page_count);
+    if (dots_w > 0) {
         right -= dots_w + 6;
     }
     return right;
@@ -106,13 +131,12 @@ static void drawHeaderDivider(const int screen_w) {
                                       M5Cardputer.Display.color565(0x22, 0x22, 0x22));
 }
 
-void drawAppScreenHeader(const char* title, const bool draw_divider) {
-    drawAppScreenHeaderAccent(title, nullptr, WHITE, draw_divider);
-}
-
-void drawAppScreenHeaderAccent(const char* title, const char* accent, const uint16_t accent_color,
-                               const bool draw_divider) {
+// page_count <= 1 时不画圆点，同时清掉上个界面残留的分页状态
+static void drawAppHeaderCore(const char* title, const char* accent, const uint16_t accent_color,
+                              const bool draw_divider, const int page, const int page_count) {
     s_app_header_draw_divider = draw_divider;
+    s_app_header_page = page;
+    s_app_header_page_count = page_count;
     const int screen_w = M5Cardputer.Display.width();
     M5Cardputer.Display.fillRect(0, 0, screen_w, APP_HEADER_H, BLACK);
 
@@ -125,13 +149,24 @@ void drawAppScreenHeaderAccent(const char* title, const char* accent, const uint
         M5Cardputer.Display.print(accent);
     }
 
-    const int status_right = screen_w - 2 - APP_BACK_BTN_W - 4;
-    drawHeaderStatusIcons(status_right, s_app_header_include_battery);
+    if (page_count > 1) {
+        drawIconPageDots(getAppPageDotsX(screen_w), APP_HEADER_H / 2, page, page_count);
+    }
+    drawHeaderStatusIcons(getAppStatusRightX(screen_w), s_app_header_include_battery);
     drawBackButton(screen_w);
     if (draw_divider) {
         drawHeaderDivider(screen_w);
     }
     M5Cardputer.Display.setTextColor(WHITE, BLACK);
+}
+
+void drawAppScreenHeader(const char* title, const bool draw_divider) {
+    drawAppScreenHeaderAccent(title, nullptr, WHITE, draw_divider);
+}
+
+void drawAppScreenHeaderAccent(const char* title, const char* accent, const uint16_t accent_color,
+                               const bool draw_divider) {
+    drawAppHeaderCore(title, accent, accent_color, draw_divider, 0, 1);
 }
 
 void drawMenuScreenHeader(const char* app_name, const int page, const int page_count) {
@@ -150,10 +185,7 @@ void drawMenuScreenHeader(const char* app_name, const int page, const int page_c
     drawHeaderStatusIcons(status_right, true);
 
     if (page_count > 1) {
-        constexpr int dot_r = 2;
-        constexpr int dot_gap = 6;
-        const int dots_w = page_count * dot_r * 2 + (page_count - 1) * dot_gap;
-        const int dot_x = screen_w - dots_w - 4;
+        const int dot_x = screen_w - headerPageDotsWidth(page_count) - 4;
         drawIconPageDots(dot_x, APP_HEADER_H / 2, page, page_count);
     }
     // 主菜单 header 不画下边框
@@ -165,9 +197,7 @@ void updateMenuPageDots(const int page, const int page_count) {
         return;
     }
     const int screen_w = M5Cardputer.Display.width();
-    constexpr int dot_r = 2;
-    constexpr int dot_gap = 6;
-    const int dots_w = page_count * dot_r * 2 + (page_count - 1) * dot_gap;
+    const int dots_w = headerPageDotsWidth(page_count);
     const int dot_x = screen_w - dots_w - 4;
     // 只清圆点区域
     M5Cardputer.Display.fillRect(dot_x - 1, 0, dots_w + 2, APP_HEADER_H, BLACK);
@@ -204,7 +234,7 @@ void updateAppHeaderStatus() {
     }
     static int prev_clear_left = -1;
     const int screen_w = M5Cardputer.Display.width();
-    const int status_right = screen_w - 2 - APP_BACK_BTN_W - 4;
+    const int status_right = getAppStatusRightX(screen_w);
     const bool wifi = isWifiStaConnected();
     const bool ble = isBleStackReady();
     const bool charging = isBatteryCharging();
@@ -290,7 +320,12 @@ void fillAppContentArea(const uint16_t color) {
     }
 }
 
-void beginAppHubScreen(const char* title, const uint16_t content_bg) {
-    beginAppScreen(title, false);
+void beginAppHubScreen(const char* title, const uint16_t content_bg, const int page,
+                       const int page_count) {
+    s_app_header_include_battery = false;
+    M5Cardputer.Display.clear();
+    drawAppHeaderCore(title, nullptr, WHITE, false, page, page_count);
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setTextColor(WHITE, BLACK);
     fillAppContentArea(content_bg);
 }

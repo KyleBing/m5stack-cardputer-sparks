@@ -17,7 +17,7 @@ configTzTime(getAppTimezone(), "ntp.aliyun.com", "pool.ntp.org");
 
 | 项 | 值 |
 |----|-----|
-| 时区 | `getAppTimezone()`（`config.json`，缺省 `CST-8`） |
+| 时区 | `getAppTimezone()`（`config.json` 的 `time.timezone`，缺省 `CST-8`） |
 | 主 NTP | `ntp.aliyun.com` |
 | 备 NTP | `pool.ntp.org` |
 | 有效阈值 | Unix 秒 `> 1700000000`（约 2023-11 之后） |

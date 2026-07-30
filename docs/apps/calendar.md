@@ -20,5 +20,5 @@ Header 直接显示年月（2x，不显示应用名）；主界面无底栏 tip�
 ## 使用说明
 
 1. 进入后根据系统时钟（或 RTC）定位到当前月；无有效时钟时显示默认月，仍可手动翻页。
-2. 每周第一列可在 Options 的 clock 模块中设为周日或周一（`system.week_start`）；周末橙色，今日黄底高亮。
+2. 每周第一列可在 Options 的 calendar 模块中设为周日或周一（`calendar.week_start`）；周末橙色，今日黄底高亮。
 3. 时钟未校准时左下角提示 `clock unset`。

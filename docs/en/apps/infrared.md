@@ -60,6 +60,6 @@ Some Midea units do not respond; switching the brand to Xiaomi often works.
 - Top-bar fan icons: auto / min / low / med / high / max  
 - Adjust temperature, mode, and fan speed, then send the full frame  
 
-Defaults can be changed in [Options](./options) or Config Web: `infrared.default` (`tv`/`ac`), `tv_brand`, `ac_brand`.
+Defaults can be changed in [Options](./options) or Config Web: `infrared.default` (`tv`/`ac`), `tv_brand`, `ac_brand`. Changes made with `t` / `Tab` in the IR app are saved after the UI updates, with consecutive changes merged into the final selection.
 
 > IR protocols vary by model; if nothing happens, try another brand or aim the emitter at the receiver window.

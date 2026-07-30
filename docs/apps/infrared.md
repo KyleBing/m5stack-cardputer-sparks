@@ -60,6 +60,6 @@ Midea 有些无响应的，改成 Xiaomi 品牌就能控制了。
 - 顶栏风速图标：auto / min / low / med / high / max  
 - 调节温度、模式、风速后发送整帧状态  
 
-默认项可在 [Options](./options) 或 Config Web 修改：`infrared.default`（`tv`/`ac`）、`tv_brand`、`ac_brand`。
+默认项可在 [Options](./options) 或 Config Web 修改：`infrared.default`（`tv`/`ac`）、`tv_brand`、`ac_brand`。在红外界面用 `t` / `Tab` 切换后也会延后保存，连续切换只写入最终选择。
 
 > 红外协议因机型而异；无效时请换品牌或确认发射头对准接收窗。

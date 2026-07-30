@@ -63,5 +63,5 @@ void beginAppScreenAccent(const char* title, const char* accent, uint16_t accent
 void clearAppContentArea();
 // 填充整块内容区背景（从 header 下沿铺满，含 padding 带）
 void fillAppContentArea(uint16_t color);
-// Hub 页：header（无下边框）+ 内容区背景
-void beginAppHubScreen(const char* title, uint16_t content_bg);
+// Hub 页：header（无下边框）+ 内容区背景；page_count > 1 时 header 右侧画分页圆点
+void beginAppHubScreen(const char* title, uint16_t content_bg, int page = 0, int page_count = 1);

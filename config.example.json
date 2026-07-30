@@ -71,10 +71,6 @@
   "cursor": {
     "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
   },
-  "system": {
-    "week_start": "sunday"
-  },
-  "timezone": "CST-8",
   "screen": {
     "brightness": 30,
     "invert": false
@@ -86,7 +82,11 @@
   },
   "time": {
     "default": "up",
-    "pure": false
+    "pure": false,
+    "timezone": "CST-8"
+  },
+  "calendar": {
+    "week_start": "sunday"
   },
   "infrared": {
     "default": "tv",

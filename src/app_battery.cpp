@@ -19,6 +19,11 @@ static constexpr const char* BAT_LOG_PATH = "/battery_log.bin";
 static constexpr uint32_t BAT_LOG_MAGIC = 0x31424154; // BAT1
 static constexpr int BAT_LOG_CAP = 168;               // 7 天 × 24h
 static constexpr uint8_t BAT_FLAG_INTERP = 0x01;      // sleep 缺口线性补全
+static constexpr uint8_t BAT_FLAG_SLEEP_LIGHT = 0x02;
+static constexpr uint8_t BAT_FLAG_SLEEP_DEEP = 0x04;
+static constexpr uint8_t BAT_FLAG_SLEEP_MASK = BAT_FLAG_SLEEP_LIGHT | BAT_FLAG_SLEEP_DEEP;
+static constexpr uint16_t BAT_COLOR_LIGHT_SLEEP = APP_COLOR_WARN;
+static constexpr uint16_t BAT_COLOR_DEEP_SLEEP = MAGENTA;
 
 struct BatSample {
     uint32_t hour_epoch; // unix_sec / 3600
@@ -280,13 +285,16 @@ static void batFillGap(const BatSample& before, const uint32_t now_hour, const u
         return;
     }
 
+    // 入睡前采样携带休眠类型，补出的每个小时继承该类型。
+    const uint8_t sleep_flags = before.flags & BAT_FLAG_SLEEP_MASK;
     for (uint32_t h = before.hour_epoch + 1; h < now_hour; h++) {
         const float t = static_cast<float>(h - before.hour_epoch) / static_cast<float>(span);
         const int lv = static_cast<int>(before.level + (now_level - before.level) * t + 0.5f);
         const int mv =
             static_cast<int>(before.mv + static_cast<int>(now_mv - before.mv) * t + 0.5f);
         uint8_t level = static_cast<uint8_t>(lv < 0 ? 0 : (lv > 100 ? 100 : lv));
-        batUpsertHour(h, level, static_cast<uint16_t>(mv < 0 ? 0 : mv), BAT_FLAG_INTERP);
+        batUpsertHour(h, level, static_cast<uint16_t>(mv < 0 ? 0 : mv),
+                      BAT_FLAG_INTERP | sleep_flags);
     }
     batUpsertHour(now_hour, now_level, now_mv, 0);
 }
@@ -340,17 +348,19 @@ void batteryLogTick() {
     batRecordNow(true);
 }
 
-void batteryLogPrepareSleep() {
+void batteryLogPrepareSleep(const BatterySleepMode mode) {
     if (!g_log_loaded) {
         return;
     }
-    // 入睡前强制记当前点并落盘
+    // 休眠类型写进最后一个采样，深睡重启后也能恢复并标记补全段。
+    const uint8_t sleep_flag =
+        mode == BatterySleepMode::Deep ? BAT_FLAG_SLEEP_DEEP : BAT_FLAG_SLEEP_LIGHT;
     time_t now = 0;
     if (batClockValid(&now)) {
         uint8_t level = 0;
         uint16_t mv = 0;
         batReadLive(level, mv);
-        batUpsertHour(batHourEpoch(now), level, mv, 0);
+        batUpsertHour(batHourEpoch(now), level, mv, sleep_flag);
     }
     batSaveLog();
 }
@@ -447,8 +457,17 @@ static void batDrawChart(const int x, const int y, const int w, const int bar_h)
         }
         const int fill_h = (bar_h * g_chart_levels[i]) / 100;
         const int by = y + bar_h - fill_h;
-        const bool interp = (g_chart_flags[i] & BAT_FLAG_INTERP) != 0;
-        const uint16_t color = interp ? APP_COLOR_WARN : (i == n - 1 ? APP_COLOR_OK : CYAN);
+        const uint8_t flags = g_chart_flags[i];
+        uint16_t color = CYAN;
+        if (i == n - 1) {
+            color = APP_COLOR_OK;
+        } else if ((flags & BAT_FLAG_SLEEP_DEEP) != 0) {
+            color = BAT_COLOR_DEEP_SLEEP;
+        } else if ((flags & BAT_FLAG_SLEEP_LIGHT) != 0 ||
+                   (flags & BAT_FLAG_INTERP) != 0) {
+            // 旧版只有插值标志的记录继续按浅睡颜色显示。
+            color = BAT_COLOR_LIGHT_SLEEP;
+        }
         if (fill_h > 0) {
             M5Cardputer.Display.fillRect(bar_x, by, bar_w, fill_h, color);
         }
@@ -483,8 +502,12 @@ static void batDrawHints() {
     M5Cardputer.Display.print("live");
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.print(" ");
-    M5Cardputer.Display.setTextColor(APP_COLOR_WARN, BLACK);
-    M5Cardputer.Display.print("sleep");
+    M5Cardputer.Display.setTextColor(BAT_COLOR_LIGHT_SLEEP, BLACK);
+    M5Cardputer.Display.print("light");
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.print(" ");
+    M5Cardputer.Display.setTextColor(BAT_COLOR_DEEP_SLEEP, BLACK);
+    M5Cardputer.Display.print("deep");
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.print(" ");
     // 绿色柱：此时此刻（当前小时）

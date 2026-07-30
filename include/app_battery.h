@@ -2,12 +2,17 @@
 
 #include "M5Cardputer.h"
 
+enum class BatterySleepMode : uint8_t {
+    Light,
+    Deep,
+};
+
 // 启动时加载日志；深睡唤醒后补全 sleep 缺口
 void initBatteryLog();
 // 主循环：设备开启时按整点记录电量
 void batteryLogTick();
-// 入睡前落盘当前采样（深睡后 RAM 会丢）
-void batteryLogPrepareSleep();
+// 入睡前落盘当前采样和休眠类型（深睡后 RAM 会丢）
+void batteryLogPrepareSleep(BatterySleepMode mode);
 // 浅睡唤醒后线性补全缺口并记当前点
 void batteryLogAfterWake();
 

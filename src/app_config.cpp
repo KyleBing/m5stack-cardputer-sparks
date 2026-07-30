@@ -12,6 +12,37 @@ static AppConfig g_config{};
 // 按设备 id 查找（供 loadAppConfig 解析编组）
 int mijiaFindDeviceIndexById(const char* id);
 
+// 把旧 timezone / system.week_start 迁到按应用归属的新对象
+static void normalizeTimeCalendarConfig(JsonDocument& doc) {
+    JsonObject time_obj = doc["time"].as<JsonObject>();
+    if (time_obj.isNull()) {
+        time_obj = doc["time"].to<JsonObject>();
+    }
+    if (time_obj["timezone"].isNull()) {
+        const char* legacy_tz = doc["timezone"];
+        if (legacy_tz != nullptr && legacy_tz[0] != '\0') {
+            time_obj["timezone"] = legacy_tz;
+        }
+    }
+    doc.remove("timezone");
+
+    JsonObject calendar_obj = doc["calendar"].as<JsonObject>();
+    if (calendar_obj.isNull()) {
+        calendar_obj = doc["calendar"].to<JsonObject>();
+    }
+    JsonObject system_obj = doc["system"].as<JsonObject>();
+    if (calendar_obj["week_start"].isNull() && !system_obj.isNull() &&
+        !system_obj["week_start"].isNull()) {
+        calendar_obj["week_start"] = system_obj["week_start"];
+    }
+    if (!system_obj.isNull()) {
+        system_obj.remove("week_start");
+        if (system_obj.size() == 0) {
+            doc.remove("system");
+        }
+    }
+}
+
 // 安全拷贝字符串到定长缓冲区
 static void copyField(char* dest, const size_t dest_size, const char* src) {
     if (src == nullptr || dest_size == 0) {
@@ -248,26 +279,32 @@ bool loadAppConfig() {
         g_config.speaker_volume = static_cast<uint8_t>(vol);
     }
 
-    // 时区：缺字段时保持默认 CST-8
-    const char* tz = doc["timezone"];
-    if (tz != nullptr && tz[0] != '\0') {
-        copyField(g_config.timezone, sizeof(g_config.timezone), tz);
-    }
-
-    // system：系统级通用偏好
-    g_config.week_start = WeekStartDay::Sunday;
-    JsonObject system_obj = doc["system"];
-    if (!system_obj.isNull()) {
-        g_config.week_start = parseWeekStartDay(system_obj["week_start"]);
-    }
-
-    // Time：time.default / time.pure
+    // Time：优先新路径；timezone 兼容旧顶层字段
     g_config.time_default_mode = TimeDefaultMode::Up;
     g_config.time_pure = false;
     JsonObject time_obj = doc["time"];
     if (!time_obj.isNull()) {
         g_config.time_default_mode = parseTimeDefaultMode(time_obj["default"]);
         g_config.time_pure = time_obj["pure"] | false;
+    }
+    const char* tz = time_obj.isNull() ? nullptr : time_obj["timezone"];
+    if (tz == nullptr || tz[0] == '\0') {
+        tz = doc["timezone"];
+    }
+    if (tz != nullptr && tz[0] != '\0') {
+        copyField(g_config.timezone, sizeof(g_config.timezone), tz);
+    }
+
+    // Calendar：优先新路径；week_start 兼容旧 system 对象
+    g_config.week_start = WeekStartDay::Sunday;
+    JsonObject calendar_obj = doc["calendar"];
+    if (!calendar_obj.isNull() && !calendar_obj["week_start"].isNull()) {
+        g_config.week_start = parseWeekStartDay(calendar_obj["week_start"]);
+    } else {
+        JsonObject system_obj = doc["system"];
+        if (!system_obj.isNull()) {
+            g_config.week_start = parseWeekStartDay(system_obj["week_start"]);
+        }
     }
 
     // infrared：default / tv_brand / ac_brand（兼容旧大写 Infrared）
@@ -553,6 +590,7 @@ bool saveAppConfigJson(const char* json) {
     if (err) {
         return false;
     }
+    normalizeTimeCalendarConfig(doc);
 
     File file = LittleFS.open(CONFIG_PATH, "w");
     if (!file) {
@@ -794,7 +832,9 @@ bool saveAppConfigTimezone(const char* timezone) {
         }
     }
 
-    doc["timezone"] = timezone;
+    normalizeTimeCalendarConfig(doc);
+    JsonObject time_obj = doc["time"].as<JsonObject>();
+    time_obj["timezone"] = timezone;
 
     if (doc["devices"].isNull()) {
         doc["devices"].to<JsonArray>();
@@ -927,11 +967,9 @@ bool saveAppConfigWeekStart(const WeekStartDay day) {
         }
     }
 
-    JsonObject system_obj = doc["system"].as<JsonObject>();
-    if (system_obj.isNull()) {
-        system_obj = doc["system"].to<JsonObject>();
-    }
-    system_obj["week_start"] = weekStartDayName(day);
+    normalizeTimeCalendarConfig(doc);
+    JsonObject calendar_obj = doc["calendar"].as<JsonObject>();
+    calendar_obj["week_start"] = weekStartDayName(day);
 
     if (doc["devices"].isNull()) {
         doc["devices"].to<JsonArray>();

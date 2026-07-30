@@ -47,7 +47,7 @@
       "_note": "东八区显示 15:26 时，RTC 存 07:26 UTC"
     },
     "config_written": {
-      "timezone": "CST-8",
+      "time.timezone": "CST-8",
       "path": "config.json"
     }
   },
