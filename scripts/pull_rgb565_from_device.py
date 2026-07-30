@@ -7,8 +7,8 @@
   3. 再按路径下载 .rgb565 到本地 data/
 
 用法：
-  python scripts/pull_rgb565_from_device.py http://192.168.1.20
-  python scripts/pull_rgb565_from_device.py http://192.168.1.20 --bake
+  python scripts/pull_rgb565_from_device.py 192.168.1.20
+  python scripts/pull_rgb565_from_device.py 192.168.1.20 --bake
 """
 
 from __future__ import annotations
@@ -25,50 +25,14 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
-
-DEVICE_NAMES = [
-    "airpurifier",
-    "bslamp2",
-    "camera",
-    "cooker",
-    "default",
-    "fan",
-    "fryer",
-    "juicer",
-    "lamp2",
-    "light",
-    "plug",
-    "sensor_ht",
-    "wifispeaker",
-]
-# 空调模式（normal + active）
-IR_MODE_NAMES = ["ac_cool", "ac_heat", "ac_dry", "ac_fan", "ac_auto"]
-# 风速档位（仅单态图标）
-IR_FAN_NAMES = [
-    "ac_fan_auto",
-    "ac_fan_min",
-    "ac_fan_low",
-    "ac_fan_med",
-    "ac_fan_high",
-    "ac_fan_max",
-]
+RGB565_MAGIC = b"R565"
 
 
 def rel_paths() -> list[str]:
-    paths: list[str] = []
-    for n in DEVICE_NAMES:
-        paths.append(f"icon/device/{n}.rgb565")
-        paths.append(f"icon/device/{n}_active.rgb565")
-        paths.append(f"icon/device/{n}_25w.rgb565")
-        paths.append(f"icon/device/{n}_active_25w.rgb565")
-    for n in IR_MODE_NAMES:
-        paths.append(f"icon/ir/{n}.rgb565")
-        paths.append(f"icon/ir/{n}_active.rgb565")
-    for n in IR_FAN_NAMES:
-        paths.append(f"icon/ir/{n}.rgb565")
-    paths.append("logo_60.rgb565")
-    paths.append("logo_50.rgb565")
-    return paths
+    """按本地 data/ 里的 PNG 推出待拉取的同名 .rgb565，与设备端烘焙范围保持一致。"""
+    sources = sorted((DATA / "icon").rglob("*.png"))
+    sources += sorted(DATA.glob("logo_*.png"))
+    return [str(p.relative_to(DATA).with_suffix(".rgb565")) for p in sources]
 
 
 def http(url: str, method: str = "GET", timeout: float = 120.0) -> bytes:
@@ -79,10 +43,13 @@ def http(url: str, method: str = "GET", timeout: float = 120.0) -> bytes:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="拉取设备上 M5GFX 烘焙的 RGB565")
-    ap.add_argument("base", help="设备 Config 根地址，如 http://192.168.1.20")
+    ap.add_argument("base", help="设备 IP 或 Config 根地址，如 192.168.1.20")
     ap.add_argument("--bake", action="store_true", help="先 POST /bake-rgb565")
     args = ap.parse_args()
     base = args.base.rstrip("/")
+    # 只填写 IP 或主机名时默认使用 HTTP，同时兼容完整 URL
+    if not base.lower().startswith(("http://", "https://")):
+        base = f"http://{base}"
 
     if args.bake:
         print("POST /bake-rgb565 ...")
@@ -99,6 +66,11 @@ def main() -> int:
         except Exception as e:
             miss += 1
             print(f"miss {rel}: {e}")
+            continue
+        # 旧格式无头部，落盘会让固件读取失败，直接判为缺失以便重新烘焙
+        if not data.startswith(RGB565_MAGIC):
+            miss += 1
+            print(f"miss {rel}: 非 R565 头部（设备上是旧格式，需重新烘焙）")
             continue
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(data)

@@ -29,7 +29,8 @@ LittleFS 读原始像素 → pushImage（直接写屏）
 | 资源 | 源文件（LittleFS） | 运行时优先 | 绘制入口 |
 |------|-------------------|------------|----------|
 | 设备图标 | `/icon/device/*.png`（含 `_active`、`_25w`） | `.rgb565` → PNG | `src/app_device_icons.cpp` |
-| 空调模式 / 风速 | `/icon/ir/*.png` | RAM 缓存 → `.rgb565` → PNG | `src/app_ir.cpp` |
+| 空调模式 / 风速 / 信号 | `/icon/ir/*.png` | RAM 缓存 → `.rgb565` → PNG | `src/app_ir.cpp` |
+| 品牌 logo | `/icon/brand/*.png` | `.rgb565` → PNG | `src/app_ir.cpp` |
 | Logo | `/logo_60.png`、`/logo_50.png` | `.rgb565` → PNG | `drawAppLogo60` 等 |
 | 箭头 / WiFi / 电池等 | 无图文件 | 矢量绘制 | `src/app_icons.cpp` |
 
@@ -52,9 +53,21 @@ fillRect 黑底
 
 批量烘焙覆盖：
 
-- `/icon/device`
-- `/icon/ir`
+- `/icon` 下所有子目录中的 `.png`
 - `/logo_60.png`、`/logo_50.png`
+
+### .rgb565 文件格式
+
+8 字节头部 + 裸像素：
+
+| 偏移 | 长度 | 内容 |
+|------|------|------|
+| 0 | 4 | magic `R565` |
+| 4 | 2 | 宽（uint16 小端） |
+| 6 | 2 | 高（uint16 小端） |
+| 8 | w×h×2 | RGB565 像素，逐行 |
+
+头部带宽高，非正方形图标（品牌 logo 66×20、风速 34×30 等）同样可以烘焙。读取端 `loadRgb565File` 会校验 magic 与宽高，不匹配时回退现场解 PNG。
 
 触发方式：Config Web **`POST /bake-rgb565`**（返回 `{"ok":true,"baked":N}`）。Icons App 已不再提供按键 `b` 现场烘焙。
 
@@ -67,7 +80,7 @@ fillRect 黑底
 pio run -e m5stack-cardputer -t uploadfs
 
 # 2. 设备上烘焙，再拉回 data/
-python scripts/pull_rgb565_from_device.py http://<设备IP> --bake
+python scripts/pull_rgb565_from_device.py <设备IP> --bake
 ```
 
 只触发烘焙：

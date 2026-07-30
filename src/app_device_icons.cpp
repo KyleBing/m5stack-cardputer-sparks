@@ -2,7 +2,7 @@
 #include <FS.h>
 #include <LittleFS.h>
 #include "M5Cardputer.h"
-#include <cmath>
+#include "app_colors.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -25,10 +25,12 @@ static const char* const DEVICE_ICON_NAMES[] = {
 
 static char s_device_icon_path[64];
 
-static constexpr size_t RGB565_MAX_BYTES =
-    static_cast<size_t>(DEVICE_ICON_NATIVE_PX * DEVICE_ICON_NATIVE_PX * 2);
 static constexpr size_t RGB565_MAX_PIXELS =
     static_cast<size_t>(DEVICE_ICON_NATIVE_PX * DEVICE_ICON_NATIVE_PX);
+
+// .rgb565 头部：'R','5','6','5' + uint16 宽 + uint16 高（小端），其后为裸像素
+static constexpr size_t RGB565_HEADER_BYTES = 8;
+static const uint8_t RGB565_MAGIC[4] = {'R', '5', '6', '5'};
 
 static char asciiLower(const char c) {
     return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
@@ -137,31 +139,52 @@ static bool pathToRgb565(const char* path, char* out, const size_t out_sz) {
     return pathReplaceExt(path, ".rgb565", out, out_sz);
 }
 
-// 打开正方形 RGB565，返回边长与已打开文件；失败 0
-static int openRgb565Square(const char* path, File& f) {
+// 打开 RGB565 并解析头部宽高；成功时文件游标停在像素数据起点，失败返回 false
+static bool openRgb565Image(const char* path, File& f, int& w, int& h) {
     if (path == nullptr || !LittleFS.exists(path)) {
-        return 0;
+        return false;
     }
     f = LittleFS.open(path, "r");
     if (!f) {
-        return 0;
+        return false;
     }
-    const size_t sz = f.size();
-    if (sz == 0 || sz % 2 != 0 || sz > RGB565_MAX_BYTES) {
+    uint8_t hdr[RGB565_HEADER_BYTES];
+    if (f.read(hdr, sizeof(hdr)) != sizeof(hdr) || memcmp(hdr, RGB565_MAGIC, 4) != 0) {
         f.close();
-        return 0;
+        return false;
     }
-    const int pixels = static_cast<int>(sz / 2);
-    if (pixels > static_cast<int>(RGB565_MAX_PIXELS)) {
+    w = static_cast<int>(hdr[4]) | (static_cast<int>(hdr[5]) << 8);
+    h = static_cast<int>(hdr[6]) | (static_cast<int>(hdr[7]) << 8);
+    if (w <= 0 || h <= 0 || w > DEVICE_ICON_NATIVE_PX || h > DEVICE_ICON_NATIVE_PX) {
         f.close();
-        return 0;
+        return false;
     }
-    const int side = static_cast<int>(lround(sqrt(static_cast<double>(pixels))));
-    if (side <= 0 || side * side != pixels) {
+    const size_t pixels = static_cast<size_t>(w) * static_cast<size_t>(h);
+    if (pixels > RGB565_MAX_PIXELS || f.size() != RGB565_HEADER_BYTES + pixels * 2u) {
         f.close();
-        return 0;
+        return false;
     }
-    return side;
+    return true;
+}
+
+bool loadRgb565File(const char* path, uint16_t* out, const int expect_w, const int expect_h) {
+    if (out == nullptr || expect_w <= 0 || expect_h <= 0) {
+        return false;
+    }
+    File f;
+    int w = 0;
+    int h = 0;
+    if (!openRgb565Image(path, f, w, h)) {
+        return false;
+    }
+    if (w != expect_w || h != expect_h) {
+        f.close();
+        return false;
+    }
+    const size_t bytes = static_cast<size_t>(w) * static_cast<size_t>(h) * 2u;
+    const size_t n = f.read(reinterpret_cast<uint8_t*>(out), bytes);
+    f.close();
+    return n == bytes;
 }
 
 // 1:1：按行推屏，不占整图 RAM；缩放：临时 malloc 整图
@@ -171,27 +194,28 @@ static bool drawRgb565Path(const char* path, const int x, const int y, const flo
         return false;
     }
     File f;
-    const int side = openRgb565Square(rgb_path, f);
-    if (side <= 0) {
+    int w = 0;
+    int h = 0;
+    if (!openRgb565Image(rgb_path, f, w, h)) {
         return false;
     }
 
     if (scale > 0.99f && scale < 1.01f) {
         // 行缓冲：最大 70×2 字节，无需常驻 scratch
         uint16_t row[DEVICE_ICON_NATIVE_PX];
-        for (int row_i = 0; row_i < side; row_i++) {
-            const size_t row_bytes = static_cast<size_t>(side) * 2u;
+        const size_t row_bytes = static_cast<size_t>(w) * 2u;
+        for (int row_i = 0; row_i < h; row_i++) {
             if (f.read(reinterpret_cast<uint8_t*>(row), row_bytes) != row_bytes) {
                 f.close();
                 return false;
             }
-            M5Cardputer.Display.pushImage(x, y + row_i, side, 1, row);
+            M5Cardputer.Display.pushImage(x, y + row_i, w, 1, row);
         }
         f.close();
         return true;
     }
 
-    const size_t bytes = static_cast<size_t>(side) * static_cast<size_t>(side) * 2u;
+    const size_t bytes = static_cast<size_t>(w) * static_cast<size_t>(h) * 2u;
     auto* px = static_cast<uint16_t*>(malloc(bytes));
     if (px == nullptr) {
         f.close();
@@ -204,7 +228,7 @@ static bool drawRgb565Path(const char* path, const int x, const int y, const flo
         return false;
     }
     M5Cardputer.Display.pushImageRotateZoomWithAA(static_cast<float>(x), static_cast<float>(y), 0.0f,
-                                                  0.0f, 0.0f, scale, scale, side, side, px);
+                                                  0.0f, 0.0f, scale, scale, w, h, px);
     free(px);
     return true;
 }
@@ -231,6 +255,25 @@ bool drawDevicePngNative(const char* path, const int x, const int y) {
 
 bool drawLittleFsPng(const char* path, const int x, const int y, const float scale) {
     return drawDevicePngNativeScaled(path, x, y, scale);
+}
+
+// 离屏 sprite 铺黑底再解 PNG（PNG 带 alpha），回读得到可直接 pushImage 的像素
+bool decodePngToRgb565(const char* path, uint16_t* out, const int w, const int h) {
+    if (path == nullptr || out == nullptr || w <= 0 || h <= 0 || !LittleFS.exists(path)) {
+        return false;
+    }
+    M5Canvas spr(&M5Cardputer.Display);
+    spr.setColorDepth(16);
+    if (!spr.createSprite(w, h)) {
+        return false;
+    }
+    spr.fillSprite(BLACK);
+    const bool ok = spr.drawPngFile(LittleFS, path, 0, 0);
+    if (ok) {
+        spr.readRect(0, 0, w, h, out);
+    }
+    spr.deleteSprite();
+    return ok;
 }
 
 bool drawAppLogo60(const int x, const int y, const float scale) {
@@ -306,10 +349,21 @@ bool bakePngToRgb565File(const char* png_path) {
         free(px);
         return false;
     }
+    const uint8_t hdr[RGB565_HEADER_BYTES] = {
+        RGB565_MAGIC[0],
+        RGB565_MAGIC[1],
+        RGB565_MAGIC[2],
+        RGB565_MAGIC[3],
+        static_cast<uint8_t>(w & 0xFF),
+        static_cast<uint8_t>((w >> 8) & 0xFF),
+        static_cast<uint8_t>(h & 0xFF),
+        static_cast<uint8_t>((h >> 8) & 0xFF),
+    };
+    const size_t hn = out.write(hdr, sizeof(hdr));
     const size_t n = out.write(reinterpret_cast<const uint8_t*>(px), bytes);
     out.close();
     free(px);
-    return n == bytes;
+    return hn == sizeof(hdr) && n == bytes;
 }
 
 static int bakePngFilesInDir(const char* dir) {
@@ -323,13 +377,16 @@ static int bakePngFilesInDir(const char* dir) {
         const bool is_dir = f.isDirectory();
         const String name = f.name();
         f.close();
-        if (!is_dir) {
-            char path[64];
-            if (name.startsWith("/")) {
-                snprintf(path, sizeof(path), "%s", name.c_str());
-            } else {
-                snprintf(path, sizeof(path), "%s/%s", dir, name.c_str());
-            }
+        char path[128];
+        if (name.startsWith("/")) {
+            snprintf(path, sizeof(path), "%s", name.c_str());
+        } else {
+            snprintf(path, sizeof(path), "%s/%s", dir, name.c_str());
+        }
+        if (is_dir) {
+            // 递归处理 /icon 下的所有子目录，新增目录无需再维护白名单
+            ok += bakePngFilesInDir(path);
+        } else {
             const char* dot = strrchr(path, '.');
             if (dot != nullptr && strcmp(dot, ".png") == 0) {
                 if (bakePngToRgb565File(path)) {
@@ -344,19 +401,23 @@ static int bakePngFilesInDir(const char* dir) {
 }
 
 int bakeAllPngIconsToRgb565() {
-    // 整屏清黑，避免 bake 过程叠在旧 UI 上
+    // 整屏清黑：左上角作解码缓冲，下方提示进度（无 header）
     M5Cardputer.Display.fillScreen(BLACK);
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(4, DEVICE_ICON_NATIVE_PX + 8);
+    M5Cardputer.Display.print("Baking...");
+
     int ok = 0;
-    ok += bakePngFilesInDir("/icon/device");
-    ok += bakePngFilesInDir("/icon/ir");
+    ok += bakePngFilesInDir("/icon");
     if (LittleFS.exists("/logo_60.png") && bakePngToRgb565File("/logo_60.png")) {
         ok++;
     }
     if (LittleFS.exists("/logo_50.png") && bakePngToRgb565File("/logo_50.png")) {
         ok++;
     }
-    // 收尾清掉左上角最后一张图标残留
-    M5Cardputer.Display.fillRect(0, 0, DEVICE_ICON_NATIVE_PX, DEVICE_ICON_NATIVE_PX, BLACK);
+    // 收尾整屏清掉图标残留，结果提示由 Config 处理器绘制
+    M5Cardputer.Display.fillScreen(BLACK);
     return ok;
 }
 

@@ -2188,10 +2188,10 @@ static bool tryServeFavicon() {
 // 从 LittleFS 提供图标资源（png / rgb565；配置页预览仍用 png）
 static bool tryServeDeviceIcon() {
     const String uri = g_server.uri();
-    const bool is_device = uri.startsWith("/icon/device/");
-    const bool is_ir = uri.startsWith("/icon/ir/");
+    // /icon 下所有子目录都可取，新增图标目录无需再改这里
+    const bool is_icon = uri.startsWith("/icon/");
     const bool is_logo = uri.startsWith("/logo_") && (uri.endsWith(".png") || uri.endsWith(".rgb565"));
-    if (!is_device && !is_ir && !is_logo) {
+    if (!is_icon && !is_logo) {
         return false;
     }
     if (uri.indexOf("..") >= 0 || uri.length() > 80) {
@@ -2222,12 +2222,39 @@ static bool tryServeDeviceIcon() {
     return true;
 }
 
+// bake 结束提示：无 header，避免残留黑页 / 半截标题栏
+static void drawBakeDoneTip(const int baked) {
+    M5Cardputer.Display.fillScreen(BLACK);
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setTextColor(APP_COLOR_OK, BLACK);
+    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y);
+    M5Cardputer.Display.print("Bake done");
+
+    char line[32];
+    snprintf(line, sizeof(line), "baked: %d", baked);
+    M5Cardputer.Display.setTextColor(APP_COLOR_TEXT, BLACK);
+    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y + 22);
+    M5Cardputer.Display.print(line);
+
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y + 48);
+    M5Cardputer.Display.print("returning to Config...");
+}
+
 // M5GFX 烘焙 PNG → RGB565（写入 LittleFS，供固件与拉取脚本使用）
 static void handleBakeRgb565() {
     const int n = bakeAllPngIconsToRgb565();
+    drawBakeDoneTip(n);
+
     char buf[48];
     snprintf(buf, sizeof(buf), "{\"ok\":true,\"baked\":%d}", n);
     g_server.send(200, "application/json", buf);
+
+    // 稍停让结果可读，再整页重绘 Config（含 header）
+    delay(1500);
+    g_web_screen_ready = false;
+    drawWebApp();
 }
 
 // 注册 HTTP 路由（仅一次，避免重复 on()）

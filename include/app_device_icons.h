@@ -33,6 +33,13 @@ bool drawDevicePngNative(const char* path, int x, int y);
 // LittleFS 任意 PNG，按 scale 绘制（1.0 = 像素 1:1）
 bool drawLittleFsPng(const char* path, int x, int y, float scale = 1.0f);
 
+// 把 PNG 解码进调用方的 RGB565 缓冲（黑底，尺寸须与 PNG 一致）
+// 没有 bake 文件时的兜底手段
+bool decodePngToRgb565(const char* path, uint16_t* out, int w, int h);
+
+// 读取 bake 的 .rgb565 到调用方缓冲；头部宽高与期望不符时返回 false
+bool loadRgb565File(const char* path, uint16_t* out, int expect_w, int expect_h);
+
 // 绘制设备图标：按 model 匹配 PNG，active 为开关态；失败返回 false
 bool drawDeviceIconFor(const MijiaDevice* dev, int x, int y, bool active);
 
@@ -51,5 +58,5 @@ bool deviceIconsAvailable();
 // 用 M5GFX 解码 PNG 并写入同名 .rgb565（黑底上的库输出，与屏上一致）
 bool bakePngToRgb565File(const char* png_path);
 
-// 批量烘焙 /icon/device、/icon/ir、logo；返回成功个数
+// 批量烘焙 /icon 下所有子目录及 logo；返回成功个数
 int bakeAllPngIconsToRgb565();

@@ -29,7 +29,8 @@ No zlib, no live Alpha blend; Flash / SPI traffic is lighter too. Transparent ar
 | Asset | Source (LittleFS) | Runtime preference | Draw entry |
 |------|-------------------|------------|----------|
 | Device icons | `/icon/device/*.png` (incl. `_active`, `_25w`) | `.rgb565` → PNG | `src/app_device_icons.cpp` |
-| IR mode / fan speed | `/icon/ir/*.png` | RAM cache → `.rgb565` → PNG | `src/app_ir.cpp` |
+| IR mode / fan speed / signal | `/icon/ir/*.png` | RAM cache → `.rgb565` → PNG | `src/app_ir.cpp` |
+| Brand logos | `/icon/brand/*.png` | `.rgb565` → PNG | `src/app_ir.cpp` |
 | Logo | `/logo_60.png`, `/logo_50.png` | `.rgb565` → PNG | `drawAppLogo60`, etc. |
 | Arrows / WiFi / battery, etc. | no image files | vector draw | `src/app_icons.cpp` |
 
@@ -52,9 +53,21 @@ APIs: `bakePngToRgb565File` / `bakeAllPngIconsToRgb565` (`include/app_device_ico
 
 Batch bake covers:
 
-- `/icon/device`
-- `/icon/ir`
+- every `.png` under `/icon`, including subdirectories
 - `/logo_60.png`, `/logo_50.png`
+
+### .rgb565 file format
+
+8-byte header followed by raw pixels:
+
+| Offset | Size | Content |
+|--------|------|---------|
+| 0 | 4 | magic `R565` |
+| 4 | 2 | width (uint16 little-endian) |
+| 6 | 2 | height (uint16 little-endian) |
+| 8 | w×h×2 | RGB565 pixels, row by row |
+
+Because the header carries the size, non-square icons (brand logos 66×20, fan speed 34×30, etc.) can be baked too. `loadRgb565File` validates the magic and dimensions, falling back to live PNG decode on mismatch.
 
 Trigger: Config Web **`POST /bake-rgb565`** (returns `{"ok":true,"baked":N}`). The Icons App no longer offers key `b` for on-device bake.
 
@@ -67,7 +80,7 @@ Prerequisites: firmware flashed, PNGs in LittleFS, device WiFi online (Config We
 pio run -e m5stack-cardputer -t uploadfs
 
 # 2. Bake on device, then pull back into data/
-python scripts/pull_rgb565_from_device.py http://<device-IP> --bake
+python scripts/pull_rgb565_from_device.py <device-IP> --bake
 ```
 
 Bake only:

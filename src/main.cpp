@@ -2735,6 +2735,7 @@ void loop() {
                    !(currentState == AppState::RTC && isTimePureMode()) &&
                    !(currentState == AppState::CURSOR && isCursorDisplayBlanked()) &&
                    !(currentState == AppState::MIJIA && mijiaAppSuppressesHeader()) &&
+                   !(currentState == AppState::IR && irAppSuppressesHeader()) &&
                    !(currentState == AppState::HID_KEYBOARD && hidKeyboardSuppressesHeader())) {
             updateAppHeaderStatus();
         }
