@@ -13,15 +13,15 @@ A collection of ten full-screen interactive toys and games. The shelf holds 8 en
 | `3` | [Prize Wheel](./prize-wheel) | Hold `Space` / `GO` to charge a spin; shake for medium power; `-` / `=` sets 2–12 items (works while spinning; resets the wheel) |
 | `4` | [Dice](./dice) | Hold `Space` / `GO` or shake to toss; `-` / `=` changes dice count |
 | `5` | [Newton Cradle](./newton-cradle) | `1`–`3` launches balls; `Space` / `GO` replays; `r` resets |
-| `6` | [Neon FX](./neon-fx) | `WASD`, `m`, `c`, `-` / `=`, `r`; `Space` / `GO` pulse flash |
+| `6` | [Neon FX](./neon-fx) | `EASD`, `m`, `c`, `-` / `=`, `r`; `Space` / `GO` pulse flash |
 | `7` | [Curves](./curves) | `1`–`9` select curve; `-` / `=` amplitude; `,` / `.` frequency; `q` / `e` phase; `Space` / `GO` toggles animation |
-| `8` | [Minesweeper](./minesweeper) | Arrows move; `Space` digs / chords; `f` flags; `1`–`3` difficulty; `b` records |
+| `8` | [Minesweeper](./minesweeper) | Arrows move; `]` / `Space` digs / chords; `[` / `f` flags; `1`–`3` difficulty; `b` records |
 
 ## Page 2
 
 | Key | Game | Controls |
 |-----|------|----------|
-| `1` | [Snake](./snake) | Arrows / `WASD` steer; `Space` pauses; `m` wall or wrap; `-` / `=` speed |
+| `1` | [Snake](./snake) | Arrows / `EASD` steer; `Space` pauses; `m` wall or wrap; `-` / `=` speed |
 | `2` | [Conway Life](./conway-life) | `Space` runs / pauses; `n` steps; `r` randomizes; `1`–`6` patterns; `Enter` edits a cell |
 
 ## Common shortcuts

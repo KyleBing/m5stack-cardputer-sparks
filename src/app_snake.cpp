@@ -1,4 +1,5 @@
 #include "app_snake.h"
+#include "app_common.h"
 #include <LittleFS.h>
 #include <cstdio>
 #include <cstring>
@@ -27,6 +28,10 @@ static constexpr uint8_t OCC_EMPTY = 0;
 static constexpr uint8_t OCC_BODY = 1;
 static constexpr uint8_t OCC_FOOD = 2;
 static constexpr uint8_t OCC_BONUS = 3;
+
+// IMU 倾斜转向：蛇本来就会一直往前走，只在倾斜方向变化时转向一次，不连发
+static constexpr ImuTiltConfig SNAKE_IMU_TILT = {0.16f, 0.08f, 0.38f, 0, 0, 0};
+static constexpr uint32_t SNAKE_IMU_WARN_MS = 1500; // 无 IMU 时提示停留时间
 
 static constexpr const char* SNAKE_REC_PATH = "/snake_rec.dat";
 static constexpr uint32_t SNAKE_REC_MAGIC = 0x534E4B31; // 'SNK1'
@@ -73,6 +78,11 @@ static int g_bonus_cell = -1;
 static uint32_t g_bonus_until_ms = 0;
 static bool g_new_best = false;
 static bool g_dirty = true;
+
+static bool g_imu_ctrl = false; // IMU 倾斜操控开关（会话内保持）
+static ImuTiltState g_imu_tilt;
+static uint32_t g_imu_warn_until_ms = 0;
+static uint32_t g_imu_draw_ms = 0; // 倾斜指示点的重绘节流
 
 static SnakeRecord g_rec;
 
@@ -337,7 +347,38 @@ static int cellY(const int cell) {
     return SNAKE_TOP + (cell / SNAKE_COLS) * SNAKE_CELL;
 }
 
-static void drawTopBar() {
+// 倾斜指示：方框里的点跟着倾斜偏移，四个方向是否都识别一眼可见
+static void drawTiltDot(const int x, const int y) {
+    constexpr int box = 9;
+    constexpr int reach = 3;
+    snakeCanvas.drawRect(x, y, box, box, 11);
+    const int cx = x + box / 2;
+    const int cy = y + box / 2;
+    snakeCanvas.drawPixel(cx, cy, 8);
+    const float scale = static_cast<float>(reach) / SNAKE_IMU_TILT.enter;
+    const int ox = static_cast<int>(constrain(g_imu_tilt.tilt_x * scale, -reach, reach));
+    const int oy = static_cast<int>(constrain(g_imu_tilt.tilt_y * scale, -reach, reach));
+    snakeCanvas.fillRect(cx + ox - 1, cy + oy - 1, 2, 2, 14);
+}
+
+// IMU 介入标识：金色徽章画在最高分与模式之间的空档
+static void drawImuBadge(const uint32_t now) {
+    if (g_imu_ctrl) {
+        snakeCanvas.fillRoundRect(157, 2, 21, 10, 2, 9);
+        snakeCanvas.setTextColor(13);
+        snakeCanvas.setCursor(159, 3);
+        snakeCanvas.print("IMU");
+        drawTiltDot(180, 2);
+        return;
+    }
+    if (now < g_imu_warn_until_ms) {
+        snakeCanvas.setTextColor(6);
+        snakeCanvas.setCursor(151, 3);
+        snakeCanvas.print("NO IMU");
+    }
+}
+
+static void drawTopBar(const uint32_t now) {
     snakeCanvas.fillRect(0, 0, g_width, SNAKE_TOP - 1, 10);
     snakeCanvas.setTextSize(1);
     snakeCanvas.setTextColor(9);
@@ -365,6 +406,8 @@ static void drawTopBar() {
     snakeCanvas.setTextColor(g_wrap ? 12 : 8);
     snakeCanvas.setCursor(g_width - right_w - 4, 3);
     snakeCanvas.print(buf);
+
+    drawImuBadge(now);
 }
 
 static void drawField() {
@@ -467,7 +510,7 @@ static void drawOverlay() {
     if (g_state == SnakeState::Ready) {
         snprintf(line1, sizeof(line1), "best %u   games %u", static_cast<unsigned>(bestForMode()),
                  static_cast<unsigned>(g_rec.played));
-        drawCenterPanel("SNAKE", line1, "arrows / WASD to start");
+        drawCenterPanel("SNAKE", line1, "arrows / EASD to start");
     } else if (g_state == SnakeState::Paused) {
         snprintf(line1, sizeof(line1), "score %d   len %d", g_score, g_len);
         drawCenterPanel("PAUSED", line1, "SPC resume");
@@ -486,13 +529,14 @@ static void render(const uint32_t now) {
     drawFood();
     drawBonus(now);
     drawSnake();
-    drawTopBar();
+    drawTopBar(now);
     drawOverlay();
     snakeCanvas.pushSprite(0, 0);
     g_dirty = false;
 }
 
-// 方向键：HID 上下左右 / Cardputer 的 ; , . / / WASD
+// 方向键：HID 上下左右 / Cardputer 的 ; , . / / EASD
+// Cardputer 键盘是整齐网格，s 正上方是 e 不是 w，所以上键取 e
 static bool readDirection(const Keyboard_Class::KeysState& status, int& dx, int& dy) {
     dx = 0;
     dy = 0;
@@ -524,7 +568,7 @@ static bool readDirection(const Keyboard_Class::KeysState& status, int& dx, int&
     }
     for (const char raw : status.word) {
         const char c = (raw >= 'A' && raw <= 'Z') ? static_cast<char>(raw - 'A' + 'a') : raw;
-        if (c == 'w') {
+        if (c == 'e') {
             dx = 0;
             dy = -1;
         } else if (c == 's') {
@@ -539,6 +583,41 @@ static bool readDirection(const Keyboard_Class::KeysState& status, int& dx, int&
         }
     }
     return dx != 0 || dy != 0;
+}
+
+// 倾斜转向：待开局时顺手开局，只在游戏中改方向
+static void pollImuSteer() {
+    if (!g_imu_ctrl) {
+        return;
+    }
+    if (g_state != SnakeState::Playing && g_state != SnakeState::Ready) {
+        return;
+    }
+    int dx = 0;
+    int dy = 0;
+    if (!imuTiltPoll(g_imu_tilt, SNAKE_IMU_TILT, dx, dy)) {
+        return;
+    }
+    if (g_state == SnakeState::Ready) {
+        g_state = SnakeState::Playing;
+        g_last_tick_ms = millis();
+    }
+    pushDirection(dx, dy);
+    g_dirty = true;
+}
+
+// 开启时把当前握持姿态记为中立位，姿势变了再按一次 I 即可重新校准
+static void toggleImuCtrl() {
+    if (!isImuTiltAvailable()) {
+        g_imu_ctrl = false;
+        g_imu_warn_until_ms = millis() + SNAKE_IMU_WARN_MS;
+        g_dirty = true;
+        return;
+    }
+    g_imu_ctrl = !g_imu_ctrl;
+    g_imu_warn_until_ms = 0;
+    imuTiltReset(g_imu_tilt);
+    g_dirty = true;
 }
 
 static void togglePause() {
@@ -575,6 +654,11 @@ void enterSnakeApp() {
 
     recLoad();
     g_speed = 2;
+    if (g_imu_ctrl && !isImuTiltAvailable()) {
+        g_imu_ctrl = false;
+    }
+    g_imu_warn_until_ms = 0;
+    imuTiltReset(g_imu_tilt);
     resetGame();
     render(millis());
 }
@@ -591,6 +675,16 @@ void updateSnakeApp() {
         return;
     }
     const uint32_t now = millis();
+    pollImuSteer();
+    if (g_imu_warn_until_ms != 0 && now >= g_imu_warn_until_ms) {
+        g_imu_warn_until_ms = 0;
+        g_dirty = true;
+    }
+    // 倾斜指示点要跟手，但没必要每次主循环都刷
+    if (g_imu_ctrl && now - g_imu_draw_ms >= 80) {
+        g_imu_draw_ms = now;
+        g_dirty = true;
+    }
     if (g_state == SnakeState::Playing) {
         if (g_bonus_cell >= 0 && now >= g_bonus_until_ms) {
             clearBonus();
@@ -634,6 +728,8 @@ void handleSnakeApp(const Keyboard_Class::KeysState& status) {
         } else if (c == 'm') {
             g_wrap = !g_wrap;
             resetGame();
+        } else if (c == 'i') {
+            toggleImuCtrl();
         } else if (c == '-') {
             if (g_speed > 0) {
                 g_speed--;

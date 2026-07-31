@@ -13,15 +13,15 @@
 | `3` | [Prize Wheel 抽奖轮](./prize-wheel) | 长按 `Space` / `GO` 蓄力旋转，摇晃中等力度；`-` / `=` 调整项目数（2–12，转动中亦可，会重置） |
 | `4` | [Dice 骰子](./dice) | 长按 `Space` / `GO` 蓄力或摇晃投掷，`-` / `=` 调整骰子数 |
 | `5` | [Newton Cradle 牛顿摆](./newton-cradle) | `1`–`3` 释放钢球，`Space` / `GO` 重放，`r` 重置 |
-| `6` | [Neon FX](./neon-fx) | `WASD`、`m`、`c`、`-` / `=`、`r`；`Space` / `GO` 脉冲闪光 |
+| `6` | [Neon FX](./neon-fx) | `EASD`、`m`、`c`、`-` / `=`、`r`；`Space` / `GO` 脉冲闪光 |
 | `7` | [Curves 方程曲线](./curves) | `1`–`9` 切换曲线，`-` / `=` 幅度，`,` / `.` 频率，`q` / `e` 相位，`Space` / `GO` 动画开关 |
-| `8` | [Minesweeper 扫雷](./minesweeper) | 方向键移动，`Space` 挖开 / 和弦，`f` 插旗，`1`–`3` 难度，`b` 记录 |
+| `8` | [Minesweeper 扫雷](./minesweeper) | 方向键移动，`]` / `Space` 挖开 / 和弦，`[` / `f` 插旗，`1`–`3` 难度，`b` 记录 |
 
 ## 第 2 页
 
 | 按键 | 游戏 | 操作 |
 |------|------|------|
-| `1` | [Snake 贪吃蛇](./snake) | 方向键 / `WASD` 转向，`Space` 暂停，`m` 撞墙 / 穿墙，`-` / `=` 速度 |
+| `1` | [Snake 贪吃蛇](./snake) | 方向键 / `EASD` 转向，`Space` 暂停，`m` 撞墙 / 穿墙，`-` / `=` 速度 |
 | `2` | [Conway Life 生命游戏](./conway-life) | `Space` 运行 / 暂停，`n` 单步，`r` 随机，`1`–`6` 图案，`Enter` 编辑格子 |
 
 ## 通用快捷键

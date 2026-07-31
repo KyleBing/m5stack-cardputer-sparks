@@ -544,9 +544,10 @@ static void updateWheelSpaceSpin(const uint32_t now) {
     g_wheel_space_held = false;
 }
 
+// 指针固定在十二点（角度 -PI/2），扇区 seg 覆盖 [angle+seg*step, angle+(seg+1)*step)
 static int wheelIndexAtPointer() {
     const float step = TWO_PI_F / g_wheel_segments;
-    const float local = wrapAngle(-PI_F * 0.5f - g_wheel_angle + step * 0.5f);
+    const float local = wrapAngle(-PI_F * 0.5f - g_wheel_angle);
     return static_cast<int>(local / step) % g_wheel_segments;
 }
 
@@ -924,7 +925,7 @@ static void drawHelp() {
             drawHelpLine(48, "R", "reset to one ball");
             break;
         case GameMode::NEON_FX:
-            drawHelpLine(20, "WASD", "move core / cube");
+            drawHelpLine(20, "EASD", "move core / cube");
             drawHelpLine(34, "M", "cycle pattern");
             drawHelpLine(48, "C", "change color");
             drawHelpLine(62, "-=", "animation speed");
@@ -941,20 +942,21 @@ static void drawHelp() {
             break;
         case GameMode::MINESWEEPER:
             drawHelpLine(20, ";,./", "move cursor, hold to repeat");
-            drawHelpLine(34, "SPC", "dig / chord on a number");
-            drawHelpLine(48, "F", "toggle flag");
-            drawHelpLine(62, "1-3", "easy / normal / hard");
-            drawHelpLine(76, "R", "new game");
+            drawHelpLine(34, "SPC ]", "dig / chord on a number");
+            drawHelpLine(48, "F [", "toggle flag");
+            drawHelpLine(62, "I", "IMU tilt cursor, recenters");
+            drawHelpLine(76, "1-3", "level, R new game");
             drawHelpLine(90, "B", "records: best time, streak");
             drawHelpLine(104, "", "First dig is always safe");
             break;
         case GameMode::SNAKE:
-            drawHelpLine(20, ";,./", "steer, WASD also works");
+            drawHelpLine(20, ";,./", "steer, EASD also works");
             drawHelpLine(34, "SPC", "start / pause / replay");
-            drawHelpLine(48, "R", "new game");
+            drawHelpLine(48, "I", "IMU tilt steer, recenters");
             drawHelpLine(62, "M", "wall or wrap mode");
             drawHelpLine(76, "-=", "speed level 1 - 5");
-            drawHelpLine(90, "", "Gold fruit is worth 5");
+            drawHelpLine(90, "R", "new game");
+            drawHelpLine(104, "", "Gold fruit is worth 5");
             break;
         case GameMode::LIFE:
             drawHelpLine(20, "SPC", "run / pause");
@@ -1290,10 +1292,6 @@ void handleGamesApp(const Keyboard_Class::KeysState& status) {
                 selectMode(GAMES_HUB_ITEMS[item].mode);
                 return;
             }
-        }
-        if (c == '0' && g_mode != GameMode::CURVES) {
-            selectMode(GameMode::HUB);
-            return;
         }
         if (c == ' ' && g_mode == GameMode::COIN && !g_coin_tossing) {
             tossCoin();

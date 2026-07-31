@@ -8,7 +8,7 @@ A high-frame-rate neon animation demo. Full-screen 8-bit palette Sprite: the pix
 
 | Key | Action |
 |-----|--------|
-| `w` `a` `s` `d` | Move core / orbit cube |
+| `e` `a` `s` `d` | Move core / orbit cube |
 | `c` | Cycle color themes |
 | `m` or `,` `.` | Cycle Vortex / Plasma / Tunnel / Cube |
 | `-` `=` | Decrease / increase speed |

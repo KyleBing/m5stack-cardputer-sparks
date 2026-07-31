@@ -97,6 +97,40 @@ int getMenuNavDelta(const Keyboard_Class::KeysState& status);
 // 仅供 [ ] 未被占作他用的界面调用，与 getMenuNavDelta 并存
 int getBracketNavDelta(const Keyboard_Class::KeysState& status);
 
+// ===== IMU 倾斜方向（贪吃蛇 / 扫雷用倾斜代替方向键）=====
+// 开启时以当前握持姿态为中立位，之后只看偏移量，手持不用端平设备
+struct ImuTiltConfig {
+    float enter;              // 触发阈值（g），越大越钝
+    float leave;              // 回中阈值（g），小于 enter 形成迟滞
+    float full;               // 倾到这个量即达到最快连发速度
+    uint32_t repeat_delay_ms; // 保持倾斜后首次连发的延迟
+    uint32_t repeat_slow_ms;  // 刚过 enter 时的连发间隔；0 = 只在方向变化时触发一次
+    uint32_t repeat_fast_ms;  // 倾到 full 时的连发间隔，倾得越多走得越快
+};
+
+struct ImuTiltState {
+    float base[3];  // 校准瞬间的重力方向（单位向量）
+    float up[3];    // 屏幕上方投影到「垂直于 base」平面后的单位向量
+    float right[3]; // 屏幕右方，由「上方 × base」推出的单位向量
+    float tilt_x;   // 低通后的倾斜量（右正，数值约等于倾角正弦）
+    float tilt_y;   // 低通后的倾斜量（下正）
+    int8_t dir_x;
+    int8_t dir_y;
+    uint32_t hold_since_ms;
+    uint32_t last_emit_ms;
+    uint32_t last_sample_ms;
+    bool base_ready;
+};
+
+// 板载 IMU 是否可用
+bool isImuTiltAvailable();
+
+// 清空状态：下一次采样重新取中立姿态（开启倾斜操控时调用）
+void imuTiltReset(ImuTiltState& state);
+
+// 采样一次；返回本帧是否产生方向（dx/dy 其一为 ±1，屏幕坐标：dy<0 向上）
+bool imuTiltPoll(ImuTiltState& state, const ImuTiltConfig& cfg, int& dx, int& dy);
+
 // 需要出声时 begin 并套用音量
 void warmUpSpeakerIfNeeded();
 // 关喇叭并拉低 I2S 脚，避免 NS4168 悬空嗡嗡（Mic 占用 WS 时不碰 WS）

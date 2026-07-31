@@ -13,7 +13,7 @@ Conway's Game of Life on a 60 × 30 toroidal grid (edges wrap around), running t
 | `r` | Random soup (~30% density) |
 | `c` | Clear |
 | `1`–`6` | Load pattern: glider / glider gun / pulsar / LWSS / R-pentomino / acorn |
-| `;` `,` `.` `/` / arrows / `WASD` | Move the cursor (auto-pauses for editing) |
+| `;` `,` `.` `/` / arrows / `EASD` | Move the cursor (auto-pauses for editing) |
 | `Enter` | Toggle the cell under the cursor |
 | `-` `=` | Speed level 1–5 |
 | `h` | Help |

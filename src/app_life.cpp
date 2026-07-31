@@ -344,7 +344,8 @@ static void toggleCellAtCursor() {
     g_dirty = true;
 }
 
-// 方向键：HID 上下左右 / Cardputer 的 ; , . / / WASD
+// 方向键：HID 上下左右 / Cardputer 的 ; , . / / EASD
+// Cardputer 键盘是整齐网格，s 正上方是 e 不是 w，所以上键取 e
 static void readDirection(const Keyboard_Class::KeysState& status, int& dc, int& dr) {
     dc = 0;
     dr = 0;
@@ -372,7 +373,7 @@ static void readDirection(const Keyboard_Class::KeysState& status, int& dc, int&
     }
     for (const char raw : status.word) {
         const char c = (raw >= 'A' && raw <= 'Z') ? static_cast<char>(raw - 'A' + 'a') : raw;
-        if (c == 'w') {
+        if (c == 'e') {
             dr = -1;
         } else if (c == 's') {
             dr = 1;

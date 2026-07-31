@@ -30,7 +30,7 @@ static uint32_t fxPulseMs = 0;
 static uint32_t fxFpsWindowMs = 0;
 static uint32_t fxFrameCount = 0;
 static uint16_t fxFps = 0;
-// 立方体额外姿态（WASD 微调）
+// 立方体额外姿态（EASD 微调）
 static float fxCubeYawBias = 0.0f;
 static float fxCubePitchBias = 0.0f;
 
@@ -341,7 +341,7 @@ static void fxDrawFpsOverlay() {
 
 static void fxMoveCore(const int dx, const int dy) {
     if (fxPattern == FX_CUBE_PATTERN) {
-        // 立方体：WASD 微调姿态
+        // 立方体：EASD 微调姿态
         fxCubeYawBias += dx * 0.08f;
         fxCubePitchBias += dy * 0.08f;
         return;
@@ -406,7 +406,7 @@ static void drawNeonFxHelpPage() {
                                      M5Cardputer.Display.height() - col_y, DARKGREY);
 
     int y = drawFxHelpColHeader(0, col_y, col_w, "keymap");
-    y = drawFxHelpBadge(2, y, "WASD", "move/orbit");
+    y = drawFxHelpBadge(2, y, "EASD", "move/orbit");
     y = drawFxHelpKey(2, y, 'c', "cycle theme");
     y = drawFxHelpKey(2, y, 'm', "cycle pattern");
     y = drawFxHelpBadge(2, y, "-=", "speed -/+");
@@ -546,7 +546,8 @@ void handleNeonFxApp(const Keyboard_Class::KeysState& status) {
         if (c >= 'A' && c <= 'Z') {
             c = static_cast<char>(c - 'A' + 'a');
         }
-        if (c == 'w') {
+        // Cardputer 键盘是整齐网格，s 正上方是 e 不是 w，所以上键取 e
+        if (c == 'e') {
             fxMoveCore(0, -8);
         } else if (c == 'a') {
             fxMoveCore(-10, 0);

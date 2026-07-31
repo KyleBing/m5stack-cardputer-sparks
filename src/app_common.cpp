@@ -4,6 +4,7 @@
 #include "app_header.h"
 #include "app_icons.h"
 #include <cctype>
+#include <cmath>
 #include <cstring>
 #include <cstdlib>
 #include <time.h>
@@ -563,4 +564,173 @@ void playTimeKeyTone(const float freq_hz, const uint32_t duration_ms) {
         return;
     }
     playUiTone(freq_hz, duration_ms);
+}
+
+// ===== IMU 倾斜方向 =====
+
+// 主循环调用很密，限一下采样频率省 I2C
+static constexpr uint32_t IMU_TILT_SAMPLE_MS = 15;
+// 低通系数：越小越稳，越大越跟手
+static constexpr float IMU_TILT_SMOOTH = 0.40f;
+// 主轴优势倍数：斜着倾时避免两个方向来回跳，越接近 1 越容易认斜着的那一侧
+static constexpr float IMU_TILT_DOMINANCE = 1.15f;
+// Cardputer 屏幕上方对应机身加速度的 -y 轴；屏幕右方不写死，
+// 由「上方 × 屏幕法线」推出，法线取校准时的重力方向（握持时屏幕总是朝上的那一侧）
+static constexpr float IMU_SCREEN_UP_AXIS[3] = {0.0f, -1.0f, 0.0f};
+// 屏幕立得几乎垂直时上方轴会与重力重合，退化用这个轴先定右方
+static constexpr float IMU_SCREEN_RIGHT_FALLBACK[3] = {-1.0f, 0.0f, 0.0f};
+
+static float imuDot3(const float a[3], const float b[3]) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+static void imuCross3(const float a[3], const float b[3], float out[3]) {
+    out[0] = a[1] * b[2] - a[2] * b[1];
+    out[1] = a[2] * b[0] - a[0] * b[2];
+    out[2] = a[0] * b[1] - a[1] * b[0];
+}
+
+// 把机身轴投影到「垂直于重力」的平面上再归一化；几乎与重力同向时退化返回 false
+static bool imuProjectPerp(const float axis[3], const float base[3], float out[3]) {
+    const float along = imuDot3(axis, base);
+    for (int i = 0; i < 3; ++i) {
+        out[i] = axis[i] - along * base[i];
+    }
+    const float norm = sqrtf(imuDot3(out, out));
+    if (norm < 0.25f) {
+        out[0] = axis[0];
+        out[1] = axis[1];
+        out[2] = axis[2];
+        return false;
+    }
+    for (int i = 0; i < 3; ++i) {
+        out[i] /= norm;
+    }
+    return true;
+}
+
+bool isImuTiltAvailable() {
+    return M5.Imu.isEnabled();
+}
+
+// 倾得越多走得越快，接近鼠标那种「一直倾就一直走」的手感
+static uint32_t imuRepeatInterval(const ImuTiltConfig& cfg, const float mag) {
+    if (cfg.repeat_slow_ms == 0) {
+        return 0;
+    }
+    if (cfg.repeat_fast_ms == 0 || cfg.repeat_fast_ms >= cfg.repeat_slow_ms) {
+        return cfg.repeat_slow_ms;
+    }
+    const float span = cfg.full - cfg.enter;
+    float t = (span > 0.01f) ? (mag - cfg.enter) / span : 1.0f;
+    t = fmaxf(0.0f, fminf(1.0f, t));
+    const float slow = static_cast<float>(cfg.repeat_slow_ms);
+    const float fast = static_cast<float>(cfg.repeat_fast_ms);
+    return static_cast<uint32_t>(slow - (slow - fast) * t);
+}
+
+void imuTiltReset(ImuTiltState& state) {
+    state = ImuTiltState{};
+}
+
+bool imuTiltPoll(ImuTiltState& state, const ImuTiltConfig& cfg, int& dx, int& dy) {
+    dx = 0;
+    dy = 0;
+    if (!M5.Imu.isEnabled()) {
+        return false;
+    }
+    const uint32_t now = millis();
+    if (state.base_ready && now - state.last_sample_ms < IMU_TILT_SAMPLE_MS) {
+        return false;
+    }
+    state.last_sample_ms = now;
+
+    M5.Imu.update();
+    float ax = 0.0f;
+    float ay = 0.0f;
+    float az = 0.0f;
+    M5.Imu.getAccel(&ax, &ay, &az);
+
+    // 只取重力方向，晃动导致的模长变化不参与判定
+    float g[3] = {ax, ay, az};
+    const float g_norm = sqrtf(imuDot3(g, g));
+    if (g_norm < 0.35f) {
+        return false;
+    }
+    for (int i = 0; i < 3; ++i) {
+        g[i] /= g_norm;
+    }
+
+    if (!state.base_ready) {
+        // 校准：记下当前重力方向，并在垂直于它的平面里建立屏幕上 / 右两个基向量。
+        // 直接拿单轴分量做基准的话，端着的姿态本身已经吃掉大半量程，
+        // 继续朝同一侧倾会顶到 ±1g 没法再变大，那个方向就永远触发不了。
+        for (int i = 0; i < 3; ++i) {
+            state.base[i] = g[i];
+        }
+        if (imuProjectPerp(IMU_SCREEN_UP_AXIS, state.base, state.up)) {
+            imuCross3(state.up, state.base, state.right);
+        } else {
+            imuProjectPerp(IMU_SCREEN_RIGHT_FALLBACK, state.base, state.right);
+            imuCross3(state.base, state.right, state.up);
+        }
+        state.tilt_x = 0.0f;
+        state.tilt_y = 0.0f;
+        state.base_ready = true;
+        return false;
+    }
+
+    // 去掉沿校准重力的分量，剩下的垂直分量就是相对校准姿态的倾斜，模长即倾角正弦，
+    // 四个方向量程对称，握持角度再大也不会有哪一侧顶到量程尽头
+    const float along = imuDot3(g, state.base);
+    float perp[3];
+    for (int i = 0; i < 3; ++i) {
+        perp[i] = g[i] - along * state.base[i];
+    }
+    const float raw_x = imuDot3(perp, state.right);
+    const float raw_y = -imuDot3(perp, state.up);
+    state.tilt_x += (raw_x - state.tilt_x) * IMU_TILT_SMOOTH;
+    state.tilt_y += (raw_y - state.tilt_y) * IMU_TILT_SMOOTH;
+
+    const float mag_x = fabsf(state.tilt_x);
+    const float mag_y = fabsf(state.tilt_y);
+    int next_x = 0;
+    int next_y = 0;
+    // 已经在某个方向上时用较低的 leave 阈值，回中才算松开
+    if (mag_x >= mag_y * IMU_TILT_DOMINANCE) {
+        if (mag_x >= ((state.dir_x != 0) ? cfg.leave : cfg.enter)) {
+            next_x = (state.tilt_x > 0.0f) ? 1 : -1;
+        }
+    } else if (mag_y >= mag_x * IMU_TILT_DOMINANCE) {
+        if (mag_y >= ((state.dir_y != 0) ? cfg.leave : cfg.enter)) {
+            next_y = (state.tilt_y > 0.0f) ? 1 : -1;
+        }
+    }
+
+    if (next_x == 0 && next_y == 0) {
+        state.dir_x = 0;
+        state.dir_y = 0;
+        return false;
+    }
+    if (next_x != state.dir_x || next_y != state.dir_y) {
+        state.dir_x = static_cast<int8_t>(next_x);
+        state.dir_y = static_cast<int8_t>(next_y);
+        state.hold_since_ms = now;
+        state.last_emit_ms = now;
+        dx = next_x;
+        dy = next_y;
+        return true;
+    }
+    const uint32_t interval = imuRepeatInterval(cfg, fmaxf(mag_x, mag_y));
+    if (interval == 0) {
+        return false;
+    }
+    if (now - state.hold_since_ms >= cfg.repeat_delay_ms &&
+        now - state.last_emit_ms >= interval) {
+        state.last_emit_ms = now;
+        dx = next_x;
+        dy = next_y;
+        return true;
+    }
+    return false;
 }

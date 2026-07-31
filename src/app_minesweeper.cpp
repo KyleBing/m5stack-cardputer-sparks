@@ -1,4 +1,5 @@
 #include "app_minesweeper.h"
+#include "app_common.h"
 #include <LittleFS.h>
 #include <cstdio>
 #include <cstring>
@@ -13,6 +14,10 @@ static constexpr int MINES_MAX_CELLS = 242; // 22 x 11（HARD）
 // 长按方向键的连发节奏
 static constexpr uint32_t MINES_REPEAT_DELAY_MS = 340;
 static constexpr uint32_t MINES_REPEAT_RATE_MS = 85;
+
+// IMU 倾斜移动光标：像鼠标一样只要保持倾斜就一直走，倾得越多走得越快
+static constexpr ImuTiltConfig MINES_IMU_TILT = {0.12f, 0.06f, 0.38f, 90, 260, 45};
+static constexpr uint32_t MINES_IMU_WARN_MS = 1500; // 无 IMU 时提示停留时间
 
 static constexpr const char* MINES_REC_PATH = "/mines_rec.dat";
 static constexpr uint32_t MINES_REC_MAGIC = 0x4D494E32; // 'MIN2'
@@ -84,6 +89,11 @@ static int8_t g_repeat_dc = 0;
 static int8_t g_repeat_dr = 0;
 static uint32_t g_repeat_since_ms = 0;
 static uint32_t g_repeat_last_ms = 0;
+
+static bool g_imu_ctrl = false; // IMU 倾斜操控开关（会话内保持）
+static ImuTiltState g_imu_tilt;
+static uint32_t g_imu_warn_until_ms = 0;
+static uint32_t g_imu_draw_ms = 0; // 倾斜指示点的重绘节流
 
 static MinesRecord g_rec;
 
@@ -556,7 +566,38 @@ static uint32_t elapsedMs() {
     return g_elapsed_ms;
 }
 
-static void drawTopBar() {
+// 倾斜指示：方框里的点跟着倾斜偏移，四个方向是否都识别一眼可见
+static void drawTiltDot(const int x, const int y) {
+    constexpr int box = 9;
+    constexpr int reach = 3;
+    minesCanvas.drawRect(x, y, box, box, 21);
+    const int cx = x + box / 2;
+    const int cy = y + box / 2;
+    minesCanvas.drawPixel(cx, cy, 8);
+    const float scale = static_cast<float>(reach) / MINES_IMU_TILT.enter;
+    const int ox = static_cast<int>(constrain(g_imu_tilt.tilt_x * scale, -reach, reach));
+    const int oy = static_cast<int>(constrain(g_imu_tilt.tilt_y * scale, -reach, reach));
+    minesCanvas.fillRect(cx + ox - 1, cy + oy - 1, 2, 2, 23);
+}
+
+// IMU 介入标识：金色徽章画在剩余雷数与难度名之间的空档
+static void drawImuBadge(const uint32_t now) {
+    if (g_imu_ctrl) {
+        minesCanvas.fillRoundRect(40, 2, 21, 10, 2, 9);
+        minesCanvas.setTextColor(0);
+        minesCanvas.setCursor(42, 3);
+        minesCanvas.print("IMU");
+        drawTiltDot(63, 2);
+        return;
+    }
+    if (now < g_imu_warn_until_ms) {
+        minesCanvas.setTextColor(11);
+        minesCanvas.setCursor(40, 3);
+        minesCanvas.print("NO IMU");
+    }
+}
+
+static void drawTopBar(const uint32_t now) {
     minesCanvas.fillRect(0, 0, g_width, MINES_TOP - 1, 1);
     minesCanvas.setTextSize(1);
 
@@ -591,6 +632,8 @@ static void drawTopBar() {
     minesCanvas.setTextColor(8);
     minesCanvas.setCursor(g_width - static_cast<int>(strlen(buf)) * 6 - 4, 3);
     minesCanvas.print(buf);
+
+    drawImuBadge(now);
 }
 
 static void drawResultBanner() {
@@ -680,7 +723,7 @@ static void render() {
     } else {
         minesCanvas.fillSprite(0);
         drawBoard();
-        drawTopBar();
+        drawTopBar(millis());
         drawResultBanner();
     }
     minesCanvas.pushSprite(0, 0);
@@ -688,7 +731,8 @@ static void render() {
     g_shown_sec = elapsedMs() / 1000;
 }
 
-// 方向键：HID 上下左右 / Cardputer 的 ; , . / / WASD
+// 方向键：HID 上下左右 / Cardputer 的 ; , . / / EASD
+// Cardputer 键盘是整齐网格，s 正上方是 e 不是 w，所以上键取 e
 static bool readDirection(const Keyboard_Class::KeysState& status, int& dc, int& dr) {
     dc = 0;
     dr = 0;
@@ -716,7 +760,7 @@ static bool readDirection(const Keyboard_Class::KeysState& status, int& dc, int&
     }
     for (const char raw : status.word) {
         const char c = (raw >= 'A' && raw <= 'Z') ? static_cast<char>(raw - 'A' + 'a') : raw;
-        if (c == 'w') {
+        if (c == 'e') {
             dr = -1;
         } else if (c == 's') {
             dr = 1;
@@ -732,7 +776,7 @@ static bool readDirection(const Keyboard_Class::KeysState& status, int& dc, int&
 // 长按连发：按住的方向仍在按下时按固定节奏继续移动
 static bool isDirectionStillHeld(const int dc, const int dr) {
     if (dr < 0) {
-        return M5Cardputer.Keyboard.isKeyPressed(';') || M5Cardputer.Keyboard.isKeyPressed('w');
+        return M5Cardputer.Keyboard.isKeyPressed(';') || M5Cardputer.Keyboard.isKeyPressed('e');
     }
     if (dr > 0) {
         return M5Cardputer.Keyboard.isKeyPressed('.') || M5Cardputer.Keyboard.isKeyPressed('s');
@@ -741,6 +785,32 @@ static bool isDirectionStillHeld(const int dc, const int dr) {
         return M5Cardputer.Keyboard.isKeyPressed(',') || M5Cardputer.Keyboard.isKeyPressed('a');
     }
     return M5Cardputer.Keyboard.isKeyPressed('/') || M5Cardputer.Keyboard.isKeyPressed('d');
+}
+
+// 倾斜移动光标：记录界面下不响应
+static void pollImuCursor() {
+    if (!g_imu_ctrl || g_show_records) {
+        return;
+    }
+    int dc = 0;
+    int dr = 0;
+    if (imuTiltPoll(g_imu_tilt, MINES_IMU_TILT, dc, dr)) {
+        moveCursor(dc, dr);
+    }
+}
+
+// 开启时把当前握持姿态记为中立位，姿势变了再按一次 I 即可重新校准
+static void toggleImuCtrl() {
+    if (!isImuTiltAvailable()) {
+        g_imu_ctrl = false;
+        g_imu_warn_until_ms = millis() + MINES_IMU_WARN_MS;
+        g_dirty = true;
+        return;
+    }
+    g_imu_ctrl = !g_imu_ctrl;
+    g_imu_warn_until_ms = 0;
+    imuTiltReset(g_imu_tilt);
+    g_dirty = true;
 }
 
 static void startNewGame() {
@@ -775,6 +845,11 @@ void enterMinesweeperApp() {
 
     recLoad();
     g_show_records = false;
+    if (g_imu_ctrl && !isImuTiltAvailable()) {
+        g_imu_ctrl = false;
+    }
+    g_imu_warn_until_ms = 0;
+    imuTiltReset(g_imu_tilt);
     startNewGame();
     render();
 }
@@ -791,6 +866,17 @@ void updateMinesweeperApp() {
         return;
     }
     const uint32_t now = millis();
+
+    pollImuCursor();
+    if (g_imu_warn_until_ms != 0 && now >= g_imu_warn_until_ms) {
+        g_imu_warn_until_ms = 0;
+        g_dirty = true;
+    }
+    // 倾斜指示点要跟手，但没必要每次主循环都刷
+    if (g_imu_ctrl && !g_show_records && now - g_imu_draw_ms >= 100) {
+        g_imu_draw_ms = now;
+        g_dirty = true;
+    }
 
     if ((g_repeat_dc != 0 || g_repeat_dr != 0) && !g_show_records) {
         if (!isDirectionStillHeld(g_repeat_dc, g_repeat_dr)) {
@@ -842,10 +928,13 @@ void handleMinesweeperApp(const Keyboard_Class::KeysState& status) {
             setLevel(c - '1');
         } else if (g_show_records) {
             continue;
-        } else if (c == ' ') {
+        } else if (c == ' ' || c == ']') {
+            // ] 与 [ 相邻，单手就能在插旗和排雷之间切换
             digAtCursor();
-        } else if (c == 'f') {
+        } else if (c == 'f' || c == '[') {
             toggleFlag();
+        } else if (c == 'i') {
+            toggleImuCtrl();
         }
     }
 }
