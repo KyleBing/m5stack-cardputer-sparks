@@ -62,5 +62,5 @@
 
 | 键 | App | 说明 |
 |----|-----|------|
-| `g` | [Mini Games](./mini-games) | [硬币](./coin-toss)、[双摆](./double-pendulum)、[抽奖轮](./prize-wheel)、[Dice](./dice)、[牛顿摆](./newton-cradle)、[Neon FX](./neon-fx)、[曲线](./curves) |
+| `g` | [Mini Games](./mini-games) | [硬币](./coin-toss)、[双摆](./double-pendulum)、[抽奖轮](./prize-wheel)、[Dice](./dice)、[牛顿摆](./newton-cradle)、[Neon FX](./neon-fx)、[曲线](./curves)、[扫雷](./minesweeper)、[贪吃蛇](./snake)、[生命游戏](./conway-life) |
 | `h` | [Hardware Test](./hardware-test) | Display、IMU、Font、Icons、LED、BLE、I2C、[Mic](./mic) |

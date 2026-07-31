@@ -2,8 +2,11 @@
 #include "app_common.h"
 #include "app_header.h"
 #include "app_dice.h"
+#include "app_life.h"
+#include "app_minesweeper.h"
 #include "app_neon_fx.h"
 #include "app_newton_cradle.h"
+#include "app_snake.h"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -23,6 +26,9 @@ enum class GameMode {
     NEWTON_CRADLE,
     NEON_FX,
     CURVES,
+    MINESWEEPER,
+    SNAKE,
+    LIFE,
 };
 
 struct TracePoint {
@@ -55,6 +61,9 @@ static constexpr GamesHubItem GAMES_HUB_ITEMS[] = {
     {"PHYS", GameMode::NEWTON_CRADLE},
     {"NEON FX", GameMode::NEON_FX},
     {"CURVES", GameMode::CURVES},
+    {"MINES", GameMode::MINESWEEPER},
+    {"SNAKE", GameMode::SNAKE},
+    {"LIFE", GameMode::LIFE},
 };
 static constexpr int GAMES_HUB_ITEM_COUNT =
     static_cast<int>(sizeof(GAMES_HUB_ITEMS) / sizeof(GAMES_HUB_ITEMS[0]));
@@ -188,6 +197,12 @@ static const char* modeName() {
             return "NEON FX";
         case GameMode::CURVES:
             return "CURVES";
+        case GameMode::MINESWEEPER:
+            return "MINESWEEPER";
+        case GameMode::SNAKE:
+            return "SNAKE";
+        case GameMode::LIFE:
+            return "CONWAY LIFE";
         default:
             return "MINI GAMES";
     }
@@ -924,14 +939,39 @@ static void drawHelp() {
             drawHelpLine(76, "SPC", "toggle animate");
             drawHelpLine(90, "R", "reset params");
             break;
+        case GameMode::MINESWEEPER:
+            drawHelpLine(20, ";,./", "move cursor, hold to repeat");
+            drawHelpLine(34, "SPC", "dig / chord on a number");
+            drawHelpLine(48, "F", "toggle flag");
+            drawHelpLine(62, "1-3", "easy / normal / hard");
+            drawHelpLine(76, "R", "new game");
+            drawHelpLine(90, "B", "records: best time, streak");
+            drawHelpLine(104, "", "First dig is always safe");
+            break;
+        case GameMode::SNAKE:
+            drawHelpLine(20, ";,./", "steer, WASD also works");
+            drawHelpLine(34, "SPC", "start / pause / replay");
+            drawHelpLine(48, "R", "new game");
+            drawHelpLine(62, "M", "wall or wrap mode");
+            drawHelpLine(76, "-=", "speed level 1 - 5");
+            drawHelpLine(90, "", "Gold fruit is worth 5");
+            break;
+        case GameMode::LIFE:
+            drawHelpLine(20, "SPC", "run / pause");
+            drawHelpLine(34, "N", "single step");
+            drawHelpLine(48, "R", "random soup, C clear");
+            drawHelpLine(62, "1-6", "glider gun pulsar lwss...");
+            drawHelpLine(76, ";,./", "move cursor, ENT toggle");
+            drawHelpLine(90, "-=", "speed 1 - 5");
+            drawHelpLine(104, "", "Edges wrap around");
+            break;
         default:
-            drawHelpLine(20, "1", "Coin");
-            drawHelpLine(34, "2", "Double pendulum");
-            drawHelpLine(48, "3", "Prize wheel");
-            drawHelpLine(62, "4", "Dice");
-            drawHelpLine(76, "5", "Newton cradle");
-            drawHelpLine(90, "6", "Neon FX");
-            drawHelpLine(104, "7", "Curves");
+            drawHelpLine(20, "1-8", "enter game on this page");
+            drawHelpLine(34, "[]", "flip hub page");
+            drawHelpLine(48, "", "P1 Coin Chaos Wheel Dice");
+            drawHelpLine(62, "", "   Phys Neon Curves Mines");
+            drawHelpLine(76, "", "P2 Snake Life");
+            drawHelpLine(90, "H", "open help inside a game");
             break;
     }
     if (g_mode != GameMode::HUB) {
@@ -943,7 +983,8 @@ static void drawHelp() {
 
 static bool isExternalMode(const GameMode mode) {
     return mode == GameMode::DICE || mode == GameMode::NEWTON_CRADLE ||
-           mode == GameMode::NEON_FX;
+           mode == GameMode::NEON_FX || mode == GameMode::MINESWEEPER ||
+           mode == GameMode::SNAKE || mode == GameMode::LIFE;
 }
 
 static void leaveModeApp(const GameMode mode) {
@@ -953,6 +994,12 @@ static void leaveModeApp(const GameMode mode) {
         leaveNewtonCradleApp();
     } else if (mode == GameMode::NEON_FX) {
         leaveNeonFxApp();
+    } else if (mode == GameMode::MINESWEEPER) {
+        leaveMinesweeperApp();
+    } else if (mode == GameMode::SNAKE) {
+        leaveSnakeApp();
+    } else if (mode == GameMode::LIFE) {
+        leaveLifeApp();
     }
 }
 
@@ -963,6 +1010,12 @@ static void drawExternalFrame() {
         updateNewtonCradleApp();
     } else if (g_mode == GameMode::NEON_FX) {
         updateNeonFxApp();
+    } else if (g_mode == GameMode::MINESWEEPER) {
+        updateMinesweeperApp();
+    } else if (g_mode == GameMode::SNAKE) {
+        updateSnakeApp();
+    } else if (g_mode == GameMode::LIFE) {
+        updateLifeApp();
     }
 }
 
@@ -1073,6 +1126,12 @@ static void selectMode(const GameMode mode) {
         enterNewtonCradleApp(true);
     } else if (mode == GameMode::NEON_FX) {
         enterNeonFxApp();
+    } else if (mode == GameMode::MINESWEEPER) {
+        enterMinesweeperApp();
+    } else if (mode == GameMode::SNAKE) {
+        enterSnakeApp();
+    } else if (mode == GameMode::LIFE) {
+        enterLifeApp();
     }
     drawCurrent();
 }
@@ -1190,6 +1249,18 @@ void pollGamesBtnA() {
         pollNeonFxBtnA();
         return;
     }
+    if (g_mode == GameMode::MINESWEEPER) {
+        pollMinesweeperBtnA();
+        return;
+    }
+    if (g_mode == GameMode::SNAKE) {
+        pollSnakeBtnA();
+        return;
+    }
+    if (g_mode == GameMode::LIFE) {
+        pollLifeBtnA();
+        return;
+    }
     // DICE / WHEEL 蓄力在 update 里轮询 isPressed
     if (M5Cardputer.BtnA.wasPressed()) {
         triggerGamesBtnAAction();
@@ -1277,6 +1348,12 @@ void handleGamesApp(const Keyboard_Class::KeysState& status) {
         handleNewtonCradleApp(status);
     } else if (g_mode == GameMode::NEON_FX) {
         handleNeonFxApp(status);
+    } else if (g_mode == GameMode::MINESWEEPER) {
+        handleMinesweeperApp(status);
+    } else if (g_mode == GameMode::SNAKE) {
+        handleSnakeApp(status);
+    } else if (g_mode == GameMode::LIFE) {
+        handleLifeApp(status);
     }
     drawCurrent();
 }

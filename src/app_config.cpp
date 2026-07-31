@@ -12,7 +12,7 @@ static AppConfig g_config{};
 // 按设备 id 查找（供 loadAppConfig 解析编组）
 int mijiaFindDeviceIndexById(const char* id);
 
-// 把旧 timezone / system.week_start 迁到按应用归属的新对象
+// 把旧顶层 timezone 迁到 time 对象，并确保 calendar 对象存在
 static void normalizeTimeCalendarConfig(JsonDocument& doc) {
     JsonObject time_obj = doc["time"].as<JsonObject>();
     if (time_obj.isNull()) {
@@ -26,20 +26,8 @@ static void normalizeTimeCalendarConfig(JsonDocument& doc) {
     }
     doc.remove("timezone");
 
-    JsonObject calendar_obj = doc["calendar"].as<JsonObject>();
-    if (calendar_obj.isNull()) {
-        calendar_obj = doc["calendar"].to<JsonObject>();
-    }
-    JsonObject system_obj = doc["system"].as<JsonObject>();
-    if (calendar_obj["week_start"].isNull() && !system_obj.isNull() &&
-        !system_obj["week_start"].isNull()) {
-        calendar_obj["week_start"] = system_obj["week_start"];
-    }
-    if (!system_obj.isNull()) {
-        system_obj.remove("week_start");
-        if (system_obj.size() == 0) {
-            doc.remove("system");
-        }
+    if (doc["calendar"].as<JsonObject>().isNull()) {
+        doc["calendar"].to<JsonObject>();
     }
 }
 
@@ -295,16 +283,11 @@ bool loadAppConfig() {
         copyField(g_config.timezone, sizeof(g_config.timezone), tz);
     }
 
-    // Calendar：优先新路径；week_start 兼容旧 system 对象
+    // Calendar：只认 calendar.week_start，缺失时默认周日
     g_config.week_start = WeekStartDay::Sunday;
     JsonObject calendar_obj = doc["calendar"];
-    if (!calendar_obj.isNull() && !calendar_obj["week_start"].isNull()) {
+    if (!calendar_obj.isNull()) {
         g_config.week_start = parseWeekStartDay(calendar_obj["week_start"]);
-    } else {
-        JsonObject system_obj = doc["system"];
-        if (!system_obj.isNull()) {
-            g_config.week_start = parseWeekStartDay(system_obj["week_start"]);
-        }
     }
 
     // infrared：default / tv_brand / ac_brand（兼容旧大写 Infrared）

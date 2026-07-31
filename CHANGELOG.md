@@ -10,16 +10,31 @@
 
 ### 新增
 
+- **Minesweeper 扫雷**（Games `8`）：EASY / NORMAL / HARD 三个难度；首挖及其邻格必定无雷；数字 0 连锁展开；数字格上 `Space` 和弦一次翻开邻格；`f` 插旗、`r` 重开、`1`–`3` 切难度；方向键长按连发移动光标
+- **扫雷记录**：按难度保存最快通关时间、胜 / 总场次、最长连胜与当前连胜（`/mines_rec.dat`），`b` 打开记录页，破纪录时结果牌显示 `NEW BEST!`
+- **Snake 贪吃蛇**（Games 第 2 页 `1`）：40 × 20 场地，蛇身按距头部渐暗；每 5 个果实刷出限时金色果实（+5）；`m` 切换撞墙 / 穿墙，两种模式最高分分开保存（`/snake_rec.dat`）；`-` / `=` 调速度档，转向带一步缓存
+- **Conway Life 生命游戏**（Games 第 2 页 `2`）：60 × 30 环形网格 B3/S23；细胞按存活代数着色；内置滑翔机 / 滑翔机枪 / 脉冲星 / 轻型飞船 / R-五连体 / 橡实六个图案；`Enter` 编辑格子、`n` 单步、`-` / `=` 调速；自动识别 `STILL` / `OSC` / `DEAD` 并停止推进
+- **WiFi 配置列表**：进 App 直接看已存网络（每页 3 张卡），方向键选中、`Enter` 连接、`Backspace` 删除；扫描列表改为每页 4 行带分隔线；header 标题随当前阶段变化
+- **WiFi 连接 / 失败页**：连接中显示滑动进度条、倒计时与 AP 信息；失败后停在结果页并给出原因，可重试 / 改密码 / 回扫描
+- **`[` `]` 翻页**：新增 `getBracketNavDelta()`；主菜单、Mini Games、Display、Hardware Test、Icons / Font 演示、米家列表统一支持
 - **Infrared**：全屏遥控页（无 header）；品牌 logo（`data/icon/brand`）；发送态信号图标（`send_active` / `send_inactive`）
 - **RGB565 头部**：`R565` + 宽高，支持非正方形 bake（品牌 66×20、风速 34×30、信号 57×38 等）
 
 ### 改进
 
+- **WiFi 密码页**：输入时只重绘编辑区，退出改用 `Fn+Q`，字母键全部留给密码
+- **Config**：新增 `removeAppConfigWifi()`，删除某条配置后自动回落到剩余的第一条
+- **Connectivity**：等待期间重发 `WiFi.begin`；关射频前等 deauth 落定，避免重连一直挂到超时
+- **HID Keyboard**：BtnGO 轻按开关主机列表、长按退出；删除配对由 `d` 改为 `Backspace`
+- **Infrared**：品牌 / 类别改为离开 App 时才落盘，阻塞期间显示 `Loading` / `Saving` 提示
 - **Infrared**：AC / TV 按设计稿重排按键与温度 / 品牌区；发射后信号图标短暂变红
 - **Bake**：递归 `/icon` 全部子目录；结束后屏上提示并自动回到 Config
 - **拉取脚本**：按本地 PNG 推导路径；支持只填 IP；拒绝无头部的旧格式文件
 - **Config Web**：`/icon/` 下任意子目录资源可直接访问
-- **资源**：设备 / IR / Logo 重新烘焙；风速与部分设备 PNG 更新
+- **资源**：设备 / IR / Logo 重新烘焙；风速与部分设备 PNG 更新；`icon/brand/aux` 更名为 `brand_aux`，规避 Windows 保留文件名
+- **config**：`week_start` 只认 `calendar.week_start`，不再兼容 / 清理旧的 `system.week_start`
+- **Mini Games**：Hub 增至 10 项占两页；hub help 改为说明翻页与分页清单，不再逐条罗列
+- **文档**：WiFi / HID Keyboard / Infrared 中英文页同步新键位；新增扫雷 / 贪吃蛇 / 生命游戏中英文页与侧边栏入口
 
 ---
 

@@ -195,6 +195,9 @@ export default defineConfig({
                   { text: 'Newton Cradle 牛顿摆', link: '/apps/newton-cradle' },
                   { text: 'Neon FX 动画', link: '/apps/neon-fx' },
                   { text: 'Curves 方程曲线', link: '/apps/curves' },
+                  { text: 'Minesweeper 扫雷', link: '/apps/minesweeper' },
+                  { text: 'Snake 贪吃蛇', link: '/apps/snake' },
+                  { text: 'Conway Life 生命游戏', link: '/apps/conway-life' },
                 ],
               },
               {
@@ -324,6 +327,9 @@ export default defineConfig({
                   { text: 'Newton Cradle', link: '/en/apps/newton-cradle' },
                   { text: 'Neon FX', link: '/en/apps/neon-fx' },
                   { text: 'Curves', link: '/en/apps/curves' },
+                  { text: 'Minesweeper', link: '/en/apps/minesweeper' },
+                  { text: 'Snake', link: '/en/apps/snake' },
+                  { text: 'Conway Life', link: '/en/apps/conway-life' },
                 ],
               },
               {

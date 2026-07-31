@@ -553,15 +553,11 @@ static void appendJsLoadCfg(String& body) {
               "if(!cfg.time)cfg.time={};"
               "if(!cfg.time.default)cfg.time.default='up';"
               "if(cfg.time.pure==null)cfg.time.pure=false;"
-              // timezone / week_start：迁移旧路径后只保留新对象
+              // timezone：迁移旧顶层路径；week_start 只认 calendar 对象
               "if(!cfg.time.timezone)cfg.time.timezone=cfg.timezone||'CST-8';"
               "delete cfg.timezone;"
               "if(!cfg.calendar)cfg.calendar={};"
-              "if(!cfg.calendar.week_start&&cfg.system)"
-              "cfg.calendar.week_start=cfg.system.week_start;"
               "if(cfg.calendar.week_start!=='monday')cfg.calendar.week_start='sunday';"
-              "if(cfg.system){delete cfg.system.week_start;"
-              "if(Object.keys(cfg.system).length===0)delete cfg.system;}"
               // infrared：兼容旧大写 Infrared
               "if(!cfg.infrared&&cfg.Infrared){cfg.infrared=cfg.Infrared;}"
               "delete cfg.Infrared;"
@@ -1135,8 +1131,6 @@ static void handleSystemPage() {
         "delete cfg.timezone;"
         "if(!cfg.calendar)cfg.calendar={};"
         "cfg.calendar.week_start=document.getElementById('sys-week-start').value||'sunday';"
-        "if(cfg.system){delete cfg.system.week_start;"
-        "if(Object.keys(cfg.system).length===0)delete cfg.system;}"
         "delete cfg.Infrared;"
         "if(!cfg.infrared)cfg.infrared={};"
         "cfg.infrared.default=document.getElementById('sys-ir-default').value||'tv';"
