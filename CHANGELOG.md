@@ -31,7 +31,7 @@
 - **Bake**：递归 `/icon` 全部子目录；结束后屏上提示并自动回到 Config
 - **拉取脚本**：按本地 PNG 推导路径；支持只填 IP；拒绝无头部的旧格式文件
 - **Config Web**：`/icon/` 下任意子目录资源可直接访问
-- **资源**：设备 / IR / Logo 重新烘焙；风速与部分设备 PNG 更新；`icon/brand/aux` 更名为 `brand_aux`，规避 Windows 保留文件名
+- **资源**：设备 / IR / Logo 重新烘焙；风速与部分设备 PNG 更新；`icon/brand` 下所有 logo 统一加 `brand_` 前缀（如 `brand_midea`、`brand_aux`），顺带规避 Windows 保留文件名 `aux.*`
 - **config**：`week_start` 只认 `calendar.week_start`，不再兼容 / 清理旧的 `system.week_start`
 - **Mini Games**：Hub 增至 10 项占两页；hub help 改为说明翻页与分页清单，不再逐条罗列
 - **文档**：WiFi / HID Keyboard / Infrared 中英文页同步新键位；新增扫雷 / 贪吃蛇 / 生命游戏中英文页与侧边栏入口

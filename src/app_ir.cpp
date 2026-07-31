@@ -297,9 +297,10 @@ static const char* acBrandName(const int idx) {
     return names[idx];
 }
 
-// 品牌 logo 文件名（data/icon/brand）；AUX 用 brand_aux，因 Windows 保留名 aux.*
+// 品牌 logo 文件名（data/icon/brand）；统一 brand_ 前缀，兼带规避 Windows 保留名 aux.*
 static const char* acBrandIconStem(const int idx) {
-    static const char* stems[] = {"midea", "gree", "haier", "brand_aux", "hisense", "xiaomi"};
+    static const char* stems[] = {"brand_midea",   "brand_gree",    "brand_haier",
+                                  "brand_aux",     "brand_hisense", "brand_xiaomi"};
     if (idx < 0 || idx >= static_cast<int>(IrAcBrand::Count)) {
         return nullptr;
     }
@@ -308,7 +309,8 @@ static const char* acBrandIconStem(const int idx) {
 
 // TV 品牌 logo（NEC 无图）
 static const char* tvBrandIconStem(const int idx) {
-    static const char* stems[] = {"samsung", "sony", "lg", "panasonic", nullptr};
+    static const char* stems[] = {"brand_samsung", "brand_sony", "brand_lg", "brand_panasonic",
+                                  nullptr};
     if (idx < 0 || idx >= static_cast<int>(IrTvBrand::Count)) {
         return nullptr;
     }
@@ -1073,7 +1075,7 @@ static void drawIrBrandLogo(const int x, const int y, const char* stem, const ch
             return;
         }
         // Gree 旧资源名 gelee
-        if (strcmp(stem, "gree") == 0) {
+        if (strcmp(stem, "brand_gree") == 0) {
             snprintf(path, sizeof(path), "%s/gelee.png", IR_BRAND_ICON_DIR);
             if (drawLittleFsPng(path, x, y, 1.0f)) {
                 return;
