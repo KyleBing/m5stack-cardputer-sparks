@@ -13,6 +13,13 @@ static bool g_ble_adv_before_scan = false;
 static bool g_ble_parked = false;  // 已 init 但 App 释放，Header 不当成在用
 static BLEServer* g_ble_server = nullptr;
 
+// 关射频前留给 deauth 发出去的时间：否则 AP 侧残留关联，下次关联常被拒
+static constexpr uint32_t kStaDeauthSettleMs = 80;
+// 刚开射频到发起关联的间隔
+static constexpr uint32_t kStaStartSettleMs = 100;
+// 等待期间主动重发 begin 的间隔（Arduino 自动重连不可靠，见 ensureStaWifi）
+static constexpr uint32_t kStaConnectRetryMs = 3500;
+
 void initBleStackOnly(); // 前向声明：startBleStack 会调用
 
 class AppBleServerCallbacks : public BLEServerCallbacks {
@@ -60,13 +67,29 @@ bool ensureStaWifi(const uint32_t timeout_ms) {
         delay(50);
     }
 
+    const bool radio_was_off = WiFi.getMode() == WIFI_OFF;
     WiFi.mode(WIFI_STA);
     applyWifiRadioSleepPolicy();
+    WiFi.setAutoReconnect(true);
+    if (radio_was_off) {
+        delay(kStaStartSettleMs);
+    }
     WiFi.begin(cfg.wifi_ssid, cfg.wifi_password);
 
+    // Arduino 的自动重连在失败后会先 disconnect() 再 begin()，异步的 disconnect
+    // 往往把刚发出的关联请求一起取消掉，之后就一直空等到超时（刚 WIFI_OFF→STA
+    // 重启射频时尤其容易触发）。这里按固定间隔自己重发 begin。
     const uint32_t deadline = millis() + timeout_ms;
-    while (WiFi.status() != WL_CONNECTED && static_cast<int32_t>(millis() - deadline) < 0) {
-        delay(200);
+    uint32_t next_retry_ms = millis() + kStaConnectRetryMs;
+    while (static_cast<int32_t>(millis() - deadline) < 0) {
+        if (WiFi.status() == WL_CONNECTED) {
+            return true;
+        }
+        if (static_cast<int32_t>(millis() - next_retry_ms) >= 0) {
+            WiFi.begin(cfg.wifi_ssid, cfg.wifi_password);
+            next_retry_ms = millis() + kStaConnectRetryMs;
+        }
+        delay(100);
     }
     return WiFi.status() == WL_CONNECTED;
 }
@@ -77,7 +100,12 @@ void releaseStaWifi() {
 
 void forceShutdownStaWifi() {
     if (WiFi.getMode() != WIFI_OFF || WiFi.status() == WL_CONNECTED) {
-        WiFi.disconnect(true);
+        const bool was_connected = WiFi.status() == WL_CONNECTED;
+        WiFi.disconnect(false);
+        // 关联中直接 stop 会来不及发 deauth，AP 侧留着旧关联，下次连接首帧被拒
+        if (was_connected) {
+            delay(kStaDeauthSettleMs);
+        }
         WiFi.mode(WIFI_OFF);
     }
     updateAppHeaderStatus();

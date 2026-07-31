@@ -116,6 +116,9 @@ bool setAppConfigWifiActive(const char* ssid);
 // 按 ssid 更新或追加；set_active 为 true 时同时设为当前；满且非同名则失败
 bool upsertAppConfigWifi(const char* ssid, const char* password, bool set_active = true);
 
+// 按 ssid 从 wifis[] 删除并写回；删的是 active 时回落到第一条
+bool removeAppConfigWifi(const char* ssid);
+
 // 更新屏幕亮度并写回（screen.brightness，percent：0~100）
 bool saveAppConfigBrightness(uint8_t brightness_percent);
 

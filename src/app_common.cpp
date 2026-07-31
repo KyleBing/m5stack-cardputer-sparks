@@ -360,6 +360,19 @@ int getMenuNavDelta(const Keyboard_Class::KeysState& status) {
     return 0;
 }
 
+// 检测 [ ] 翻页键：-1 上一页，0 无，1 下一页
+int getBracketNavDelta(const Keyboard_Class::KeysState& status) {
+    for (const char c : status.word) {
+        if (c == '[') {
+            return -1;
+        }
+        if (c == ']') {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 // 音量连续调节时，空闲后再写 LittleFS，避免挡界面刷新
 static constexpr uint32_t SPK_VOL_SAVE_DEBOUNCE_MS = 400;
 static uint32_t g_spk_last_ready_ms = 0;

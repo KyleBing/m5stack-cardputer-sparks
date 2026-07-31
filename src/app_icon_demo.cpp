@@ -216,6 +216,16 @@ static int drawIconHelpArrows(const int x, const int y, const char* text) {
     return y + 11;
 }
 
+// Help 按键徽章说明；徽章后恢复说明文字颜色
+static int drawIconHelpBadge(const int x, const int y, const char* badge, const char* text) {
+    const int cx = x + drawTextBadge(x, y, badge, 1);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(cx, y);
+    M5Cardputer.Display.print(text);
+    return y + 11;
+}
+
 // Help 功能说明
 static int drawIconHelpText(const int x, const int y, const char* text) {
     M5Cardputer.Display.setTextSize(1);
@@ -237,6 +247,7 @@ static void drawIconHelpPage() {
 
     int y = drawIconHelpColHeader(0, col_y, col_w, "keymap");
     y = drawIconHelpArrows(2, y, "previous / next");
+    y = drawIconHelpBadge(2, y, "[ ]", "page");
 
     y = drawIconHelpColHeader(manual_x, col_y, screen_w - manual_x, "manual");
     y = drawIconHelpText(manual_x + 2, y, "view icon resources");
@@ -342,7 +353,10 @@ void handleIconDemoNav(const Keyboard_Class::KeysState& status) {
     if (iconDemoHelpVisible) {
         return;
     }
-    const int delta = getMenuNavDelta(status);
+    int delta = getMenuNavDelta(status);
+    if (delta == 0) {
+        delta = getBracketNavDelta(status);
+    }
     if (delta == 0) {
         return;
     }

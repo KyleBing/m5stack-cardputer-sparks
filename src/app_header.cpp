@@ -126,9 +126,9 @@ static void drawBackButton(const int screen_w) {
 }
 
 static void drawHeaderDivider(const int screen_w) {
-    // header 底边框 #222222
+    // header 底边框 #3A3A3A
     M5Cardputer.Display.drawFastHLine(0, APP_HEADER_H - 1, screen_w,
-                                      M5Cardputer.Display.color565(0x22, 0x22, 0x22));
+                                      M5Cardputer.Display.color565(0x3A, 0x3A, 0x3A));
 }
 
 // page_count <= 1 时不画圆点，同时清掉上个界面残留的分页状态

@@ -147,7 +147,10 @@ void enterFontDemoApp() {
 }
 
 void handleFontDemoNav(const Keyboard_Class::KeysState& status) {
-    const int delta = getMenuNavDelta(status);
+    int delta = getMenuNavDelta(status);
+    if (delta == 0) {
+        delta = getBracketNavDelta(status);
+    }
     if (delta == 0) {
         return;
     }

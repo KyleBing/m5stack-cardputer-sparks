@@ -645,6 +645,26 @@ bool upsertAppConfigWifi(const char* ssid, const char* password, const bool set_
     return persistWifiProfiles();
 }
 
+bool removeAppConfigWifi(const char* ssid) {
+    const int idx = findWifiProfileIndex(ssid);
+    if (idx < 0) {
+        return false;
+    }
+
+    const bool was_active = strcmp(g_config.wifi_active, g_config.wifis[idx].ssid) == 0;
+    for (int i = idx; i + 1 < g_config.wifi_count; i++) {
+        g_config.wifis[i] = g_config.wifis[i + 1];
+    }
+    g_config.wifi_count--;
+    g_config.wifis[g_config.wifi_count] = WifiProfile{};
+    if (was_active) {
+        // 清空后由 syncActiveWifiMirror 回落到第一条（无档案则全清）
+        g_config.wifi_active[0] = '\0';
+    }
+    syncActiveWifiMirror();
+    return persistWifiProfiles();
+}
+
 bool saveAppConfigBrightness(const uint8_t brightness_percent) {
     JsonDocument doc;
     if (LittleFS.exists(CONFIG_PATH)) {

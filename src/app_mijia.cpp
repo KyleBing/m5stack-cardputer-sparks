@@ -2617,6 +2617,11 @@ bool handleMijiaOverviewPageNav(const Keyboard_Class::KeysState& status) {
         }
         return handleMijiaGridSelectionNav(status);
     }
+    // 列表模式：左右键之外也支持 [ ] 翻页
+    const int list_bracket = getMijiaOverviewBracketDelta(status);
+    if (list_bracket != 0) {
+        return handleMijiaOverviewNav(list_bracket);
+    }
     const int hdelta = getOverviewHorizontalDelta(status);
     if (hdelta != 0) {
         return handleMijiaOverviewNav(hdelta);

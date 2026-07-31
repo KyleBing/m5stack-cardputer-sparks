@@ -384,9 +384,12 @@ void showMenu() {
     drawMenuPage();
 }
 
-// 方向键翻页，返回 true 表示已处理
+// 方向键 / [ ] 翻页，返回 true 表示已处理
 bool handleMenuPageNav(const Keyboard_Class::KeysState& status) {
-    const int delta = getMenuNavDelta(status);
+    int delta = getMenuNavDelta(status);
+    if (delta == 0) {
+        delta = getBracketNavDelta(status);
+    }
     if (delta == 0) {
         return false;
     }
@@ -2042,7 +2045,10 @@ void drawDisplayApp(const int patternIndex) {
 }
 
 void handleDisplayApp(const Keyboard_Class::KeysState& status) {
-    const int delta = getMenuNavDelta(status);
+    int delta = getMenuNavDelta(status);
+    if (delta == 0) {
+        delta = getBracketNavDelta(status);
+    }
     if (delta == 0) {
         return;
     }
@@ -2197,7 +2203,10 @@ static bool handleHardwareTestsBack() {
 
 static void handleHardwareTestsApp(const Keyboard_Class::KeysState& status) {
     if (hardwareTestMode == HardwareTestMode::HUB) {
-        const int delta = getMenuNavDelta(status);
+        int delta = getMenuNavDelta(status);
+        if (delta == 0) {
+            delta = getBracketNavDelta(status);
+        }
         const int page_count = getHardwareTestHubPageCount();
         if (delta != 0 && page_count > 1) {
             hardwareTestHubPage =
@@ -2736,6 +2745,7 @@ void loop() {
                    !(currentState == AppState::CURSOR && isCursorDisplayBlanked()) &&
                    !(currentState == AppState::MIJIA && mijiaAppSuppressesHeader()) &&
                    !(currentState == AppState::IR && irAppSuppressesHeader()) &&
+                   !(currentState == AppState::WIFI && wifiAppSuppressesHeader()) &&
                    !(currentState == AppState::HID_KEYBOARD && hidKeyboardSuppressesHeader())) {
             updateAppHeaderStatus();
         }

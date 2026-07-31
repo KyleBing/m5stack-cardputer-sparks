@@ -2,7 +2,7 @@
 
 Main menu key: `k`
 
-Use Cardputer as a **USB** or **BLE** HID keyboard / mouse. This App **cannot** return to the menu with `ESC` — use **BtnGO**.
+Use Cardputer as a **USB** or **BLE** HID keyboard / mouse. This App **cannot** return to the menu with `ESC` — **hold BtnGO**.
 
 No header on the main input screen. Left pill column shows Fn / Aa / Opt / Ctrl / Alt; center shows a large last-key echo; footer shows link status, green device name, and a yellow slot badge.
 
@@ -46,7 +46,8 @@ No header on the main input screen. Left pill column shows Fn / Aa / Opt / Ctrl 
 | `Fn` + `b` | BLE HID |
 | **Hold `Fn`** | Toggle IMU→mouse pointer |
 | `Fn` + `p` | BLE host list (switch / pair) |
-| **BtnGO** | Exit to main menu (and disconnect BLE) |
+| **Tap BtnGO** | Open / close the BLE host list (same as `Fn` + `p`) |
+| **Hold BtnGO** | Exit to main menu (and disconnect BLE) |
 | `Fn` + `h` | Help |
 
 ### IMU mouse (hold Fn)
@@ -63,7 +64,7 @@ Center shows a mouse icon; right side is the sensitivity bar. If BLE pointer doe
 
 Transport and sensitivity are saved under `hid_keyboard` in `config.json` and restored the next time the app opens. The IMU mouse toggle is temporary and defaults to off whenever the app opens.
 
-### BLE host list (`Fn+p`)
+### BLE host list (`Fn+p` / tap BtnGO)
 
 Stores up to **5** paired hosts; only one connected at a time.
 
@@ -73,8 +74,8 @@ Stores up to **5** paired hosts; only one connected at a time.
 | Enter / Space | Switch to that host (disconnect current; on the target, tap `Cardputer KB` in Bluetooth) |
 | `n` | New pairing (needs free slot; rejects reconnect from old hosts) |
 | `r` | Rename current slot alias (Enter saves; empty name shows MAC again; `` ` `` cancels) |
-| `d` | Delete current slot pairing |
-| `p` / `h` | Close list |
+| Backspace | Delete current slot pairing |
+| `p` / `h` / tap BtnGO | Close list |
 
 ### Fn layer (Help page 2)
 
@@ -91,9 +92,9 @@ Stores up to **5** paired hosts; only one connected at a time.
 ## Usage
 
 1. Use a cable for USB, or `Fn+b` for BLE keyboard then pair on the host (`Fn+p` → `n`).
-2. Multiple hosts: `Fn+p` opens the list, select a slot, Enter to switch. `reconnecting #N` means waiting for the target PC to auto-reconnect (usually within a few seconds; otherwise tap `Cardputer KB` in Bluetooth again).
+2. Multiple hosts: `Fn+p` or a tap on **BtnGO** opens the list, select a slot, Enter to switch. `reconnecting #N` means waiting for the target PC to auto-reconnect (usually within a few seconds; otherwise tap `Cardputer KB` in Bluetooth again).
 3. New pairing with `n`: rejects old hosts grabbing the link, then search/pair on the new PC.
 4. Type normal characters directly; bare `` ` `` sends Esc; other function keys use the Fn layer.
 5. Hold `Fn` for IMU mouse; `ygv` left / `uhb` right click; `1`–`0` set sensitivity; other function keys still work.
-6. Always exit with **BtnGO** (disconnects BLE); `` ` `` is Esc to the host.
+6. Always exit by **holding BtnGO** (disconnects BLE); a short tap only toggles the host list; `` ` `` is Esc to the host.
 7. BLE combo keyboard+mouse: after firmware update, forget `Cardputer KB` and re-pair if the pointer does nothing.

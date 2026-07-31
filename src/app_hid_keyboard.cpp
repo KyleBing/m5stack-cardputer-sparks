@@ -40,7 +40,8 @@ static constexpr int kEchoCellW = 18;       // size3 单字符格
 static constexpr int kEchoCellH = 24;
 static constexpr size_t kBleReportQueueCap = 48;
 static constexpr uint32_t kBleReportIntervalMs = 12;
-static constexpr uint32_t kFnLongPressMs = 650;  // 长按 Fn 切换 IMU
+static constexpr uint32_t kFnLongPressMs = 650;    // 长按 Fn 切换 IMU
+static constexpr uint32_t kBtnALongPressMs = 700;  // 长按 BtnA 退出应用（短按开/关主机列表）
 static constexpr int kModColW = 56;              // 左侧修饰键胶囊列宽（x2 字体）
 static constexpr int kModMarginX = 5;            // 左侧特殊键距屏左边界
 static constexpr int kModMarginY = 5;            // 左侧特殊键距上下边界
@@ -109,6 +110,8 @@ static bool g_imu_pad_drawn = false;  // IMU 鼠标区已画底板
 static uint32_t g_fn_down_ms = 0;     // Fn 按下计时（长按切 IMU）
 static bool g_fn_long_fired = false;
 static bool g_fn_long_cancelled = false;  // Fn+其它键则取消长按
+static uint32_t g_btna_down_ms = 0;       // BtnA 按下计时（长按退出）
+static bool g_btna_long_fired = false;    // 已触发长按：松开时不再当短按
 static bool g_drawn_mod_fn = false;
 static bool g_drawn_mod_shift = false;
 static bool g_drawn_mod_opt = false;
@@ -1291,6 +1294,24 @@ static void redrawHostsListAndStatus();
 static void drawHostsTips();
 static void drawHidKeyboardApp(const bool full_init);
 
+// 关闭主机列表回到输入界面
+static void closeHostsUi() {
+    g_hosts_ui = false;
+    g_rename_ui = false;
+    g_rename_buf[0] = '\0';
+    drawHidKeyboardApp(true);
+}
+
+// BtnA 短按：开/关主机列表（与 Fn+p 一致）
+static void toggleHostsUi() {
+    if (g_hosts_ui) {
+        closeHostsUi();
+        return;
+    }
+    openHostsUi();
+    drawHostsUi();
+}
+
 static void beginRenameHostSlot() {
     if (!g_hosts[g_sel_slot].used) {
         snprintf(g_hosts_status, sizeof(g_hosts_status), "empty");
@@ -1345,6 +1366,29 @@ static void commitRenameHostSlot() {
     }
     redrawHostsListAndStatus();
     drawHostsTips();
+}
+
+// 删除选中槽位的配对（backspace）
+static void deleteSelectedHostSlot() {
+    if (!g_hosts[g_sel_slot].used) {
+        snprintf(g_hosts_status, sizeof(g_hosts_status), "empty");
+        redrawHostsListAndStatus();
+        return;
+    }
+
+    // 删的是当前连着的主机：先断链再删槽
+    if (g_ble_connected && g_active_slot == g_sel_slot) {
+        disconnectBleClients();
+        g_ble_connected = false;
+        clearPeerInfo();
+    }
+    deleteHostSlot(g_sel_slot);
+    if (g_ble_ready) {
+        g_pairing_open = (usedHostSlotCount() == 0);
+        configureBleAdvertising(g_pairing_open);
+    }
+    snprintf(g_hosts_status, sizeof(g_hosts_status), "deleted #%d", g_sel_slot + 1);
+    redrawHostsListAndStatus();
 }
 
 // 主机列表页按键（不发给主机）
@@ -1426,6 +1470,13 @@ static bool tryHandleHostsUi(const Keyboard_Class::KeysState& status) {
         return true;
     }
 
+    // backspace 删除选中槽位
+    if (status.del) {
+        g_hosts_key_latched = true;
+        deleteSelectedHostSlot();
+        return true;
+    }
+
     if (status.enter || status.space) {
         g_hosts_key_latched = true;
         switchToHostSlot(g_sel_slot);
@@ -1451,33 +1502,14 @@ static bool tryHandleHostsUi(const Keyboard_Class::KeysState& status) {
             beginRenameHostSlot();
             return true;
         }
-        if (c == 'd' || c == 'D') {
+        if (c == '\b') {
             g_hosts_key_latched = true;
-            if (g_hosts[g_sel_slot].used) {
-                const bool was_conn_target =
-                    g_ble_connected && g_active_slot == g_sel_slot;
-                if (was_conn_target) {
-                    disconnectBleClients();
-                    g_ble_connected = false;
-                    clearPeerInfo();
-                }
-                deleteHostSlot(g_sel_slot);
-                if (g_ble_ready) {
-                    g_pairing_open = (usedHostSlotCount() == 0);
-                    configureBleAdvertising(g_pairing_open);
-                }
-                snprintf(g_hosts_status, sizeof(g_hosts_status), "deleted #%d", g_sel_slot + 1);
-            } else {
-                snprintf(g_hosts_status, sizeof(g_hosts_status), "empty");
-            }
-            redrawHostsListAndStatus();
+            deleteSelectedHostSlot();
             return true;
         }
         if (c == 'p' || c == 'P' || c == 'h' || c == 'H') {
             g_hosts_key_latched = true;
-            g_hosts_ui = false;
-            g_rename_ui = false;
-            drawHidKeyboardApp(true);
+            closeHostsUi();
             return true;
         }
     }
@@ -1519,7 +1551,11 @@ static bool tryHandleModeHotkey(const Keyboard_Class::KeysState& status) {
                 }
             }
         }
-        const int delta = getMenuNavDelta(status);
+        // [ ] 仅在帮助页翻页；主输入界面仍原样透传给主机
+        int delta = getMenuNavDelta(status);
+        if (delta == 0) {
+            delta = getBracketNavDelta(status);
+        }
         if (delta != 0) {
             const int next = g_help_page + delta;
             if (next >= 0 && next < kHelpPageCount) {
@@ -2579,7 +2615,7 @@ static void drawHelpPage() {
 
     if (g_help_page == 0) {
         y = helpDrawSection(x0, y, "Mode");
-        y = helpRowBadge(x0, y, "BtnGO", " exit app");
+        y = helpRowBadge(x0, y, "BtnGO", " hold=exit  tap=hosts");
         {
             int x = x0;
             M5Cardputer.Display.setTextSize(1);
@@ -2780,7 +2816,7 @@ static void drawHostsTips() {
     tip_row("1-5", " select");
     tip_row("Ent", " switch");
     tip_key('n', " new");
-    tip_key('d', " del");
+    tip_row("Bk", " del");
     tip_key('r', " rename");
     tip_key('p', " back");
 }
@@ -2900,6 +2936,8 @@ void enterHidKeyboardApp() {
     g_fn_down_ms = 0;
     g_fn_long_fired = false;
     g_fn_long_cancelled = false;
+    g_btna_down_ms = 0;
+    g_btna_long_fired = false;
     g_imu_ok = M5.Imu.isEnabled();
     const AppConfig& cfg = getAppConfig();
     g_transport = cfg.hid_keyboard_transport == HidKeyboardTransport::Usb
@@ -3119,10 +3157,34 @@ void handleHidKeyboardApp(const Keyboard_Class::KeysState& status) {
 
 bool pollHidKeyboardBtnAExit() {
     if (!g_active) {
+        g_btna_down_ms = 0;
+        g_btna_long_fired = false;
         return false;
     }
-    // 真正的 leave 交给 showMenu，避免这里拆栈后再 leave 一次
-    return M5Cardputer.BtnA.wasPressed();
+
+    if (M5Cardputer.BtnA.wasPressed()) {
+        g_btna_down_ms = millis();
+        g_btna_long_fired = false;
+    }
+
+    // 长按：退出应用（真正的 leave 交给 showMenu，避免这里拆栈后再 leave 一次）
+    if (g_btna_down_ms != 0 && !g_btna_long_fired && M5Cardputer.BtnA.isPressed() &&
+        millis() - g_btna_down_ms >= kBtnALongPressMs) {
+        g_btna_long_fired = true;
+        g_btna_down_ms = 0;
+        return true;
+    }
+
+    // 短按：开/关主机列表；未在本应用内按下的（如进入应用那一下）不算
+    if (M5Cardputer.BtnA.wasReleased()) {
+        const bool was_short = g_btna_down_ms != 0 && !g_btna_long_fired;
+        g_btna_down_ms = 0;
+        g_btna_long_fired = false;
+        if (was_short) {
+            toggleHostsUi();
+        }
+    }
+    return false;
 }
 
 // 主输入 / Help / Hosts / 退出中：均无 header（避免蓝牙图标刷到无顶栏界面）

@@ -93,6 +93,10 @@ void flushCardputerInput(bool wait_btn_a = true);
 // 翻页键：-1 上一页，0 无，1 下一页（方向键 / ; , . /）
 int getMenuNavDelta(const Keyboard_Class::KeysState& status);
 
+// 括号翻页键：-1 上一页（'['），0 无，1 下一页（']'）
+// 仅供 [ ] 未被占作他用的界面调用，与 getMenuNavDelta 并存
+int getBracketNavDelta(const Keyboard_Class::KeysState& status);
+
 // 需要出声时 begin 并套用音量
 void warmUpSpeakerIfNeeded();
 // 关喇叭并拉低 I2S 脚，避免 NS4168 悬空嗡嗡（Mic 占用 WS 时不碰 WS）

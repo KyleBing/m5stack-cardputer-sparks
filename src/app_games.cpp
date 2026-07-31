@@ -1260,7 +1260,10 @@ void handleGamesApp(const Keyboard_Class::KeysState& status) {
         }
     }
     if (g_mode == GameMode::HUB) {
-        const int delta = getMenuNavDelta(status);
+        int delta = getMenuNavDelta(status);
+        if (delta == 0) {
+            delta = getBracketNavDelta(status);
+        }
         const int page_count = getGamesHubPageCount();
         if (delta != 0 && page_count > 1) {
             g_hub_page = (g_hub_page + delta + page_count) % page_count;

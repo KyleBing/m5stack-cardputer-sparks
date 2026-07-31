@@ -63,7 +63,7 @@ static constexpr int AC_PAGE_ROW1_Y = 53;
 static constexpr int AC_PAGE_ROW2_Y = AC_PAGE_ROW1_Y + IR_PAGE_BTN_H + IR_PAGE_BTN_GAP;
 static constexpr int AC_PAGE_ICON_CY = 25;
 // 温度大字 / 品牌 logo 独立按左半边排版，不与右侧按键对齐
-static constexpr int AC_PAGE_TEMP_X = 22;
+static constexpr int AC_PAGE_TEMP_X = 20;
 static constexpr int AC_PAGE_TEMP_Y = 58;
 static constexpr int AC_PAGE_TEMP_SIZE = 5;
 static constexpr int AC_PAGE_TEMP_CLEAR_W = 76;
@@ -218,19 +218,16 @@ static uint8_t g_ac_temp = 26;
 static stdAc::fanspeed_t g_ac_fan = stdAc::fanspeed_t::kAuto;
 
 static bool g_help_visible = false;
-// 品牌/类别先完成重绘，再合并连续切换并延后写 LittleFS
-static constexpr uint32_t IR_CONFIG_SAVE_DELAY_MS = 250;
+// 品牌/类别仅退出时写回，避免操控时卡顿
 static bool g_config_dirty = false;
-static uint32_t g_config_save_due_ms = 0;
 
 static void markIrConfigDirty() {
     g_config_dirty = true;
-    g_config_save_due_ms = millis() + IR_CONFIG_SAVE_DELAY_MS;
 }
 
-static void flushIrConfigSave(const bool force = false) {
-    if (!g_config_dirty ||
-        (!force && static_cast<int32_t>(millis() - g_config_save_due_ms) < 0)) {
+// 仅在 leaveIrApp 调用：把当前类别/品牌写入 config
+static void flushIrConfigSave() {
+    if (!g_config_dirty) {
         return;
     }
 
@@ -300,9 +297,9 @@ static const char* acBrandName(const int idx) {
     return names[idx];
 }
 
-// 品牌 logo 文件名（data/icon/brand）
+// 品牌 logo 文件名（data/icon/brand）；AUX 用 brand_aux，因 Windows 保留名 aux.*
 static const char* acBrandIconStem(const int idx) {
-    static const char* stems[] = {"midea", "gree", "haier", "aux", "hisense", "xiaomi"};
+    static const char* stems[] = {"midea", "gree", "haier", "brand_aux", "hisense", "xiaomi"};
     if (idx < 0 || idx >= static_cast<int>(IrAcBrand::Count)) {
         return nullptr;
     }
@@ -1343,7 +1340,19 @@ static void redrawIr() {
     }
 }
 
+// 进入/退出阻塞前先画提示，避免长时间黑屏无反馈
+static void drawIrBusyTip(const char* msg) {
+    M5Cardputer.Display.fillScreen(BLACK);
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.drawCenterString(msg, M5Cardputer.Display.width() / 2,
+                                         M5Cardputer.Display.height() / 2 - 8);
+}
+
 void enterIrApp() {
+    // 先提示再预载图标，避免清屏后长时间黑屏
+    drawIrBusyTip("Loading...");
+
     g_screen_ready = false;
     g_help_visible = false;
     g_config_dirty = false;
@@ -1373,7 +1382,11 @@ void enterIrApp() {
 }
 
 void leaveIrApp() {
-    flushIrConfigSave(true);
+    // 有未写盘的类别/品牌：先提示再保存，完成后由 showMenu 回主页
+    if (g_config_dirty) {
+        drawIrBusyTip("Saving config...");
+        flushIrConfigSave();
+    }
     freeAcIconCache();
 }
 
@@ -1383,7 +1396,6 @@ bool irAppSuppressesHeader() {
 }
 
 void updateIrApp() {
-    flushIrConfigSave();
     if (g_help_visible) {
         return;
     }
