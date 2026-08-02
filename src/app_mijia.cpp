@@ -354,7 +354,10 @@ static bool mijiaPanelRightVisualChanged(const MijiaUiState& old_ui, const Mijia
     if (strcmp(old_net != nullptr ? old_net : "", new_net != nullptr ? new_net : "") != 0) {
         return true;
     }
-    if (old_ui.power_known != new_ui.power_known) {
+    // 开关态变化：左图标、插座电源图标、炸锅状态色等都会变
+    const bool old_on = old_ui.power_known && old_ui.power_on;
+    const bool new_on = new_ui.power_known && new_ui.power_on;
+    if (old_ui.power_known != new_ui.power_known || old_on != new_on) {
         return true;
     }
     return mijiaPanelControlsVisualChanged(old_ui, new_ui);

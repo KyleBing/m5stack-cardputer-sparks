@@ -139,6 +139,13 @@ DEFINE_IR_MODE_ICON_DEMO(ac_heat)
 DEFINE_IR_MODE_ICON_DEMO(ac_dry)
 DEFINE_IR_MODE_ICON_DEMO(ac_fan)
 DEFINE_IR_MODE_ICON_DEMO(ac_auto)
+DEFINE_IR_MODE_ICON_DEMO(ac_power)
+
+// 通用电源图标（米家插座等）：/icon/power[_active].png
+static void drawDemoPowerPair(const int x, const int y) {
+    drawDevicePngNative("/icon/power.png", x, y);
+    drawDevicePngNative("/icon/power_active.png", x + IR_MODE_ICON_PX + IR_ICON_DEMO_GAP, y);
+}
 
 // 风速六档横排
 static void drawDemoIrFanStrip(const int x, const int y) {
@@ -184,7 +191,9 @@ static const IconDemoItem ICON_DEMO_ITEMS[] = {
     {"ir ac_dry", IR_MODE_DEMO_PAIR_W, IR_MODE_ICON_PX, drawDemoIrMode_ac_dry},
     {"ir ac_fan", IR_MODE_DEMO_PAIR_W, IR_MODE_ICON_PX, drawDemoIrMode_ac_fan},
     {"ir ac_auto", IR_MODE_DEMO_PAIR_W, IR_MODE_ICON_PX, drawDemoIrMode_ac_auto},
+    {"ir ac_power", IR_MODE_DEMO_PAIR_W, IR_MODE_ICON_PX, drawDemoIrMode_ac_power},
     {"ir fan speeds", IR_FAN_DEMO_STRIP_W, IR_FAN_ICON_PX, drawDemoIrFanStrip},
+    {"power", IR_MODE_DEMO_PAIR_W, IR_MODE_ICON_PX, drawDemoPowerPair},
 };
 
 static int getIconDemoItemCount() {

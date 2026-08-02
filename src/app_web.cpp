@@ -111,7 +111,6 @@ static const char* DEFAULT_CONFIG = R"({
   },
   "time": {
     "default": "up",
-    "pure": false,
     "timezone": "CST-8"
   },
   "calendar": {
@@ -514,7 +513,7 @@ static const char* JS_CFG_DEFAULT =
     "{wifis:[],wifi_active:'',devices:[],device_groups:[],cursor:{token:''},"
     "screen:{brightness:30,invert:false},"
     "sound:{time_key:true,mijia_on_off:true,volume:25},"
-    "time:{default:'up',pure:false,timezone:'CST-8'},calendar:{week_start:'sunday'},"
+    "time:{default:'up',timezone:'CST-8'},calendar:{week_start:'sunday'},"
     "infrared:{default:'tv',tv_brand:'samsung',ac_brand:'midea'},"
     "hid_keyboard:{transport:'ble',imu_sensitivity:5}}";
 
@@ -552,7 +551,7 @@ static void appendJsLoadCfg(String& body) {
               "svol=+svol;if(svol<0)svol=0;if(svol>100)svol=100;cfg.sound.volume=svol;"
               "if(!cfg.time)cfg.time={};"
               "if(!cfg.time.default)cfg.time.default='up';"
-              "if(cfg.time.pure==null)cfg.time.pure=false;"
+              "delete cfg.time.pure;"
               // timezone：迁移旧顶层路径；week_start 只认 calendar 对象
               "if(!cfg.time.timezone)cfg.time.timezone=cfg.timezone||'CST-8';"
               "delete cfg.timezone;"
@@ -1051,9 +1050,6 @@ static void handleSystemPage() {
               "</select></label>"
               "<label>时区（POSIX TZ）"
               "<input id='sys-timezone' placeholder='CST-8' autocomplete='off'></label>"
-              "<label class='check-row'>"
-              "<input id='sys-time-pure' type='checkbox'>"
-              "<span>默认 Pure 全屏</span></label>"
               "</section>"
               // Calendar 应用
               "<section class='sys-sec' data-pane='calendar'>"
@@ -1127,7 +1123,7 @@ static void handleSystemPage() {
         "if(!cfg.time)cfg.time={};"
         "cfg.time.default=document.getElementById('sys-time-default').value||'up';"
         "cfg.time.timezone=document.getElementById('sys-timezone').value||'CST-8';"
-        "cfg.time.pure=document.getElementById('sys-time-pure').checked;"
+        "delete cfg.time.pure;"
         "delete cfg.timezone;"
         "if(!cfg.calendar)cfg.calendar={};"
         "cfg.calendar.week_start=document.getElementById('sys-week-start').value||'sunday';"
@@ -1165,7 +1161,6 @@ static void handleSystemPage() {
         "document.getElementById('sys-sound-volume-val').textContent=String(cfg.sound.volume);"
         "document.getElementById('sys-time-default').value=cfg.time.default||'up';"
         "document.getElementById('sys-timezone').value=cfg.time.timezone||'CST-8';"
-        "document.getElementById('sys-time-pure').checked=!!cfg.time.pure;"
         "document.getElementById('sys-week-start').value=cfg.calendar.week_start||'sunday';"
         "document.getElementById('sys-ir-default').value=cfg.infrared.default||'tv';"
         "document.getElementById('sys-ir-tv-brand').value=cfg.infrared.tv_brand||'samsung';"

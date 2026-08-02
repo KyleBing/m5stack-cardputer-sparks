@@ -82,7 +82,6 @@
   },
   "time": {
     "default": "up",
-    "pure": false,
     "timezone": "CST-8"
   },
   "calendar": {

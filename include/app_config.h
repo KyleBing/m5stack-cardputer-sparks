@@ -84,7 +84,6 @@ struct AppConfig {
     bool time_key_sound;     // Time 内按键声（countdown 到点闹钟不受影响）
     bool mijia_on_off_sound; // 米家开/关提示音
     TimeDefaultMode time_default_mode; // 按 T 进入 Time 时的默认模块
-    bool time_pure;                    // Time 是否默认 pure 全屏
     WeekStartDay week_start;           // 日历每周起始日
     IrDefaultCategory infrared_default; // 进入红外时默认 TV / AC
     uint8_t infrared_tv_brand;          // 0..IR_TV_BRAND_COUNT-1
@@ -141,9 +140,6 @@ bool saveAppConfigTimezone(const char* timezone);
 
 // 更新 Time 默认模块并写回
 bool saveAppConfigTimeDefaultMode(TimeDefaultMode mode);
-
-// 更新 Time pure 偏好并写回
-bool saveAppConfigTimePure(bool enabled);
 
 // 更新日历每周起始日并写回 calendar.week_start
 bool saveAppConfigWeekStart(WeekStartDay day);

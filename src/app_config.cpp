@@ -156,7 +156,6 @@ bool loadAppConfig() {
     g_config.time_key_sound = true; // 默认开
     g_config.mijia_on_off_sound = true;
     g_config.time_default_mode = TimeDefaultMode::Up;
-    g_config.time_pure = false;
     g_config.week_start = WeekStartDay::Sunday;
     g_config.infrared_default = IrDefaultCategory::Tv;
     g_config.infrared_tv_brand = 0; // Samsung
@@ -267,13 +266,11 @@ bool loadAppConfig() {
         g_config.speaker_volume = static_cast<uint8_t>(vol);
     }
 
-    // Time：优先新路径；timezone 兼容旧顶层字段
+    // Time：优先新路径；timezone 兼容旧顶层字段（time.pure 已废弃，忽略）
     g_config.time_default_mode = TimeDefaultMode::Up;
-    g_config.time_pure = false;
     JsonObject time_obj = doc["time"];
     if (!time_obj.isNull()) {
         g_config.time_default_mode = parseTimeDefaultMode(time_obj["default"]);
-        g_config.time_pure = time_obj["pure"] | false;
     }
     const char* tz = time_obj.isNull() ? nullptr : time_obj["timezone"];
     if (tz == nullptr || tz[0] == '\0') {
@@ -900,38 +897,6 @@ bool saveAppConfigTimeDefaultMode(const TimeDefaultMode mode) {
         time_obj = doc["time"].to<JsonObject>();
     }
     time_obj["default"] = timeDefaultModeName(mode);
-
-    if (doc["devices"].isNull()) {
-        doc["devices"].to<JsonArray>();
-    }
-
-    File out = LittleFS.open(CONFIG_PATH, "w");
-    if (!out) {
-        return false;
-    }
-    serializeJsonPretty(doc, out);
-    out.close();
-    return loadAppConfig();
-}
-
-bool saveAppConfigTimePure(const bool enabled) {
-    JsonDocument doc;
-    if (LittleFS.exists(CONFIG_PATH)) {
-        File in = LittleFS.open(CONFIG_PATH, "r");
-        if (in) {
-            const DeserializationError err = deserializeJson(doc, in);
-            in.close();
-            if (err) {
-                doc.clear();
-            }
-        }
-    }
-
-    JsonObject time_obj = doc["time"].as<JsonObject>();
-    if (time_obj.isNull()) {
-        time_obj = doc["time"].to<JsonObject>();
-    }
-    time_obj["pure"] = enabled;
 
     if (doc["devices"].isNull()) {
         doc["devices"].to<JsonArray>();

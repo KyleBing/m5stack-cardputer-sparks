@@ -1,11 +1,15 @@
 #include "app_games.h"
+#include "app_bezier_wave.h"
 #include "app_common.h"
 #include "app_header.h"
 #include "app_dice.h"
 #include "app_life.h"
+#include "app_lissajous.h"
+#include "app_matrix_rain.h"
 #include "app_minesweeper.h"
 #include "app_neon_fx.h"
 #include "app_newton_cradle.h"
+#include "app_particle_clock.h"
 #include "app_snake.h"
 #include <cmath>
 #include <cstdio>
@@ -29,6 +33,10 @@ enum class GameMode {
     MINESWEEPER,
     SNAKE,
     LIFE,
+    MATRIX_RAIN,
+    BEZIER_WAVE,
+    PARTICLE_CLOCK,
+    LISSAJOUS,
 };
 
 struct TracePoint {
@@ -64,6 +72,10 @@ static constexpr GamesHubItem GAMES_HUB_ITEMS[] = {
     {"MINES", GameMode::MINESWEEPER},
     {"SNAKE", GameMode::SNAKE},
     {"LIFE", GameMode::LIFE},
+    {"MATRIX", GameMode::MATRIX_RAIN},
+    {"WAVE", GameMode::BEZIER_WAVE},
+    {"PCLOCK", GameMode::PARTICLE_CLOCK},
+    {"LISSA", GameMode::LISSAJOUS},
 };
 static constexpr int GAMES_HUB_ITEM_COUNT =
     static_cast<int>(sizeof(GAMES_HUB_ITEMS) / sizeof(GAMES_HUB_ITEMS[0]));
@@ -203,6 +215,14 @@ static const char* modeName() {
             return "SNAKE";
         case GameMode::LIFE:
             return "CONWAY LIFE";
+        case GameMode::MATRIX_RAIN:
+            return "MATRIX RAIN";
+        case GameMode::BEZIER_WAVE:
+            return "BEZIER WAVE";
+        case GameMode::PARTICLE_CLOCK:
+            return "PARTICLE CLOCK";
+        case GameMode::LISSAJOUS:
+            return "LISSAJOUS";
         default:
             return "MINI GAMES";
     }
@@ -967,13 +987,40 @@ static void drawHelp() {
             drawHelpLine(90, "-=", "speed 1 - 5");
             drawHelpLine(104, "", "Edges wrap around");
             break;
+        case GameMode::MATRIX_RAIN:
+            drawHelpLine(20, "SPC", "pulse burst");
+            drawHelpLine(34, "-=", "fall speed 1 - 5");
+            drawHelpLine(48, "R", "reshuffle columns");
+            drawHelpLine(62, "", "Matrix-style code rain");
+            break;
+        case GameMode::BEZIER_WAVE:
+            drawHelpLine(20, "SPC", "amplitude pulse");
+            drawHelpLine(34, "-=", "wave speed 1 - 5");
+            drawHelpLine(48, "C", "cycle color theme");
+            drawHelpLine(62, "R", "reset phase");
+            drawHelpLine(76, "", "Layered bezier silk waves");
+            break;
+        case GameMode::PARTICLE_CLOCK:
+            drawHelpLine(20, "SPC", "reshuffle morph");
+            drawHelpLine(34, "M", "toggle HH:MM / HH:MM:SS");
+            drawHelpLine(48, "R", "reshuffle morph");
+            drawHelpLine(62, "", "Particles form the clock");
+            break;
+        case GameMode::LISSAJOUS:
+            drawHelpLine(20, "SPC", "phase pulse");
+            drawHelpLine(34, "-=", "anim speed 1 - 5");
+            drawHelpLine(48, "C", "cycle color theme");
+            drawHelpLine(62, "R", "reset frequencies");
+            drawHelpLine(76, "", "Lissajous a:b curves");
+            break;
         default:
             drawHelpLine(20, "1-8", "enter game on this page");
             drawHelpLine(34, "[]", "flip hub page");
             drawHelpLine(48, "", "P1 Coin Chaos Wheel Dice");
             drawHelpLine(62, "", "   Phys Neon Curves Mines");
-            drawHelpLine(76, "", "P2 Snake Life");
-            drawHelpLine(90, "H", "open help inside a game");
+            drawHelpLine(76, "", "P2 Snake Life Matrix Wave");
+            drawHelpLine(90, "", "   PClock Lissa");
+            drawHelpLine(104, "H", "open help inside a game");
             break;
     }
     if (g_mode != GameMode::HUB) {
@@ -986,7 +1033,9 @@ static void drawHelp() {
 static bool isExternalMode(const GameMode mode) {
     return mode == GameMode::DICE || mode == GameMode::NEWTON_CRADLE ||
            mode == GameMode::NEON_FX || mode == GameMode::MINESWEEPER ||
-           mode == GameMode::SNAKE || mode == GameMode::LIFE;
+           mode == GameMode::SNAKE || mode == GameMode::LIFE ||
+           mode == GameMode::MATRIX_RAIN || mode == GameMode::BEZIER_WAVE ||
+           mode == GameMode::PARTICLE_CLOCK || mode == GameMode::LISSAJOUS;
 }
 
 static void leaveModeApp(const GameMode mode) {
@@ -1002,6 +1051,14 @@ static void leaveModeApp(const GameMode mode) {
         leaveSnakeApp();
     } else if (mode == GameMode::LIFE) {
         leaveLifeApp();
+    } else if (mode == GameMode::MATRIX_RAIN) {
+        leaveMatrixRainApp();
+    } else if (mode == GameMode::BEZIER_WAVE) {
+        leaveBezierWaveApp();
+    } else if (mode == GameMode::PARTICLE_CLOCK) {
+        leaveParticleClockApp();
+    } else if (mode == GameMode::LISSAJOUS) {
+        leaveLissajousApp();
     }
 }
 
@@ -1018,6 +1075,14 @@ static void drawExternalFrame() {
         updateSnakeApp();
     } else if (g_mode == GameMode::LIFE) {
         updateLifeApp();
+    } else if (g_mode == GameMode::MATRIX_RAIN) {
+        updateMatrixRainApp();
+    } else if (g_mode == GameMode::BEZIER_WAVE) {
+        updateBezierWaveApp();
+    } else if (g_mode == GameMode::PARTICLE_CLOCK) {
+        updateParticleClockApp();
+    } else if (g_mode == GameMode::LISSAJOUS) {
+        updateLissajousApp();
     }
 }
 
@@ -1134,6 +1199,14 @@ static void selectMode(const GameMode mode) {
         enterSnakeApp();
     } else if (mode == GameMode::LIFE) {
         enterLifeApp();
+    } else if (mode == GameMode::MATRIX_RAIN) {
+        enterMatrixRainApp();
+    } else if (mode == GameMode::BEZIER_WAVE) {
+        enterBezierWaveApp();
+    } else if (mode == GameMode::PARTICLE_CLOCK) {
+        enterParticleClockApp();
+    } else if (mode == GameMode::LISSAJOUS) {
+        enterLissajousApp();
     }
     drawCurrent();
 }
@@ -1263,6 +1336,22 @@ void pollGamesBtnA() {
         pollLifeBtnA();
         return;
     }
+    if (g_mode == GameMode::MATRIX_RAIN) {
+        pollMatrixRainBtnA();
+        return;
+    }
+    if (g_mode == GameMode::BEZIER_WAVE) {
+        pollBezierWaveBtnA();
+        return;
+    }
+    if (g_mode == GameMode::PARTICLE_CLOCK) {
+        pollParticleClockBtnA();
+        return;
+    }
+    if (g_mode == GameMode::LISSAJOUS) {
+        pollLissajousBtnA();
+        return;
+    }
     // DICE / WHEEL 蓄力在 update 里轮询 isPressed
     if (M5Cardputer.BtnA.wasPressed()) {
         triggerGamesBtnAAction();
@@ -1352,6 +1441,14 @@ void handleGamesApp(const Keyboard_Class::KeysState& status) {
         handleSnakeApp(status);
     } else if (g_mode == GameMode::LIFE) {
         handleLifeApp(status);
+    } else if (g_mode == GameMode::MATRIX_RAIN) {
+        handleMatrixRainApp(status);
+    } else if (g_mode == GameMode::BEZIER_WAVE) {
+        handleBezierWaveApp(status);
+    } else if (g_mode == GameMode::PARTICLE_CLOCK) {
+        handleParticleClockApp(status);
+    } else if (g_mode == GameMode::LISSAJOUS) {
+        handleLissajousApp(status);
     }
     drawCurrent();
 }

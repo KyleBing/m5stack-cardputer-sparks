@@ -977,7 +977,7 @@ static int settingsPanelRowCount(const SettingsModule mod) {
         case SettingsModule::Sound:
             return 3; // volume / time key / mijia pwr
         case SettingsModule::Time:
-            return 3; // default / timezone / pure
+            return 2; // default / timezone
         case SettingsModule::Calendar:
             return 1; // week start
         case SettingsModule::Infrared:
@@ -1211,8 +1211,6 @@ static void drawSettingsTimePanel(const int x, const int y, const int w) {
                          APP_COLOR_VALUE, g_settings_row == 0);
     drawSettingsRowLabel(x, y + INFO_LINE_H, w, "tz", getAppTimezone(), APP_COLOR_VALUE,
                          g_settings_row == 1);
-    drawSettingsRowLabel(x, y + INFO_LINE_H * 2, w, "pure", cfg.time_pure ? "ON" : "OFF",
-                         cfg.time_pure ? APP_COLOR_OK : APP_COLOR_HINT, g_settings_row == 2);
 }
 
 static void drawSettingsCalendarPanel(const int x, const int y, const int w) {
@@ -1351,8 +1349,6 @@ static void applySettingsValueDelta(const int val_delta) {
                 if (saveAppConfigTimezone(next_tz)) {
                     applyLocalTimezone();
                 }
-            } else if (g_settings_row == 2) {
-                saveAppConfigTimePure(!getAppConfig().time_pure);
             }
             break;
         case SettingsModule::Calendar:
@@ -2849,10 +2845,12 @@ void loop() {
     }
 
     if (currentState == AppState::RTC) {
-        // BtnA 边沿只在当帧有效，不能跟 30ms 刷新绑在一起
+        // BtnA 边沿只在当帧有效，不能跟刷新节流绑在一起
         pollTimeAppBtnA();
         static uint32_t lastRtcUpdateMs = 0;
-        if (now - lastRtcUpdateMs >= 30) {
+        // Clock-like 空闲 1s 一拍时不必 30ms 轮询；CD/SW 仍 30ms
+        const uint32_t rtc_poll_ms = isTimeIdleSlowLoop() ? 1000 : 30;
+        if (now - lastRtcUpdateMs >= rtc_poll_ms) {
             lastRtcUpdateMs = now;
             updateRtcApp();
         }
@@ -3023,9 +3021,16 @@ void loop() {
         }
     }
 
-    // 实时 app 不休眠；Cursor 无操作 5 分钟后 1s 一拍，否则 10ms；其它状态 yield 10ms
+    // 实时 app 不休眠；Cursor / Time(Uptime·Clock) 空闲后 1s 一拍；其它状态 yield 10ms
     if (currentState == AppState::CURSOR && isCursorIdleSlowLoop()) {
         delay(1000);
+    } else if (currentState == AppState::RTC && isTimeIdleSlowLoop()) {
+        // 对齐下一整秒，秒位刷新不跳秒；按键响应约 1s 内
+        const uint32_t rem = millis() % 1000;
+        delay(rem == 0 ? 1000 : (1000 - rem));
+    } else if (currentState == AppState::RTC && isTimeClockLikeMode()) {
+        // Uptime / Clock 有操作时 ~30ms，避免空转费电
+        delay(30);
     } else if ((currentState == AppState::NEON_FX && isNeonFxHelpVisible()) ||
                (currentState == AppState::DICE && isDiceHelpVisible()) ||
                (currentState == AppState::GAMES && isGamesHelpVisible())) {

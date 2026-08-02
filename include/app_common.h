@@ -55,6 +55,13 @@ void drawHelpHintRight(const char* help_label = "help", int y_offset = 0);
 // 提示小字：',' 左箭头，'.' 右箭头
 void drawHintText(int x, int y, const char* text, int text_size = 1);
 
+// 点阵风格文字：Font0 1x 渲染后再按 scale 画方块，方块间留 1px 缝
+// 返回绘制占用宽高（scale<2 时退回普通 setTextSize）
+void drawDotText(const char* text, int x, int y, int scale, uint16_t color);
+// Font0 1x 下的文字宽度（用于按 scale 推布局）
+int measureDotTextWidth1x(const char* text);
+static constexpr int DOT_TEXT_H_1X = 8;
+
 // 使用 config 连接 WiFi（timeout_ms 为最长等待毫秒）
 bool ensureConfigWifi(uint32_t timeout_ms = 12000);
 

@@ -846,6 +846,16 @@ int drawMijiaDeviceControls(const MijiaDevice* dev, const MijiaDevKind kind,
     char buf[24];
     constexpr int text_size = MIJIA_PANEL_TEXT_SIZE;
 
+    // 插座：右栏电源图标显示启用状态（不依赖 extra）
+    if (kind == MijiaDevKind::PLUG) {
+        constexpr int POWER_ICON_PX = 30;
+        const bool on = ui.power_known && ui.power_on;
+        const char* path = on ? "/icon/power_active.png" : "/icon/power.png";
+        M5Cardputer.Display.fillRect(x, y, POWER_ICON_PX, POWER_ICON_PX, BLACK);
+        drawLittleFsPng(path, x, y, 1.0f);
+        return y + POWER_ICON_PX + 4;
+    }
+
     if (!ui.extra_known) {
         return y;
     }
@@ -1044,7 +1054,6 @@ int drawMijiaDeviceControls(const MijiaDevice* dev, const MijiaDevKind kind,
             return cy;
         }
 
-        case MijiaDevKind::PLUG:
         default:
             return y;
     }

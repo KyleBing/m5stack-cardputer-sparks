@@ -58,7 +58,7 @@ static constexpr uint16_t IR_PAGE_BTN_FILL = 0x18E3;   // #1e1e1e
 static constexpr uint16_t IR_PAGE_BTN_BORDER = 0x4A69; // #4a4a4a
 static constexpr uint16_t IR_PAGE_BTN_ACTIVE = 0x3CDF; // #3cd3fe
 
-// AC：两排按键；模式/风速图标居中于第 1/2 列
+// AC：两排按键；模式/风速/电源图标居中于第 1/2/3 列
 static constexpr int AC_PAGE_ROW1_Y = 53;
 static constexpr int AC_PAGE_ROW2_Y = AC_PAGE_ROW1_Y + IR_PAGE_BTN_H + IR_PAGE_BTN_GAP;
 static constexpr int AC_PAGE_ICON_CY = 25;
@@ -971,40 +971,10 @@ static bool isTvBtnPressed(const IrTvBtn btn) {
 
 enum class IrPadGlyph : uint8_t { Letter = 0, ArrowUp, ArrowDown };
 
-// 点阵风格文字：先 1x 渲染到离屏 sprite，再按 scale 画带 1px 缝隙的方块
+// IR 点阵文字：复用公共 drawDotText（1px 缝）
 static void drawIrDotText(const char* text, const int x, const int y, const int scale,
                           const uint16_t color) {
-    if (text == nullptr || text[0] == '\0') {
-        return;
-    }
-    M5Cardputer.Display.setTextSize(1);
-    const int w = M5Cardputer.Display.textWidth(text);
-    constexpr int h = 8;
-    M5Canvas spr(&M5Cardputer.Display);
-    spr.setColorDepth(16);
-    if (scale < 2 || w <= 0 || !spr.createSprite(w, h)) {
-        M5Cardputer.Display.setTextSize(scale);
-        M5Cardputer.Display.setTextColor(color, BLACK);
-        M5Cardputer.Display.setCursor(x, y);
-        M5Cardputer.Display.print(text);
-        return;
-    }
-    spr.setFont(&fonts::Font0);
-    spr.setTextSize(1);
-    spr.fillSprite(BLACK);
-    spr.setTextColor(WHITE, BLACK);
-    spr.setCursor(0, 0);
-    spr.print(text);
-
-    const int block = scale - 1; // 留 1px 缝隙
-    for (int py = 0; py < h; py++) {
-        for (int px = 0; px < w; px++) {
-            if (spr.readPixel(px, py) != 0) {
-                M5Cardputer.Display.fillRect(x + px * scale, y + py * scale, block, block, color);
-            }
-        }
-    }
-    spr.deleteSprite();
+    drawDotText(text, x, y, scale, color);
 }
 
 // 单个按键：深灰圆角底 + 点阵键名/三角 + 小字说明；按下时青底
@@ -1151,6 +1121,14 @@ static void drawAcFanIcon() {
     M5Cardputer.Display.print(acFanName(g_ac_fan)[0]);
 }
 
+// 顶排最右：电源状态图标（ac_power / ac_power_active）
+static void drawAcPowerIcon() {
+    const int x = irPadColX(2) + (IR_PAGE_BTN_W - AC_MODE_ICON_PX) / 2;
+    const int y = AC_PAGE_ICON_CY - AC_MODE_ICON_PX / 2;
+    M5Cardputer.Display.fillRect(x, y, AC_MODE_ICON_PX, AC_MODE_ICON_PX, BLACK);
+    drawAcModeIconAt("ac_power", x, y, g_ac_power);
+}
+
 static void drawAcTemp() {
     char buf[8];
     snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(g_ac_temp));
@@ -1180,6 +1158,7 @@ static void drawAcPage() {
     drawIrSignalIcon();
     drawAcModeIcon();
     drawAcFanIcon();
+    drawAcPowerIcon();
     drawAcTemp();
     drawAcBrandLogo();
     for (int i = 0; i < AC_PAD_BTN_COUNT; i++) {
@@ -1527,8 +1506,9 @@ void handleIrApp(const Keyboard_Class::KeysState& status) {
                 g_ac_field = static_cast<int>(IrAcField::Power);
                 g_ac_power = !g_ac_power;
                 pressAcBtn(IrAcBtn::Power);
-                // 关机态：模式图标与温度转灰
+                // 关机态：模式/电源图标与温度转灰
                 drawAcModeIcon();
+                drawAcPowerIcon();
                 drawAcTemp();
                 return;
             }

@@ -6,6 +6,29 @@
 
 ---
 
+## 2026-08-03
+
+### 新增
+
+- **Mini Games 视觉效果**（第 2 页）：`MATRIX` 代码雨、`WAVE` 多层贝塞尔丝波、`PCLOCK` 粒子时钟、`LISSA` 利萨茹曲线；无标题叠字，`-` / `=` 调速，`Space` / BtnA 脉冲
+- **公共点阵字** `drawDotText` / `measureDotTextWidth1x`：Font0 1× 渲染后再按 scale 画方块并留 1px 缝，IR 与 Time Big Clock 共用
+- **Infrared AC 电源图标**：顶排第 3 列显示 `ac_power` / `ac_power_active`，随开关态刷新
+- **米家插座电源图标**：右栏用 `/icon/power[_active].png` 显示开关态；开关变化会触发面板重绘
+- **Icon Demo**：补 `ir ac_power` 与通用 `power` 图标对
+
+### 改进
+
+- **Time**：Uptime / Clock 默认即全屏 pure，去掉 `p` 切换与配置项 `time.pure`（Settings / Config Web / example 同步删除）
+- **Time 省电**：Clock-like 模式无操作满 1 分钟后主循环 1s 一拍并对齐整秒；有操作时约 30ms；Big Clock（仅 HH:MM）活跃时 15s 检查一次
+- **Time UI**：切模式时左上角短暂显示模式名；Big Clock 改用点阵大字，不再单独画秒
+- **Infrared**：AC 点阵字改为调用公共 `drawDotText`
+
+### 修复
+
+- **LISSA**：去掉拖尾残影；相位 / 形变与曲线参数分离，消除 `a(t)·t` 导致的越转越快，速度档重新生效
+
+---
+
 ## 2026-07-31
 
 ### 新增

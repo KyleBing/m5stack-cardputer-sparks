@@ -178,6 +178,57 @@ void drawHintText(const int x, const int y, const char* text, const int text_siz
     }
 }
 
+int measureDotTextWidth1x(const char* text) {
+    if (text == nullptr || text[0] == '\0') {
+        return 0;
+    }
+    M5Cardputer.Display.setFont(&fonts::Font0);
+    M5Cardputer.Display.setTextSize(1);
+    const int w = M5Cardputer.Display.textWidth(text);
+    M5Cardputer.Display.setTextFont(1);
+    return w;
+}
+
+// 点阵风格文字：先 1x 渲染到离屏 sprite，再按 scale 画带 1px 缝隙的方块
+void drawDotText(const char* text, const int x, const int y, const int scale,
+                 const uint16_t color) {
+    if (text == nullptr || text[0] == '\0') {
+        return;
+    }
+    M5Cardputer.Display.setFont(&fonts::Font0);
+    M5Cardputer.Display.setTextSize(1);
+    const int w = M5Cardputer.Display.textWidth(text);
+    M5Canvas spr(&M5Cardputer.Display);
+    spr.setColorDepth(16);
+    if (scale < 2 || w <= 0 || !spr.createSprite(w, DOT_TEXT_H_1X)) {
+        M5Cardputer.Display.setTextSize(scale < 1 ? 1 : scale);
+        M5Cardputer.Display.setTextColor(color, BLACK);
+        M5Cardputer.Display.setCursor(x, y);
+        M5Cardputer.Display.print(text);
+        M5Cardputer.Display.setTextFont(1);
+        M5Cardputer.Display.setTextSize(1);
+        return;
+    }
+    spr.setFont(&fonts::Font0);
+    spr.setTextSize(1);
+    spr.fillSprite(BLACK);
+    spr.setTextColor(WHITE, BLACK);
+    spr.setCursor(0, 0);
+    spr.print(text);
+
+    const int block = scale - 1; // 留 1px 缝隙
+    for (int py = 0; py < DOT_TEXT_H_1X; py++) {
+        for (int px = 0; px < w; px++) {
+            if (spr.readPixel(px, py) != 0) {
+                M5Cardputer.Display.fillRect(x + px * scale, y + py * scale, block, block, color);
+            }
+        }
+    }
+    spr.deleteSprite();
+    M5Cardputer.Display.setTextFont(1);
+    M5Cardputer.Display.setTextSize(1);
+}
+
 void drawInfoLineAt(const int x, const int y, const char* label, const char* value,
                     const int text_size) {
     M5Cardputer.Display.setTextSize(text_size);
