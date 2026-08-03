@@ -50,13 +50,13 @@ Local miIO (LAN) and BLE Mijia device control: detail, list, grid, groups, and d
 | `i` | Off |
 | `t` / **BtnGO** | Toggle |
 | `r` | Refresh status (BLE scan for sensors) |
-| `q` | Quick-select page |
+| `q` | Quick-select keymap (keyboard occupancy) |
 | `Fn` + `q` | Edit hotkey for current device |
 | `l` | List view |
 | `g` | Grid view |
 | `d` | Group view |
 | `;` `,` / ↑← · `.` `/` / ↓→ | Switch device / page (depends on view) |
-| `[` `]` | Page grid / quick-select |
+| `[` `]` | Page grid |
 
 ### List
 
@@ -89,10 +89,11 @@ Bottom tip example: page `pN/M` · arrow page · `l` · `g`
 
 ### Quick select (`q`)
 
+Shows the real Cardputer keyboard layout with occupied hotkeys highlighted, plus bound device names below (hotkey letter tinted in the name). If any hotkeys are configured, this page opens first when entering Mijia. No tip bar; `q` goes back.
+
 | Key | Action |
 |------|------|
-| `q` | Back |
-| `[` `]` | Page |
+| `q` | Back to detail |
 | Configured `a`–`z` / `0`–`9` | Jump to device (`q` reserved for this page) |
 
 ### Hotkey edit (`Fn+q`)

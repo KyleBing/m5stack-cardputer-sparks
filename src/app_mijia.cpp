@@ -24,11 +24,10 @@ static bool mijiaOverviewMode = false; // 是否在概览模式
 static bool mijiaOverviewGridMode = false; // 是否在宫格模式
 static bool mijiaGroupMode = false; // 是否在编组模式（d 键）
 static bool mijiaHelpVisible = false; // 是否在帮助模式
-static bool mijiaQuickSelectMode = false; // Q 快速选择页
+static bool mijiaQuickSelectMode = false; // Q 快速选择 keymap 页
 static bool mijiaHotkeyEditMode = false;  // Fn+Q 编辑当前设备快捷键
 static char mijiaHotkeyEditPending = '\0'; // 编辑中待保存的快捷键
 static int mijiaHotkeyEditConflictIdx = -1; // 冲突设备下标；-1 无冲突
-static int mijiaQuickSelectScroll = 0; // 快速选择页滚动起始项
 static int mijiaOverviewScrollIdx = 0; // 概览模式下的滚动索引
 static int mijiaOverviewEntryDeviceIdx = 0; // 概览模式下的入口设备索引
 static int mijiaGroupIdx = 0; // 当前编组
@@ -198,6 +197,8 @@ static void enterMijiaHotkeyEdit();
 static void exitMijiaHotkeyEdit(bool redraw);
 static void confirmMijiaHotkeyEdit();
 static uint16_t mijiaHotkeyLetterColor(char c);
+static bool mijiaHasAnyHotkey();
+static void drawMijiaKbKey(int x, int y, int w, int h, char ch);
 static void invalidateMijiaControlSurface();
 static void applyMijiaControlRefresh(bool force_full = false);
 static void drawMijiaOverview(int& y);
@@ -2711,7 +2712,6 @@ static void openMijiaDeviceControl(const int idx) {
 
 static void exitMijiaQuickSelect() {
     mijiaQuickSelectMode = false;
-    mijiaQuickSelectScroll = 0;
 }
 
 static void enterMijiaQuickSelect() {
@@ -2720,8 +2720,154 @@ static void enterMijiaQuickSelect() {
     }
     mijiaHelpVisible = false;
     mijiaQuickSelectMode = true;
-    mijiaQuickSelectScroll = 0;
     redrawMijiaScreen();
+}
+
+// 是否已配置任意快速切换热键
+static bool mijiaHasAnyHotkey() {
+    const AppConfig& cfg = getAppConfig();
+    if (!cfg.loaded) {
+        return false;
+    }
+    for (int i = 0; i < cfg.device_count; i++) {
+        if (cfg.devices[i].hotkey != '\0') {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Cardputer 键帽显示字符（修饰键等返回 '\0'）
+static char mijiaKbDisplayChar(const char ch) {
+    if (ch >= 'a' && ch <= 'z') {
+        return static_cast<char>(toupper(static_cast<unsigned char>(ch)));
+    }
+    if ((ch >= '0' && ch <= '9') || ch == '`' || ch == '-' || ch == '=' || ch == '[' ||
+        ch == ']' || ch == '\\' || ch == ';' || ch == '\'' || ch == ',' || ch == '.' ||
+        ch == '/') {
+        return ch;
+    }
+    if (ch == '\b') {
+        return '<'; // Backspace
+    }
+    if (ch == '\t') {
+        return '>'; // Tab
+    }
+    return '\0';
+}
+
+// 画单个键帽：占用=彩色填充；可热键未占用=暗底灰字；q 保留=橙字；其它=空帽
+static void drawMijiaKbKey(const int x, const int y, const int w, const int h, const char ch) {
+    constexpr uint16_t kCapBg = 0x18C3;  // 空帽 / 修饰
+    constexpr uint16_t kFreeBg = 0x2104; // 可设未占用
+    const bool is_digit = (ch >= '0' && ch <= '9');
+    const bool is_letter = (ch >= 'a' && ch <= 'z');
+    const bool is_hotkey_slot = is_digit || is_letter;
+    const bool is_reserved_q = (ch == 'q');
+    const int bound_idx =
+        is_hotkey_slot && !is_reserved_q ? mijiaFindDeviceIndexByHotkey(ch) : -1;
+    const bool occupied = (bound_idx >= 0);
+
+    uint16_t bg = kCapBg;
+    uint16_t fg = APP_COLOR_MUTED;
+    if (occupied) {
+        bg = mijiaHotkeyLetterColor(ch);
+        fg = APP_COLOR_KEY_TEXT;
+    } else if (is_reserved_q) {
+        bg = kFreeBg;
+        fg = APP_COLOR_WARN;
+    } else if (is_hotkey_slot) {
+        bg = kFreeBg;
+        fg = APP_COLOR_HINT;
+    }
+
+    M5Cardputer.Display.fillRoundRect(x, y, w, h, 2, bg);
+
+    const char label = mijiaKbDisplayChar(ch);
+    if (label == '\0') {
+        return;
+    }
+    const char str[2] = {label, '\0'};
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(fg, bg);
+    const int tw = M5Cardputer.Display.textWidth(str);
+    const int tx = x + (w - tw) / 2;
+    const int ty = y + (h - 8) / 2;
+    M5Cardputer.Display.setCursor(tx, ty);
+    M5Cardputer.Display.print(str);
+}
+
+// 设备名内高亮热键字母（x2）；其余 x1。名中无该字母时前置彩色热键。返回占用宽度
+static int drawMijiaHotkeyDeviceLabel(const int x, const int y, const char* name,
+                                     const char hotkey) {
+    const char* src = (name != nullptr && name[0] != '\0') ? name : "device";
+    const uint16_t hk_color = mijiaHotkeyLetterColor(hotkey);
+    // x2 字高 16，x1 字高 8：小字垂直居中对齐大字
+    constexpr int y_small = 4;
+
+    // 找名中首个与热键同字（忽略大小写）
+    int mark = -1;
+    for (int i = 0; src[i] != '\0'; i++) {
+        char c = src[i];
+        if (c >= 'A' && c <= 'Z') {
+            c = static_cast<char>(c - 'A' + 'a');
+        }
+        if (c == hotkey) {
+            mark = i;
+            break;
+        }
+    }
+
+    int cx = x;
+    if (mark < 0) {
+        // 名中无热键字母：前置彩色字母（x2）
+        const char letter[2] = {hotkey, '\0'};
+        M5Cardputer.Display.setTextSize(2);
+        M5Cardputer.Display.setTextColor(hk_color, BLACK);
+        M5Cardputer.Display.setCursor(cx, y);
+        M5Cardputer.Display.print(letter);
+        cx += M5Cardputer.Display.textWidth(letter) + 2;
+    }
+
+    for (int i = 0; src[i] != '\0'; i++) {
+        const char ch[2] = {src[i], '\0'};
+        const bool is_hk = (i == mark);
+        M5Cardputer.Display.setTextSize(is_hk ? 2 : 1);
+        M5Cardputer.Display.setTextColor(is_hk ? hk_color : APP_COLOR_VALUE, BLACK);
+        M5Cardputer.Display.setCursor(cx, is_hk ? y : y + y_small);
+        M5Cardputer.Display.print(ch);
+        cx += M5Cardputer.Display.textWidth(ch);
+    }
+    return cx - x;
+}
+
+// 估算设备名标签宽度（与 drawMijiaHotkeyDeviceLabel 一致）
+static int measureMijiaHotkeyDeviceLabel(const char* name, const char hotkey) {
+    const char* src = (name != nullptr && name[0] != '\0') ? name : "device";
+    int mark = -1;
+    for (int i = 0; src[i] != '\0'; i++) {
+        char c = src[i];
+        if (c >= 'A' && c <= 'Z') {
+            c = static_cast<char>(c - 'A' + 'a');
+        }
+        if (c == hotkey) {
+            mark = i;
+            break;
+        }
+    }
+
+    int w = 0;
+    if (mark < 0) {
+        const char letter[2] = {hotkey, '\0'};
+        M5Cardputer.Display.setTextSize(2);
+        w += M5Cardputer.Display.textWidth(letter) + 2;
+    }
+    for (int i = 0; src[i] != '\0'; i++) {
+        const char ch[2] = {src[i], '\0'};
+        M5Cardputer.Display.setTextSize(i == mark ? 2 : 1);
+        w += M5Cardputer.Display.textWidth(ch);
+    }
+    return w;
 }
 
 static void exitMijiaHotkeyEdit(const bool redraw) {
@@ -2783,97 +2929,73 @@ static void confirmMijiaHotkeyEdit() {
     exitMijiaHotkeyEdit(true);
 }
 
-// 快速选择：无 Header，尽量多行；彩色字母 + 白字英文名
+// 快速选择：顶部正方形键占用图 + 下方横排已绑定设备名
 static void drawMijiaQuickSelectPage() {
     M5Cardputer.Display.fillScreen(BLACK);
 
-    const AppConfig& cfg = getAppConfig();
-    constexpr int pad_x = 2;
-    constexpr int pad_top = 2;
-    constexpr int hint_h = 11;
-    constexpr int cols = 2;
-    constexpr int row_h = INFO_LINE_H;
+    constexpr int pad_x = 1;
+    constexpr int pad_top = 1;
+    constexpr int cols = 14;
+    constexpr int rows = 4;
+    constexpr int gap = 1;
+    // Cardputer 物理布局（与 _key_value_map 一致）；\x01..\x05 为修饰键
+    static const char kLayout[rows][cols] = {
+        {'`', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b'},
+        {'\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\\'},
+        {'\x01', '\x02', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '\n'},
+        {'\x03', '\x04', '\x05', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', ' '},
+    };
+
     const int screen_w = M5Cardputer.Display.width();
     const int screen_h = M5Cardputer.Display.height();
-    const int col_w = (screen_w - pad_x * 2) / cols;
-    const int rows = (screen_h - pad_top - hint_h) / row_h;
-    const int page_size = rows * cols;
+    const int area_w = screen_w - pad_x * 2;
+    // 正方形键：边长取列宽
+    const int key_w = (area_w - gap * (cols - 1)) / cols;
+    const int key_h = key_w;
+    const int grid_w = key_w * cols + gap * (cols - 1);
+    const int grid_h = key_h * rows + gap * (rows - 1);
+    const int origin_x = pad_x + (area_w - grid_w) / 2;
+    const int origin_y = pad_top; // 键盘顶对齐
 
-    // 收集已设快捷键的设备
-    int indices[MIJIA_DEVICE_MAX];
-    int count = 0;
-    if (cfg.loaded) {
-        for (int i = 0; i < cfg.device_count && count < MIJIA_DEVICE_MAX; i++) {
-            if (cfg.devices[i].hotkey != '\0') {
-                indices[count++] = i;
-            }
+    for (int r = 0; r < rows; r++) {
+        for (int c = 0; c < cols; c++) {
+            const int x = origin_x + c * (key_w + gap);
+            const int y = origin_y + r * (key_h + gap);
+            drawMijiaKbKey(x, y, key_w, key_h, kLayout[r][c]);
         }
     }
 
-    if (count == 0) {
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(pad_x, pad_top);
-        M5Cardputer.Display.print("no hotkeys");
-        M5Cardputer.Display.setCursor(pad_x, pad_top + row_h);
-        M5Cardputer.Display.print("Fn+Q set / web config");
-    } else {
-        if (mijiaQuickSelectScroll >= count) {
-            mijiaQuickSelectScroll = 0;
-        }
-        if (mijiaQuickSelectScroll < 0) {
-            mijiaQuickSelectScroll = 0;
-        }
+    // 剩余空间横排已绑定设备名；热键字母 x2，其余 x1
+    constexpr int list_gap_x = 8;
+    constexpr int list_row_h = INFO_LINE_H_2X;
+    constexpr int list_pad_top = 4;
+    const int list_x0 = pad_x + 1;
+    const int list_y0 = origin_y + grid_h + list_pad_top;
+    const int list_max_x = screen_w - pad_x - 1;
+    const int list_max_y = screen_h - 1;
 
-        for (int slot = 0; slot < page_size; slot++) {
-            const int list_i = mijiaQuickSelectScroll + slot;
-            if (list_i >= count) {
-                break;
-            }
-            const int di = indices[list_i];
-            const MijiaDevice& d = cfg.devices[di];
-            const int col = slot / rows;
-            const int row = slot % rows;
-            const int x = pad_x + col * col_w;
-            const int y = pad_top + row * row_h;
-
-            char letter[2] = {d.hotkey, '\0'};
-            M5Cardputer.Display.setTextSize(1);
-            M5Cardputer.Display.setTextColor(mijiaHotkeyLetterColor(d.hotkey), BLACK);
-            M5Cardputer.Display.setCursor(x, y);
-            M5Cardputer.Display.print(letter);
-
-            const int name_x = x + M5Cardputer.Display.textWidth(letter) + 3;
-            M5Cardputer.Display.setTextColor(APP_COLOR_VALUE, BLACK);
-            M5Cardputer.Display.setCursor(name_x, y);
-            const char* name = d.name[0] != '\0' ? d.name : "device";
-            // 截断避免跨列
-            char buf[28];
-            strncpy(buf, name, sizeof(buf) - 1);
-            buf[sizeof(buf) - 1] = '\0';
-            const int max_w = col_w - (name_x - x) - 2;
-            while (buf[0] != '\0' && M5Cardputer.Display.textWidth(buf) > max_w) {
-                buf[strlen(buf) - 1] = '\0';
-            }
-            M5Cardputer.Display.print(buf);
-        }
+    const AppConfig& cfg = getAppConfig();
+    int cx = list_x0;
+    int cy = list_y0;
+    if (!cfg.loaded) {
+        return;
     }
-
-    // 底栏：q 退出；多页时 [ ]
-    const int hint_y = screen_h - hint_h;
-    int cx = pad_x;
-    cx += drawKeyBadge(cx, hint_y, 'q', 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, hint_y);
-    M5Cardputer.Display.print("back");
-    if (count > page_size) {
-        cx += M5Cardputer.Display.textWidth("back") + 6;
-        cx += drawTextBadge(cx, hint_y, "[ ]", 1);
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(cx, hint_y);
-        M5Cardputer.Display.print("page");
+    for (int i = 0; i < cfg.device_count; i++) {
+        const MijiaDevice& d = cfg.devices[i];
+        if (d.hotkey == '\0') {
+            continue;
+        }
+        const char* name = d.name[0] != '\0' ? d.name : "device";
+        const int label_w = measureMijiaHotkeyDeviceLabel(name, d.hotkey);
+        if (cx > list_x0 && cx + label_w > list_max_x) {
+            cx = list_x0;
+            cy += list_row_h;
+        }
+        if (cy + list_row_h > list_max_y) {
+            break;
+        }
+        drawMijiaHotkeyDeviceLabel(cx, cy, name, d.hotkey);
+        cx += label_w + list_gap_x;
     }
 }
 
@@ -2966,40 +3088,11 @@ bool handleMijiaHotkeyUi(const Keyboard_Class::KeysState& status) {
         return true; // 吞掉其它键
     }
 
-    // 快速选择页
+    // 快速选择 keymap 页：q 返回；占用键直达设备
     if (mijiaQuickSelectMode) {
         for (const char c : status.word) {
             if (c == 'q' || c == 'Q') {
                 exitMijiaQuickSelect();
-                redrawMijiaScreen();
-                return true;
-            }
-            if (c == '[' || c == ']') {
-                const AppConfig& cfg = getAppConfig();
-                int count = 0;
-                for (int i = 0; i < cfg.device_count; i++) {
-                    if (cfg.devices[i].hotkey != '\0') {
-                        count++;
-                    }
-                }
-                const int rows =
-                    (M5Cardputer.Display.height() - 2 - 11) / INFO_LINE_H;
-                const int page_size = rows * 2;
-                if (count <= page_size) {
-                    return true;
-                }
-                if (c == '[') {
-                    mijiaQuickSelectScroll -= page_size;
-                    if (mijiaQuickSelectScroll < 0) {
-                        const int pages = (count + page_size - 1) / page_size;
-                        mijiaQuickSelectScroll = (pages - 1) * page_size;
-                    }
-                } else {
-                    mijiaQuickSelectScroll += page_size;
-                    if (mijiaQuickSelectScroll >= count) {
-                        mijiaQuickSelectScroll = 0;
-                    }
-                }
                 redrawMijiaScreen();
                 return true;
             }
@@ -3010,12 +3103,13 @@ bool handleMijiaHotkeyUi(const Keyboard_Class::KeysState& status) {
             if (!((match >= 'a' && match <= 'z') || (match >= '0' && match <= '9'))) {
                 continue;
             }
-            const AppConfig& cfg = getAppConfig();
-            for (int i = 0; i < cfg.device_count; i++) {
-                if (cfg.devices[i].hotkey == match) {
-                    openMijiaDeviceControl(i);
-                    return true;
-                }
+            if (match == 'q') {
+                continue;
+            }
+            const int idx = mijiaFindDeviceIndexByHotkey(match);
+            if (idx >= 0) {
+                openMijiaDeviceControl(idx);
+                return true;
             }
         }
         return true;
@@ -3396,7 +3490,6 @@ void enterMijiaApp() {
     mijiaHotkeyEditMode = false;
     mijiaHotkeyEditPending = '\0';
     mijiaHotkeyEditConflictIdx = -1;
-    mijiaQuickSelectScroll = 0;
     mijiaOverviewScrollIdx = 0;
     mijiaGroupIdx = 0;
     mijiaGroupScrollIdx = 0;
@@ -3426,9 +3519,14 @@ void enterMijiaApp() {
                     sizeof(mijiaUi.status));
         }
     }
-    applyMijiaControlRefresh(true);
     startMijiaWifiConnect();
     requestMijiaBleBackground();
+    // 有快速切换热键时优先进入 keymap 层
+    if (mijiaHasAnyHotkey()) {
+        enterMijiaQuickSelect();
+    } else {
+        applyMijiaControlRefresh(true);
+    }
 }
 
 void leaveMijiaApp() {
