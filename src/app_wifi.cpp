@@ -12,6 +12,7 @@ static constexpr int WIFI_SAVED_PAGE_SIZE = 3; // 已保存：一页 3 条，均
 static constexpr int WIFI_SCAN_PAGE_SIZE = 4;  // 扫网：一页 4 条
 static constexpr int WIFI_CONTENT_TOP = APP_CONTENT_Y_NO_TAP_TO_HEADER + 2; // 贴 header 下沿
 static constexpr int WIFI_CONTENT_BOTTOM_PAD = 2;
+static constexpr int WIFI_SCAN_FOOTER_H = 12; // 扫网底栏：条数 + 页码
 static constexpr int WIFI_LIST_LINE_H = 24; // 状态页行距
 static constexpr int WIFI_CARD_GAP = 2; // 已保存卡片间距（越小卡片越高）
 static constexpr int WIFI_PASS_MAX = 64;
@@ -157,17 +158,23 @@ static int wifiSavedSlotHeight() {
     return wifiContentHeight() / WIFI_SAVED_PAGE_SIZE;
 }
 
-// 扫网列表：内容区均分给每页条数
-static int wifiScanSlotHeight() {
-    return wifiContentHeight() / WIFI_SCAN_PAGE_SIZE;
+// 扫网列表：扣除底栏后，剩余高度均分给每页条数
+static int wifiScanListHeight() {
+    return wifiContentHeight() - WIFI_SCAN_FOOTER_H;
 }
 
-// 已保存卡片：圆角底 + 序号 x2 垂直居中，返回 label 起始 x（序号右 + 10px）
-// draw_border=false 时只有底色，用于未选中项
+static int wifiScanSlotHeight() {
+    return wifiScanListHeight() / WIFI_SCAN_PAGE_SIZE;
+}
+
+// 已保存卡片：选中项才铺底色；可选描边；序号 x2 垂直居中，返回 label 起始 x
 static int drawWifiItemCard(const int x, const int y, const int w, const int h, const int num,
-                            const uint16_t accent, const uint16_t border, const bool draw_border) {
-    const uint16_t card_bg = wifiCardBg();
-    M5Cardputer.Display.fillRoundRect(x, y, w, h, 4, card_bg);
+                            const uint16_t accent, const uint16_t border, const bool draw_border,
+                            const bool draw_bg) {
+    const uint16_t card_bg = draw_bg ? wifiCardBg() : BLACK;
+    if (draw_bg) {
+        M5Cardputer.Display.fillRoundRect(x, y, w, h, 4, card_bg);
+    }
     if (draw_border) {
         M5Cardputer.Display.drawRoundRect(x, y, w, h, 4, border);
     }
@@ -355,14 +362,15 @@ static void drawWifiSavedScreen() {
 
         const uint16_t accent =
             is_connected ? APP_COLOR_OK : (is_connecting ? APP_COLOR_WARN : wifiCardAccentGold());
-        // 光标项黄框；其余仅 active / 已连上的项描边
+        // 仅选中项铺底色；active / 已连上绿框，光标项黄框优先
         const bool show_border = is_sel || is_active || is_connected;
-        const uint16_t border = is_sel ? YELLOW : accent;
+        const uint16_t border =
+            is_sel ? YELLOW : ((is_active || is_connected) ? APP_COLOR_OK : accent);
         // 序号 x2 居中，返回与 label 间距 10px 后的起始 x
-        const int name_x =
-            drawWifiItemCard(card_x, card_y, card_w, card_h, row + 1, accent, border, show_border);
+        const int name_x = drawWifiItemCard(card_x, card_y, card_w, card_h, row + 1, accent, border,
+                                            show_border, is_sel);
 
-        const uint16_t card_bg = wifiCardBg();
+        const uint16_t card_bg = is_sel ? wifiCardBg() : BLACK;
         int name_max_w = card_x + card_w - ROW_RIGHT_GAP - name_x;
 
         if (is_connected) {
@@ -419,7 +427,7 @@ static void drawWifiSavedScreen() {
     }
 }
 
-// 扫网列表：纯文本行（黄字序号 x2 + SSID + 右侧 RSSI/信号）
+// 扫网列表：纯文本行（黄字序号 x2 + SSID + 右侧 RSSI/信号）；底栏条数/页码
 static void drawWifiListScreen() {
     beginWifiScreen();
 
@@ -430,6 +438,7 @@ static void drawWifiListScreen() {
     constexpr int ROW_RIGHT_GAP = 2;
     constexpr int RSSI_SIGNAL_GAP = 4;
     const int num_h = infoLineHeight(2);
+    const int list_h = wifiScanListHeight();
     const int slot_h = wifiScanSlotHeight();
 
     for (int i = start; i < end; i++) {
@@ -488,6 +497,17 @@ static void drawWifiListScreen() {
         M5Cardputer.Display.setCursor(APP_CONTENT_X, WIFI_CONTENT_TOP);
         M5Cardputer.Display.println("no network");
     }
+
+    // 底栏：列表总数 + 页码（列表区已均分剩余高度）
+    const int footer_y = WIFI_CONTENT_TOP + list_h + (WIFI_SCAN_FOOTER_H - 8) / 2;
+    const int page_count = getWifiListPageCount();
+    char footer_buf[24];
+    snprintf(footer_buf, sizeof(footer_buf), "%d  %d/%d", wifiScanCount, wifiListPage + 1,
+             page_count);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(APP_CONTENT_X, footer_y);
+    M5Cardputer.Display.print(footer_buf);
 }
 
 // 按键提示项：徽章 + 说明（徽章后恢复说明文字颜色），返回下一项起始 x

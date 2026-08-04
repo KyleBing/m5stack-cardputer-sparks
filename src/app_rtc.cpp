@@ -111,18 +111,46 @@ static int drawTimeHelpText(const int x, const int y, const char* text) {
     return y + TIME_HELP_LINE_H;
 }
 
-static const char* timeHelpModeName() {
-    switch (timeMode) {
-        case TimeMode::UPTIME:
-            return "UP";
-        case TimeMode::CLOCK:
-            return "CLK";
-        case TimeMode::COUNTDOWN:
-            return "CD";
-        case TimeMode::STOPWATCH:
-            return "SW";
+// 彩色按键徽章（模块入口行用）
+static int drawTimeHelpColoredKey(const int x, const int y, const char key, const uint16_t bg) {
+    const char letter = static_cast<char>(toupper(static_cast<unsigned char>(key)));
+    const char str[2] = {letter, '\0'};
+    M5Cardputer.Display.setTextSize(1);
+    const int tw = M5Cardputer.Display.textWidth(str);
+    constexpr int pad_x = 2;
+    constexpr int pad_y = 1;
+    const int bw = tw + pad_x * 2;
+    const int bh = 8 + pad_y * 2;
+    M5Cardputer.Display.fillRoundRect(x, y, bw, bh, 2, bg);
+    M5Cardputer.Display.setTextColor(APP_COLOR_KEY_TEXT, bg);
+    M5Cardputer.Display.setCursor(x + pad_x, y + pad_y);
+    M5Cardputer.Display.print(str);
+    return bw + 3;
+}
+
+// 一排模块入口：彩色首字母键 + 剩余字母（如 T + ime）
+static void drawTimeHelpModulesRow(const int y) {
+    struct Entry {
+        char key;
+        const char* rest; // 名称去掉首字母后的部分
+        uint16_t color;
+    };
+    // u/t/c/s 与切模式热键一致；键底分色便于扫读
+    const Entry entries[] = {
+        {'u', "ptime", APP_COLOR_LABEL},
+        {'t', "ime", APP_COLOR_VALUE},
+        {'c', "ountdown", APP_COLOR_WARN},
+        {'s', "topwatch", APP_COLOR_OK},
+    };
+    int cx = 2;
+    for (const Entry& e : entries) {
+        cx += drawTimeHelpColoredKey(cx, y, e.key, e.color);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK); // 徽章后恢复说明色
+        M5Cardputer.Display.setCursor(cx, y + 1);
+        M5Cardputer.Display.print(e.rest);
+        cx = M5Cardputer.Display.getCursorX() + 6;
     }
-    return "";
 }
 
 // 模式切换时左上角小字提示用的名称
@@ -161,7 +189,8 @@ static void drawTimeModeLabelOverlay() {
 
     const char* name = timeModeLabelName();
     M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    // 主题蓝（与 Help / header accent 同色）
+    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
     M5Cardputer.Display.setCursor(TIME_MODE_LABEL_X, TIME_MODE_LABEL_Y);
     M5Cardputer.Display.print(name);
     timeModeLabelVisible = true;
@@ -174,17 +203,25 @@ static void showTimeModeLabel() {
 }
 
 static void drawTimeHelpScreen() {
-    beginAppScreenAccent("Help ", timeHelpModeName(), APP_COLOR_LABEL);
-    int y = APP_CONTENT_INSET_Y;
+    // 无 header：全屏黑底，不响应全局 header 刷新
+    M5Cardputer.Display.fillScreen(BLACK);
 
-    // 每个 Time 子模块只显示与当前模块相关的帮助
+    // 标题 Help（x2），与下方内容间距 10px
+    constexpr int title_y = 2;
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
+    M5Cardputer.Display.setCursor(2, title_y);
+    M5Cardputer.Display.print("Help");
+    int y = title_y + 16 + 10;
+
+    // 当前模块功能说明
     switch (timeMode) {
         case TimeMode::UPTIME:
             y = drawTimeHelpText(2, y, "Shows time since device boot.");
             break;
         case TimeMode::CLOCK:
             y = drawTimeHelpKey(2, y, 'r', "sync time over WiFi");
-            y = drawTimeHelpKey(2, y, 'b', "big clock (dot)");
+            y = drawTimeHelpKey(2, y, 'b', "big clock");
             y = drawTimeHelpText(2, y, "Uses RTC; sync source is NTP.");
             break;
         case TimeMode::COUNTDOWN:
@@ -201,8 +238,11 @@ static void drawTimeHelpScreen() {
             break;
     }
 
+    // 所有模块入口一排（彩色首字母 + 剩余字母），贴在底栏 close 上方
+    const int modules_y = M5Cardputer.Display.height() - 12 - TIME_HELP_LINE_H - 2;
+    drawTimeHelpModulesRow(modules_y);
+
     drawHelpHintRight("close");
-    updateAppHeaderStatus();
 }
 
 static void redrawCurrentTimeMode() {
@@ -212,11 +252,12 @@ static void redrawCurrentTimeMode() {
 }
 
 static void drawRtcBusyScreen(const char* msg) {
-    beginAppScreenAccent("Time ", "CLK", APP_COLOR_LABEL);
+    // 同步中提示：无 header，全屏
+    M5Cardputer.Display.fillScreen(BLACK);
     rtcScreenReady = true;
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y + 4);
+    M5Cardputer.Display.setCursor(APP_CONTENT_X, 8);
     M5Cardputer.Display.println(msg);
 }
 
@@ -390,30 +431,30 @@ static void drawRtcPureLargeClockApp(const bool full_init) {
         pureLargeClockLastTime[0] = '\0';
     }
 
-    const int screen_w = M5Cardputer.Display.width();
-    const int screen_h = M5Cardputer.Display.height();
-    // Font0 1x 宽高，按 scale 放大且方块间留 1px（同 IR 温度数字）
-    const int glyph_w = measureDotTextWidth1x("00:00");
-    constexpr int glyph_h = DOT_TEXT_H_1X;
-    int scale = 2;
-    for (int candidate = 12; candidate >= 2; candidate--) {
-        if (glyph_w * candidate <= screen_w && glyph_h * candidate <= screen_h) {
-            scale = candidate;
-            break;
-        }
-    }
-    // 最大可用再缩一级，给边缘留呼吸空间
-    if (scale > 2) {
-        scale--;
-    }
-    const int time_w = glyph_w * scale;
-    const int time_h = glyph_h * scale;
-    const int time_x = (screen_w - time_w) / 2;
-    const int time_y = (screen_h - time_h) / 2;
-
     if (full_init || strcmp(time_buf, pureLargeClockLastTime) != 0) {
-        M5Cardputer.Display.fillRect(0, time_y, screen_w, time_h, BLACK);
-        drawDotText(time_buf, time_x, time_y, scale, WHITE);
+        const int screen_w = M5Cardputer.Display.width();
+        const int screen_h = M5Cardputer.Display.height();
+        const int margin = APP_CONTENT_X;
+        const int avail_w = screen_w - margin * 2;
+        // 原字体放大：取能放下 HH:MM 的最大 textSize
+        int ts = 1;
+        for (int candidate = 12; candidate >= 1; candidate--) {
+            M5Cardputer.Display.setTextSize(candidate);
+            if (M5Cardputer.Display.textWidth(time_buf) <= avail_w &&
+                8 * candidate <= screen_h) {
+                ts = candidate;
+                break;
+            }
+        }
+        M5Cardputer.Display.setTextSize(ts);
+        const int time_w = M5Cardputer.Display.textWidth(time_buf);
+        const int time_h = 8 * ts;
+        const int time_x = (screen_w - time_w) / 2;
+        const int time_y = (screen_h - time_h) / 2;
+        M5Cardputer.Display.fillScreen(BLACK);
+        M5Cardputer.Display.setTextColor(WHITE, BLACK);
+        M5Cardputer.Display.setCursor(time_x, time_y);
+        M5Cardputer.Display.print(time_buf);
         strncpy(pureLargeClockLastTime, time_buf, sizeof(pureLargeClockLastTime) - 1);
         pureLargeClockLastTime[sizeof(pureLargeClockLastTime) - 1] = '\0';
     }
@@ -464,14 +505,14 @@ static void drawRtcPureApp(const bool full_init) {
     }
 }
 
-// Clock 未校时时的错误页（pure 主界面无时间可读时回退到此）
+// Clock 未校时时的错误页（无 header）
 static void drawRtcApp(const bool full_init) {
     if (!full_init && rtcScreenReady) {
         return;
     }
-    beginAppScreenAccent("Time ", "CLK", APP_COLOR_LABEL);
+    M5Cardputer.Display.fillScreen(BLACK);
     rtcScreenReady = true;
-    int y = APP_CONTENT_INSET_Y;
+    int y = 8;
     drawInfoLineAt(APP_CONTENT_X, y, "time", "not set", RTC_FAIL_TEXT_SIZE);
     y += INFO_LINE_H_2X;
     const AppConfig& cfg = getAppConfig();
@@ -644,8 +685,8 @@ void handleTimeApp(const Keyboard_Class::KeysState& status) {
 }
 
 bool isTimePureMode() {
-    // Time 固定全屏 pure 显示（Help 页除外，由调用方结合 AppState 判断）
-    return !timeHelpVisible;
+    // Time 全部页面（含 Help / 同步提示）均无 header
+    return true;
 }
 
 bool isTimeClockLikeMode() {

@@ -2,7 +2,6 @@
 #include "app_colors.h"
 #include "app_common.h"
 #include "app_header.h"
-#include "app_rtc.h"
 #include "app_time_ui.h"
 #include <cstring>
 
@@ -71,17 +70,7 @@ static uint32_t cdSetupTotalMs() {
 
 // 结束提示贴在大字下方，不占底栏
 static void getCountdownDisplayArea(int& area_y, int& area_h) {
-    if (isTimePureMode()) {
-        getTimePureDisplayArea(area_y, area_h);
-        return;
-    }
-    if (cdPhase == CountdownPhase::FINISHED) {
-        const int screen_h = M5Cardputer.Display.height();
-        area_y = APP_CONTENT_INSET_Y;
-        area_h = screen_h - area_y;
-        return;
-    }
-    getTimeDisplayArea(area_y, area_h);
+    getTimePureDisplayArea(area_y, area_h);
 }
 
 static void cdGetDisplayHms(int& hours, int& minutes, int& seconds) {
@@ -339,14 +328,9 @@ static void drawCountdownChrome() {
         drawCountdownFinishedCancelHint();
         return;
     }
-    if (isTimePureMode()) {
-        if (cdPhase != CountdownPhase::SETUP) {
-            drawCountdownStateBanner();
-        }
-        return;
+    if (cdPhase != CountdownPhase::SETUP) {
+        drawCountdownStateBanner();
     }
-    // 按键 tip 已迁到 Help，主界面只保留 RUN / PAUSED 状态
-    drawCountdownStateBanner();
 }
 
 static void cdInvalidateTimeCache() {
@@ -362,26 +346,13 @@ static void drawCountdownApp(const bool full_init) {
     getCountdownDisplayArea(area_y, area_h);
 
     if (full_init || !cdScreenReady) {
-        if (isTimePureMode()) {
-            if (full_init) {
-                M5Cardputer.Display.fillScreen(BLACK);
-            }
-            cdScreenReady = true;
-            cdInvalidateTimeCache();
-            cdTs = 0;
-            // 先画时间再画 chrome：force fillRect 会盖住左下角 RUN/PAUSED
-            drawCountdownTime(area_y, area_h, true);
-            drawCountdownChrome();
-            return;
-        }
-        // 到点页：标题强调 UP
-        if (cdPhase == CountdownPhase::FINISHED) {
-            beginAppScreenAccent("Time ", "UP", APP_COLOR_ERROR);
-        } else {
-            beginAppScreenAccent("Time ", "CD", APP_COLOR_LABEL);
+        if (full_init) {
+            M5Cardputer.Display.fillScreen(BLACK);
         }
         cdScreenReady = true;
         cdInvalidateTimeCache();
+        cdTs = 0;
+        // 先画时间再画 chrome：force fillRect 会盖住左下角 RUN/PAUSED
         drawCountdownTime(area_y, area_h, true);
         drawCountdownChrome();
         return;

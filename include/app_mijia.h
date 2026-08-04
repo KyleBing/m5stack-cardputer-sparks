@@ -9,7 +9,7 @@ void drawMijiaApp();
 void handleMijiaApp(const String& key);
 // Q 快速选择 / Fn+Q 编辑快捷键；在这些模式下吞掉按键
 bool handleMijiaHotkeyUi(const Keyboard_Class::KeysState& status);
-// 快速选择 / 快捷键编辑：无 Header，抑制主循环 header 刷新
+// 快速选择 / 快捷键编辑 / Exiting：无 Header，抑制主循环 header 刷新
 bool mijiaAppSuppressesHeader();
 // 概览导航：宫格方向键选设备、[ ] 翻页；列表上下选中、左右翻页；编组切组/翻页；回车回控制页
 bool handleMijiaOverviewPageNav(const Keyboard_Class::KeysState& status);

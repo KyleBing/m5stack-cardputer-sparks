@@ -26,6 +26,7 @@ static bool mijiaGroupMode = false; // 是否在编组模式（d 键）
 static bool mijiaHelpVisible = false; // 是否在帮助模式
 static bool mijiaQuickSelectMode = false; // Q 快速选择 keymap 页
 static bool mijiaHotkeyEditMode = false;  // Fn+Q 编辑当前设备快捷键
+static bool mijiaExiting = false;         // leave 期间全屏 Exiting，禁止刷 header
 static char mijiaHotkeyEditPending = '\0'; // 编辑中待保存的快捷键
 static int mijiaHotkeyEditConflictIdx = -1; // 冲突设备下标；-1 无冲突
 static int mijiaOverviewScrollIdx = 0; // 概览模式下的滚动索引
@@ -2968,7 +2969,7 @@ static void drawMijiaQuickSelectPage() {
     // 剩余空间横排已绑定设备名；热键字母 x2，其余 x1
     constexpr int list_gap_x = 8;
     constexpr int list_row_h = INFO_LINE_H_2X;
-    constexpr int list_pad_top = 4;
+    constexpr int list_pad_top = 10; // 下文与上方键盘图形间隔
     const int list_x0 = pad_x + 1;
     const int list_y0 = origin_y + grid_h + list_pad_top;
     const int list_max_x = screen_w - pad_x - 1;
@@ -3530,6 +3531,14 @@ void enterMijiaApp() {
 }
 
 void leaveMijiaApp() {
+    // 先进入 exiting：立刻全屏覆盖 header，并继续压制状态图标刷新
+    mijiaExiting = true;
+    M5Cardputer.Display.fillScreen(BLACK);
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.drawCenterString("Exiting.", M5Cardputer.Display.width() / 2,
+                                         M5Cardputer.Display.height() / 2 - 8);
+
     mijiaBleBgEnabled = false;
     mijiaBleScanPending = false;
     mijiaBleFocusActive = false;
@@ -3548,15 +3557,11 @@ void leaveMijiaApp() {
     freeMijiaOverviewUi();
     // 退出后完整释放 BLE（仅停扫会留下协议栈，额外耗电）；deinit 可能稍慢
     if (isBleStackReady()) {
-        clearAppContentArea();
-        M5Cardputer.Display.setTextSize(2);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.drawCenterString("Exiting.", M5Cardputer.Display.width() / 2,
-                                             APP_CONTENT_INSET_Y + 36);
         resetBleStackFully();
     }
     // 立刻关射频
     releaseConfigWifi();
+    mijiaExiting = false;
 }
 
 void updateMijiaApp() {
@@ -3664,7 +3669,7 @@ void updateMijiaApp() {
 }
 
 bool mijiaAppSuppressesHeader() {
-    return mijiaQuickSelectMode || mijiaHotkeyEditMode;
+    return mijiaQuickSelectMode || mijiaHotkeyEditMode || mijiaExiting;
 }
 
 // BtnA：快捷键编辑确认；控制页 / Grid 切换当前设备；编组页切换整组

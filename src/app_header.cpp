@@ -3,6 +3,7 @@
 #include "app_common.h"
 #include "app_connectivity.h"
 #include "app_hid_keyboard.h"
+#include "app_mijia.h"
 #include "M5Cardputer.h"
 
 static constexpr int MENU_LOGO_SIZE = 24;
@@ -228,8 +229,8 @@ void updateMenuHeaderStatus(const int page_count) {
 }
 
 void updateAppHeaderStatus() {
-    // Keyboard 主界面 / Hosts / 退出 Exiting 期间禁止刷蓝牙等图标
-    if (hidKeyboardSuppressesHeader()) {
+    // Keyboard / 米家 Exiting 等期间禁止刷蓝牙等图标
+    if (hidKeyboardSuppressesHeader() || mijiaAppSuppressesHeader()) {
         return;
     }
     static int prev_clear_left = -1;

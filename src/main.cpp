@@ -112,7 +112,7 @@ static const MenuItem MENU_ITEMS[] = {
     {'w', "WiFi", "WIFI", AppState::WIFI},
     {'t', "Time", "TIME", AppState::RTC},
     {'s', "Slp", "SLEEP", AppState::SLEEP},
-    {'o', "Opt", "OPTIONS", AppState::SETTINGS},
+    {'o', "Opt", "Options", AppState::SETTINGS},
     {'i', "Inf", "INFO", AppState::INFO},
     {'p', "Bat", "BATTERY", AppState::BATTERY},
     {'c', "Cur", "CURSOR", AppState::CURSOR},
@@ -932,7 +932,7 @@ void drawBmiApp() {
     updateBmiZPanel(panelW, panelW, contentTop, contentH, az);
 }
 
-// ===== SETTINGS =====
+// ===== SETTINGS（L1 模块列表 → L2 详情 → L3 选择页）=====
 
 enum class SettingsModule : uint8_t {
     Screen = 0,
@@ -943,15 +943,35 @@ enum class SettingsModule : uint8_t {
     Count = 5,
 };
 
-enum class SettingsFocus : uint8_t { List = 0, Panel = 1 };
+enum class SettingsLayer : uint8_t { List = 0, Detail = 1, Picker = 2 };
+
+enum class SettingsPickerKind : uint8_t {
+    None = 0,
+    TimeDefault,
+    Timezone,
+    IrDefault,
+    IrTvBrand,
+    IrAcBrand,
+};
 
 static SettingsModule g_settings_module = SettingsModule::Screen;
-static SettingsFocus g_settings_focus = SettingsFocus::List;
-static int g_settings_row = 0; // 右侧行选中
-static constexpr int SETTINGS_LIST_W = 66;
+static SettingsLayer g_settings_layer = SettingsLayer::List;
+static int g_settings_row = 0; // L2 行选中
+static SettingsPickerKind g_picker_kind = SettingsPickerKind::None;
+static int g_picker_index = 0;
+static int g_picker_scroll = 0;
 static constexpr int SETTINGS_HINT_H = 12;
-static constexpr int SETTINGS_LIST_TEXT_PAD_X = 10;
-static constexpr int SETTINGS_PANEL_PAD = 6;
+static constexpr int SETTINGS_ROW_H = 12;      // L2 / L3 行高（字号 1）
+static constexpr int SETTINGS_LIST_ROW_H = 18; // L1 行高（字号 2）
+static constexpr int SETTINGS_PAD_X = 4;
+static constexpr int SETTINGS_PAD_Y = 2;
+
+// 与 cycleAppTimezonePreset 预设表保持一致
+static const char* const kSettingsTzPresets[] = {
+    "CST-8", "JST-9", "KST-9", "UTC", "GMT0", "CET-1", "EST5", "PST8",
+};
+static constexpr int kSettingsTzPresetCount =
+    static_cast<int>(sizeof(kSettingsTzPresets) / sizeof(kSettingsTzPresets[0]));
 
 static const char* settingsModuleName(const SettingsModule mod) {
     switch (mod) {
@@ -973,15 +993,15 @@ static const char* settingsModuleName(const SettingsModule mod) {
 static int settingsPanelRowCount(const SettingsModule mod) {
     switch (mod) {
         case SettingsModule::Screen:
-            return 2; // bright / invert
+            return 2; // brightness / invert
         case SettingsModule::Sound:
-            return 3; // volume / time key / mijia pwr
+            return 3; // volume / time key / mijia on/off
         case SettingsModule::Time:
             return 2; // default / timezone
         case SettingsModule::Calendar:
             return 1; // week start
         case SettingsModule::Infrared:
-            return 3; // category / tv brand / ac brand
+            return 3; // category / tv / ac
         default:
             return 0;
     }
@@ -1047,7 +1067,7 @@ static int getSettingsUpDownDelta(const Keyboard_Class::KeysState& status) {
     return 0;
 }
 
-// 左右键：焦点切换
+// 左右键：L1 进入 / L2·L3 返回
 static int getSettingsLeftRightDelta(const Keyboard_Class::KeysState& status) {
     for (const uint8_t hid : status.hid_keys) {
         if (hid == 0x50 || hid == 0x36) {
@@ -1081,21 +1101,6 @@ static int getSettingsValueDelta(const Keyboard_Class::KeysState& status) {
     return 0;
 }
 
-// Tab 键（HID 0x2B / '\t'）
-static bool isSettingsTabKey(const Keyboard_Class::KeysState& status) {
-    for (const uint8_t hid : status.hid_keys) {
-        if (hid == 0x2B) {
-            return true;
-        }
-    }
-    for (const char c : status.word) {
-        if (c == '\t') {
-            return true;
-        }
-    }
-    return false;
-}
-
 static const char* timeDefaultModeLabel(const TimeDefaultMode mode) {
     switch (mode) {
         case TimeDefaultMode::Ntp:
@@ -1117,27 +1122,207 @@ static TimeDefaultMode cycleTimeDefaultMode(const TimeDefaultMode cur, const int
     return static_cast<TimeDefaultMode>(idx);
 }
 
-static void drawSettingsModuleList(const int list_x, const int list_y, const int list_h) {
-    M5Cardputer.Display.fillRect(list_x, list_y, SETTINGS_LIST_W, list_h, BLACK);
-    M5Cardputer.Display.setTextSize(1);
-    constexpr int row_h = 12;
-    const bool list_focus = (g_settings_focus == SettingsFocus::List);
-    for (int i = 0; i < static_cast<int>(SettingsModule::Count); i++) {
-        const SettingsModule mod = static_cast<SettingsModule>(i);
-        const int y = list_y + i * row_h;
-        const bool selected = (mod == g_settings_module);
-        const char* name = settingsModuleName(mod);
-        if (selected && list_focus) {
-            M5Cardputer.Display.fillRect(list_x, y, SETTINGS_LIST_W - 2, row_h, APP_COLOR_MENU_KEY);
-            M5Cardputer.Display.setTextColor(APP_COLOR_KEY_TEXT, APP_COLOR_MENU_KEY);
-        } else if (selected) {
-            M5Cardputer.Display.drawRect(list_x, y, SETTINGS_LIST_W - 2, row_h, APP_COLOR_MUTED);
-            M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        } else {
-            M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+static int findSettingsTzPresetIndex(const char* tz) {
+    if (tz == nullptr || tz[0] == '\0') {
+        return 0;
+    }
+    for (int i = 0; i < kSettingsTzPresetCount; i++) {
+        if (strcmp(tz, kSettingsTzPresets[i]) == 0) {
+            return i;
         }
-        M5Cardputer.Display.setCursor(list_x + SETTINGS_LIST_TEXT_PAD_X, y + 2);
-        M5Cardputer.Display.print(name);
+    }
+    return 0;
+}
+
+static int settingsPickerCount(const SettingsPickerKind kind) {
+    switch (kind) {
+        case SettingsPickerKind::TimeDefault:
+            return 4;
+        case SettingsPickerKind::Timezone:
+            return kSettingsTzPresetCount;
+        case SettingsPickerKind::IrDefault:
+            return 2;
+        case SettingsPickerKind::IrTvBrand:
+            return IR_TV_BRAND_COUNT;
+        case SettingsPickerKind::IrAcBrand:
+            return IR_AC_BRAND_COUNT;
+        default:
+            return 0;
+    }
+}
+
+static const char* settingsPickerLabel(const SettingsPickerKind kind, const int index) {
+    switch (kind) {
+        case SettingsPickerKind::TimeDefault:
+            return timeDefaultModeLabel(static_cast<TimeDefaultMode>(index));
+        case SettingsPickerKind::Timezone:
+            if (index >= 0 && index < kSettingsTzPresetCount) {
+                return kSettingsTzPresets[index];
+            }
+            return "?";
+        case SettingsPickerKind::IrDefault:
+            return index == 1 ? "AC" : "TV";
+        case SettingsPickerKind::IrTvBrand:
+            return irTvBrandDisplayName(static_cast<uint8_t>(index));
+        case SettingsPickerKind::IrAcBrand:
+            return irAcBrandDisplayName(static_cast<uint8_t>(index));
+        default:
+            return "?";
+    }
+}
+
+static const char* settingsPickerTitle(const SettingsPickerKind kind) {
+    switch (kind) {
+        case SettingsPickerKind::TimeDefault:
+            return "default";
+        case SettingsPickerKind::Timezone:
+            return "timezone";
+        case SettingsPickerKind::IrDefault:
+            return "default";
+        case SettingsPickerKind::IrTvBrand:
+            return "tv brand";
+        case SettingsPickerKind::IrAcBrand:
+            return "ac brand";
+        default:
+            return "pick";
+    }
+}
+
+// 当前行是否进 L3 选择页（开关类不进）
+static bool settingsRowOpensPicker(const SettingsModule mod, const int row) {
+    switch (mod) {
+        case SettingsModule::Time:
+            return row == 0 || row == 1;
+        case SettingsModule::Infrared:
+            return row >= 0 && row <= 2;
+        default:
+            return false;
+    }
+}
+
+static void openSettingsPickerForCurrentRow() {
+    g_picker_kind = SettingsPickerKind::None;
+    g_picker_index = 0;
+    g_picker_scroll = 0;
+    const AppConfig& cfg = getAppConfig();
+    if (g_settings_module == SettingsModule::Time) {
+        if (g_settings_row == 0) {
+            g_picker_kind = SettingsPickerKind::TimeDefault;
+            g_picker_index = static_cast<int>(cfg.time_default_mode);
+        } else if (g_settings_row == 1) {
+            g_picker_kind = SettingsPickerKind::Timezone;
+            g_picker_index = findSettingsTzPresetIndex(getAppTimezone());
+        }
+    } else if (g_settings_module == SettingsModule::Infrared) {
+        if (g_settings_row == 0) {
+            g_picker_kind = SettingsPickerKind::IrDefault;
+            g_picker_index = cfg.infrared_default == IrDefaultCategory::Ac ? 1 : 0;
+        } else if (g_settings_row == 1) {
+            g_picker_kind = SettingsPickerKind::IrTvBrand;
+            g_picker_index = cfg.infrared_tv_brand;
+        } else if (g_settings_row == 2) {
+            g_picker_kind = SettingsPickerKind::IrAcBrand;
+            g_picker_index = cfg.infrared_ac_brand;
+        }
+    }
+    if (g_picker_kind == SettingsPickerKind::None) {
+        return;
+    }
+    const int n = settingsPickerCount(g_picker_kind);
+    if (g_picker_index < 0) {
+        g_picker_index = 0;
+    }
+    if (n > 0 && g_picker_index >= n) {
+        g_picker_index = n - 1;
+    }
+    g_settings_layer = SettingsLayer::Picker;
+}
+
+static void applySettingsPickerSelection() {
+    switch (g_picker_kind) {
+        case SettingsPickerKind::TimeDefault:
+            saveAppConfigTimeDefaultMode(static_cast<TimeDefaultMode>(g_picker_index));
+            break;
+        case SettingsPickerKind::Timezone:
+            if (g_picker_index >= 0 && g_picker_index < kSettingsTzPresetCount) {
+                if (saveAppConfigTimezone(kSettingsTzPresets[g_picker_index])) {
+                    applyLocalTimezone();
+                }
+            }
+            break;
+        case SettingsPickerKind::IrDefault:
+        case SettingsPickerKind::IrTvBrand:
+        case SettingsPickerKind::IrAcBrand: {
+            const AppConfig& cfg = getAppConfig();
+            IrDefaultCategory cat = cfg.infrared_default;
+            uint8_t tv = cfg.infrared_tv_brand;
+            uint8_t ac = cfg.infrared_ac_brand;
+            if (g_picker_kind == SettingsPickerKind::IrDefault) {
+                cat = g_picker_index == 1 ? IrDefaultCategory::Ac : IrDefaultCategory::Tv;
+            } else if (g_picker_kind == SettingsPickerKind::IrTvBrand) {
+                tv = static_cast<uint8_t>(g_picker_index);
+            } else {
+                ac = static_cast<uint8_t>(g_picker_index);
+            }
+            saveAppConfigInfrared(cat, tv, ac);
+            break;
+        }
+        default:
+            break;
+    }
+    g_picker_kind = SettingsPickerKind::None;
+    g_settings_layer = SettingsLayer::Detail;
+}
+
+static void settingsEnsureScroll(int& scroll, const int selected, const int count,
+                                 const int visible) {
+    if (visible <= 0 || count <= 0) {
+        scroll = 0;
+        return;
+    }
+    if (selected < scroll) {
+        scroll = selected;
+    }
+    if (selected >= scroll + visible) {
+        scroll = selected - visible + 1;
+    }
+    const int max_scroll = count > visible ? count - visible : 0;
+    if (scroll < 0) {
+        scroll = 0;
+    }
+    if (scroll > max_scroll) {
+        scroll = max_scroll;
+    }
+}
+
+// L1 右侧摘要：不进详情也能扫一眼
+static void settingsModuleSummary(const SettingsModule mod, char* buf, const size_t buf_len) {
+    if (buf == nullptr || buf_len == 0) {
+        return;
+    }
+    buf[0] = '\0';
+    const AppConfig& cfg = getAppConfig();
+    switch (mod) {
+        case SettingsModule::Screen:
+            snprintf(buf, buf_len, "%d",
+                     brightnessHwToPercent(M5Cardputer.Display.getBrightness()));
+            break;
+        case SettingsModule::Sound:
+            snprintf(buf, buf_len, "%d", getAppSpeakerVolumePercent());
+            break;
+        case SettingsModule::Time:
+            snprintf(buf, buf_len, "%s", timeDefaultModeLabel(cfg.time_default_mode));
+            break;
+        case SettingsModule::Calendar:
+            snprintf(buf, buf_len, "%s",
+                     cfg.week_start == WeekStartDay::Monday ? "Mon" : "Sun");
+            break;
+        case SettingsModule::Infrared:
+            snprintf(buf, buf_len, "%s",
+                     cfg.infrared_default == IrDefaultCategory::Ac ? "AC" : "TV");
+            break;
+        default:
+            break;
     }
 }
 
@@ -1151,83 +1336,142 @@ static void drawSettingsBrightBar(const int x, const int y, const int w, const i
     }
 }
 
-static void drawSettingsRowLabel(const int x, const int y, const int w, const char* label,
-                                 const char* value, const uint16_t value_color,
-                                 const bool selected) {
-    if (selected && g_settings_focus == SettingsFocus::Panel) {
-        M5Cardputer.Display.fillRect(x - 2, y - 1, w + 4, INFO_LINE_H + 2, 0x2104);
+// 全宽选中行：黄底黑字 label + 右侧 value；text_size 1 或 2
+static void drawSettingsSelectRow(const int x, const int y, const int w, const int row_h,
+                                  const int text_size, const char* label, const char* value,
+                                  const uint16_t value_color, const bool selected) {
+    const int size = text_size == 2 ? 2 : 1;
+    M5Cardputer.Display.setTextSize(size);
+    if (selected) {
+        M5Cardputer.Display.fillRect(x, y, w, row_h, APP_COLOR_MENU_KEY);
+        M5Cardputer.Display.setTextColor(APP_COLOR_KEY_TEXT, APP_COLOR_MENU_KEY);
+    } else {
+        M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
     }
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(
-        (selected && g_settings_focus == SettingsFocus::Panel) ? APP_COLOR_MENU_KEY : APP_COLOR_LABEL,
-        BLACK);
-    M5Cardputer.Display.setCursor(x, y);
+    const int text_y = y + (row_h - 8 * size) / 2;
+    M5Cardputer.Display.setCursor(x + 2, text_y);
     M5Cardputer.Display.print(label);
-    M5Cardputer.Display.setTextColor(value_color, BLACK);
-    M5Cardputer.Display.setCursor(x + w - M5Cardputer.Display.textWidth(value), y);
-    M5Cardputer.Display.print(value);
+    if (value != nullptr && value[0] != '\0') {
+        const uint16_t bg = selected ? APP_COLOR_MENU_KEY : BLACK;
+        const uint16_t fg = selected ? APP_COLOR_KEY_TEXT : value_color;
+        M5Cardputer.Display.setTextColor(fg, bg);
+        M5Cardputer.Display.setCursor(x + w - M5Cardputer.Display.textWidth(value) - 2, text_y);
+        M5Cardputer.Display.print(value);
+    }
 }
 
-static void drawSettingsScreenPanel(const int x, const int y, const int w) {
-    const int pct = brightnessHwToPercent(M5Cardputer.Display.getBrightness());
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%d", pct);
+static void drawSettingsListLayer(const int content_y, const int content_h) {
+    const int screen_w = M5Cardputer.Display.width();
+    const int x = SETTINGS_PAD_X;
+    const int w = screen_w - SETTINGS_PAD_X * 2;
+    const int visible = content_h / SETTINGS_LIST_ROW_H;
+    const int count = static_cast<int>(SettingsModule::Count);
+    int scroll = 0;
+    settingsEnsureScroll(scroll, static_cast<int>(g_settings_module), count, visible);
 
-    drawSettingsRowLabel(x, y, w, "bright", buf, INFO_VALUE_COLOR, g_settings_row == 0);
-
-    constexpr int bar_h = 8;
-    const int bar_y = y + INFO_LINE_H;
-    drawSettingsBrightBar(x, bar_y, w, bar_h, pct);
-
-    const bool inverted = M5Cardputer.Display.getInvert();
-    const int inv_y = bar_y + bar_h + 4;
-    drawSettingsRowLabel(x, inv_y, w, "invert", inverted ? "ON" : "OFF",
-                         inverted ? APP_COLOR_OK : APP_COLOR_HINT, g_settings_row == 1);
+    for (int i = 0; i < visible; i++) {
+        const int idx = scroll + i;
+        if (idx >= count) {
+            break;
+        }
+        const SettingsModule mod = static_cast<SettingsModule>(idx);
+        char summary[24];
+        settingsModuleSummary(mod, summary, sizeof(summary));
+        const int y = content_y + SETTINGS_PAD_Y + i * SETTINGS_LIST_ROW_H;
+        // L1 模块列表字号 x2
+        drawSettingsSelectRow(x, y, w, SETTINGS_LIST_ROW_H, 2, settingsModuleName(mod), summary,
+                              APP_COLOR_VALUE, mod == g_settings_module);
+    }
 }
 
-static void drawSettingsSoundPanel(const int x, const int y, const int w) {
-    const int vol = getAppSpeakerVolumePercent();
-    char vol_buf[8];
-    snprintf(vol_buf, sizeof(vol_buf), "%d", vol);
-    drawSettingsRowLabel(x, y, w, "volume", vol_buf, INFO_VALUE_COLOR, g_settings_row == 0);
-    constexpr int bar_h = 6;
-    const int bar_y = y + INFO_LINE_H + 1;
-    drawSettingsBrightBar(x, bar_y, w, bar_h, vol);
+static void drawSettingsDetailLayer(const int content_y, const int content_h) {
+    (void)content_h;
+    const int screen_w = M5Cardputer.Display.width();
+    const int x = SETTINGS_PAD_X;
+    const int w = screen_w - SETTINGS_PAD_X * 2;
+    int y = content_y + SETTINGS_PAD_Y;
 
-    const bool time_on = isTimeKeySoundEnabled();
-    const int time_y = bar_y + bar_h + 4;
-    drawSettingsRowLabel(x, time_y, w, "time key", time_on ? "ON" : "OFF",
-                         time_on ? APP_COLOR_OK : APP_COLOR_HINT, g_settings_row == 1);
+    auto draw_row = [&](const int row, const char* label, const char* value,
+                        const uint16_t value_color, const bool with_bar, const int bar_pct) {
+        drawSettingsSelectRow(x, y, w, SETTINGS_ROW_H, 1, label, value, value_color,
+                              g_settings_row == row);
+        y += SETTINGS_ROW_H;
+        if (with_bar) {
+            constexpr int bar_h = 6;
+            drawSettingsBrightBar(x + 2, y, w - 4, bar_h, bar_pct);
+            y += bar_h + 2;
+        }
+    };
 
-    const bool mijia_on = isMijiaOnOffSoundEnabled();
-    const int mijia_y = time_y + INFO_LINE_H + 2;
-    drawSettingsRowLabel(x, mijia_y, w, "mijia pwr", mijia_on ? "ON" : "OFF",
-                         mijia_on ? APP_COLOR_OK : APP_COLOR_HINT, g_settings_row == 2);
+    switch (g_settings_module) {
+        case SettingsModule::Screen: {
+            const int pct = brightnessHwToPercent(M5Cardputer.Display.getBrightness());
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%d", pct);
+            draw_row(0, "brightness", buf, INFO_VALUE_COLOR, true, pct);
+            const bool inverted = M5Cardputer.Display.getInvert();
+            draw_row(1, "invert", inverted ? "ON" : "OFF",
+                     inverted ? APP_COLOR_OK : APP_COLOR_HINT, false, 0);
+            break;
+        }
+        case SettingsModule::Sound: {
+            const int vol = getAppSpeakerVolumePercent();
+            char vol_buf[8];
+            snprintf(vol_buf, sizeof(vol_buf), "%d", vol);
+            draw_row(0, "volume", vol_buf, INFO_VALUE_COLOR, true, vol);
+            const bool time_on = isTimeKeySoundEnabled();
+            draw_row(1, "time key", time_on ? "ON" : "OFF",
+                     time_on ? APP_COLOR_OK : APP_COLOR_HINT, false, 0);
+            const bool mijia_on = isMijiaOnOffSoundEnabled();
+            draw_row(2, "mijia on/off", mijia_on ? "ON" : "OFF",
+                     mijia_on ? APP_COLOR_OK : APP_COLOR_HINT, false, 0);
+            break;
+        }
+        case SettingsModule::Time: {
+            const AppConfig& cfg = getAppConfig();
+            draw_row(0, "default", timeDefaultModeLabel(cfg.time_default_mode), APP_COLOR_VALUE,
+                     false, 0);
+            draw_row(1, "timezone", getAppTimezone(), APP_COLOR_VALUE, false, 0);
+            break;
+        }
+        case SettingsModule::Calendar: {
+            const AppConfig& cfg = getAppConfig();
+            const char* week_start = cfg.week_start == WeekStartDay::Monday ? "Mon" : "Sun";
+            draw_row(0, "week start", week_start, APP_COLOR_VALUE, false, 0);
+            break;
+        }
+        case SettingsModule::Infrared: {
+            const AppConfig& cfg = getAppConfig();
+            const char* cat = cfg.infrared_default == IrDefaultCategory::Ac ? "AC" : "TV";
+            draw_row(0, "default", cat, APP_COLOR_VALUE, false, 0);
+            draw_row(1, "tv brand", irTvBrandDisplayName(cfg.infrared_tv_brand), APP_COLOR_VALUE,
+                     false, 0);
+            draw_row(2, "ac brand", irAcBrandDisplayName(cfg.infrared_ac_brand), APP_COLOR_VALUE,
+                     false, 0);
+            break;
+        }
+        default:
+            break;
+    }
 }
 
-static void drawSettingsTimePanel(const int x, const int y, const int w) {
-    const AppConfig& cfg = getAppConfig();
-    drawSettingsRowLabel(x, y, w, "default", timeDefaultModeLabel(cfg.time_default_mode),
-                         APP_COLOR_VALUE, g_settings_row == 0);
-    drawSettingsRowLabel(x, y + INFO_LINE_H, w, "tz", getAppTimezone(), APP_COLOR_VALUE,
-                         g_settings_row == 1);
-}
+static void drawSettingsPickerLayer(const int content_y, const int content_h) {
+    const int screen_w = M5Cardputer.Display.width();
+    const int x = SETTINGS_PAD_X;
+    const int w = screen_w - SETTINGS_PAD_X * 2;
+    const int visible = content_h / SETTINGS_ROW_H;
+    const int count = settingsPickerCount(g_picker_kind);
+    settingsEnsureScroll(g_picker_scroll, g_picker_index, count, visible);
 
-static void drawSettingsCalendarPanel(const int x, const int y, const int w) {
-    const AppConfig& cfg = getAppConfig();
-    const char* week_start = cfg.week_start == WeekStartDay::Monday ? "Mon" : "Sun";
-    drawSettingsRowLabel(x, y, w, "week", week_start, APP_COLOR_VALUE, g_settings_row == 0);
-}
-
-static void drawSettingsInfraredPanel(const int x, const int y, const int w) {
-    const AppConfig& cfg = getAppConfig();
-    const char* cat = cfg.infrared_default == IrDefaultCategory::Ac ? "AC" : "TV";
-    drawSettingsRowLabel(x, y, w, "default", cat, APP_COLOR_VALUE, g_settings_row == 0);
-    drawSettingsRowLabel(x, y + INFO_LINE_H, w, "tv", irTvBrandDisplayName(cfg.infrared_tv_brand),
-                         APP_COLOR_VALUE, g_settings_row == 1);
-    drawSettingsRowLabel(x, y + INFO_LINE_H * 2, w, "ac",
-                         irAcBrandDisplayName(cfg.infrared_ac_brand), APP_COLOR_VALUE,
-                         g_settings_row == 2);
+    for (int i = 0; i < visible; i++) {
+        const int idx = g_picker_scroll + i;
+        if (idx >= count) {
+            break;
+        }
+        const int y = content_y + SETTINGS_PAD_Y + i * SETTINGS_ROW_H;
+        drawSettingsSelectRow(x, y, w, SETTINGS_ROW_H, 1, settingsPickerLabel(g_picker_kind, idx),
+                              nullptr, APP_COLOR_VALUE, idx == g_picker_index);
+    }
 }
 
 static void drawSettingsHints() {
@@ -1237,71 +1481,57 @@ static void drawSettingsHints() {
                                  SETTINGS_HINT_H, BLACK);
 
     int cx = APP_CONTENT_X;
+    auto print_hint = [&](const char* text) {
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(cx, hint_y);
+        M5Cardputer.Display.print(text);
+        cx += M5Cardputer.Display.textWidth(text);
+    };
+
     cx += drawArrowUpBadge(cx, hint_y, 1);
     cx += drawArrowDownBadge(cx, hint_y, 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, hint_y);
-    const char* ud = (g_settings_focus == SettingsFocus::List) ? "mod " : "row ";
-    M5Cardputer.Display.print(ud);
-    cx += M5Cardputer.Display.textWidth(ud);
-
-    cx += drawArrowLeftBadge(cx, hint_y, 1);
-    cx += drawArrowRightBadge(cx, hint_y, 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, hint_y);
-    M5Cardputer.Display.print("focus ");
-    cx += M5Cardputer.Display.textWidth("focus ");
-
-    cx += drawTextBadge(cx, hint_y, "-=", 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, hint_y);
-    M5Cardputer.Display.print("val ");
-    cx += M5Cardputer.Display.textWidth("val ");
-    cx += drawTextBadge(cx, hint_y, "Tab", 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, hint_y);
-    M5Cardputer.Display.print(g_settings_focus == SettingsFocus::List ? "ok" : "val");
+    if (g_settings_layer == SettingsLayer::List) {
+        print_hint("select ");
+        cx += drawTextBadge(cx, hint_y, "Ent", 1);
+        print_hint("open");
+    } else if (g_settings_layer == SettingsLayer::Detail) {
+        print_hint("row ");
+        cx += drawTextBadge(cx, hint_y, "-=", 1);
+        print_hint("val ");
+        cx += drawTextBadge(cx, hint_y, "`", 1);
+        print_hint("back");
+    } else {
+        print_hint("pick ");
+        cx += drawTextBadge(cx, hint_y, "Ent", 1);
+        print_hint("ok ");
+        cx += drawTextBadge(cx, hint_y, "`", 1);
+        print_hint("back");
+    }
 }
 
 void drawSettingsApp() {
-    beginAppScreen(getMenuItemNameFull(AppState::SETTINGS));
+    const char* title = getMenuItemNameFull(AppState::SETTINGS);
+    if (g_settings_layer == SettingsLayer::Detail) {
+        title = settingsModuleName(g_settings_module);
+    } else if (g_settings_layer == SettingsLayer::Picker) {
+        title = settingsPickerTitle(g_picker_kind);
+    }
+    beginAppScreen(title);
 
-    const int screen_w = M5Cardputer.Display.width();
     const int screen_h = M5Cardputer.Display.height();
     const int content_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
     const int content_h = screen_h - content_y - SETTINGS_HINT_H;
-    const int list_x = 0;
-    const int panel_x = SETTINGS_LIST_W + 1;
-    const int panel_w = screen_w - panel_x;
-    const int panel_content_x = panel_x + SETTINGS_PANEL_PAD;
-    const int panel_content_y = content_y + SETTINGS_PANEL_PAD;
-    const int panel_content_w = panel_w - SETTINGS_PANEL_PAD * 2;
 
-    drawSettingsModuleList(list_x, content_y, content_h);
-    M5Cardputer.Display.drawFastVLine(SETTINGS_LIST_W, content_y, content_h, DARKGREY);
-
-    M5Cardputer.Display.fillRect(panel_x, content_y, panel_w, content_h, BLACK);
-    switch (g_settings_module) {
-        case SettingsModule::Screen:
-            drawSettingsScreenPanel(panel_content_x, panel_content_y, panel_content_w);
+    switch (g_settings_layer) {
+        case SettingsLayer::List:
+            drawSettingsListLayer(content_y, content_h);
             break;
-        case SettingsModule::Sound:
-            drawSettingsSoundPanel(panel_content_x, panel_content_y, panel_content_w);
+        case SettingsLayer::Detail:
+            drawSettingsDetailLayer(content_y, content_h);
             break;
-        case SettingsModule::Time:
-            drawSettingsTimePanel(panel_content_x, panel_content_y, panel_content_w);
-            break;
-        case SettingsModule::Calendar:
-            drawSettingsCalendarPanel(panel_content_x, panel_content_y, panel_content_w);
-            break;
-        case SettingsModule::Infrared:
-            drawSettingsInfraredPanel(panel_content_x, panel_content_y, panel_content_w);
-            break;
-        default:
+        case SettingsLayer::Picker:
+            drawSettingsPickerLayer(content_y, content_h);
             break;
     }
     drawSettingsHints();
@@ -1309,9 +1539,28 @@ void drawSettingsApp() {
 
 void enterSettingsApp() {
     g_settings_module = SettingsModule::Screen;
-    g_settings_focus = SettingsFocus::List;
+    g_settings_layer = SettingsLayer::List;
     g_settings_row = 0;
+    g_picker_kind = SettingsPickerKind::None;
+    g_picker_index = 0;
+    g_picker_scroll = 0;
     drawSettingsApp();
+}
+
+// `：L3→L2 / L2→L1；L1 交给全局回主菜单
+static bool handleSettingsBack() {
+    if (g_settings_layer == SettingsLayer::Picker) {
+        g_picker_kind = SettingsPickerKind::None;
+        g_settings_layer = SettingsLayer::Detail;
+        drawSettingsApp();
+        return true;
+    }
+    if (g_settings_layer == SettingsLayer::Detail) {
+        g_settings_layer = SettingsLayer::List;
+        drawSettingsApp();
+        return true;
+    }
+    return false;
 }
 
 static void applySettingsValueDelta(const int val_delta) {
@@ -1344,8 +1593,7 @@ static void applySettingsValueDelta(const int val_delta) {
                 saveAppConfigTimeDefaultMode(
                     cycleTimeDefaultMode(getAppConfig().time_default_mode, val_delta));
             } else if (g_settings_row == 1) {
-                const char* next_tz =
-                    cycleAppTimezonePreset(getAppTimezone(), val_delta);
+                const char* next_tz = cycleAppTimezonePreset(getAppTimezone(), val_delta);
                 if (saveAppConfigTimezone(next_tz)) {
                     applyLocalTimezone();
                 }
@@ -1380,36 +1628,26 @@ static void applySettingsValueDelta(const int val_delta) {
 }
 
 void handleSettingsApp(const Keyboard_Class::KeysState& status) {
-    // Tab：List 焦点=进入右侧；Panel 焦点=切换选项值（同 =）
-    if (isSettingsTabKey(status)) {
-        if (g_settings_focus == SettingsFocus::List) {
-            g_settings_focus = SettingsFocus::Panel;
-            clampSettingsRow();
-        } else {
-            applySettingsValueDelta(1);
-        }
-        drawSettingsApp();
-        flushBrightnessSave();
-        // volume 写盘由 pollSpeakerVolumeSave 防抖，避免挡 UI
-        return;
-    }
-
     const int lr = getSettingsLeftRightDelta(status);
     if (lr != 0) {
-        // 左右只切 List / Panel 焦点
-        if (lr > 0) {
-            g_settings_focus = SettingsFocus::Panel;
-            clampSettingsRow();
-        } else {
-            g_settings_focus = SettingsFocus::List;
+        if (g_settings_layer == SettingsLayer::List) {
+            if (lr > 0) {
+                g_settings_layer = SettingsLayer::Detail;
+                clampSettingsRow();
+                drawSettingsApp();
+            }
+            return;
         }
-        drawSettingsApp();
+        // L2 / L3：← 返回上一层
+        if (lr < 0) {
+            (void)handleSettingsBack();
+        }
         return;
     }
 
     const int ud = getSettingsUpDownDelta(status);
     if (ud != 0) {
-        if (g_settings_focus == SettingsFocus::List) {
+        if (g_settings_layer == SettingsLayer::List) {
             int next = static_cast<int>(g_settings_module) + ud;
             const int count = static_cast<int>(SettingsModule::Count);
             if (next < 0) {
@@ -1419,43 +1657,58 @@ void handleSettingsApp(const Keyboard_Class::KeysState& status) {
             }
             g_settings_module = static_cast<SettingsModule>(next);
             g_settings_row = 0;
-        } else {
-            // Panel 焦点：切行
+        } else if (g_settings_layer == SettingsLayer::Detail) {
             const int n = settingsPanelRowCount(g_settings_module);
             if (n > 0) {
                 g_settings_row = (g_settings_row + ud + n) % n;
+            }
+        } else {
+            const int n = settingsPickerCount(g_picker_kind);
+            if (n > 0) {
+                g_picker_index = (g_picker_index + ud + n) % n;
             }
         }
         drawSettingsApp();
         return;
     }
 
-    const int val_delta = getSettingsValueDelta(status);
-    if (val_delta != 0) {
-        applySettingsValueDelta(val_delta);
-        drawSettingsApp(); // 先刷新 UI
-        flushBrightnessSave();
-        // volume：内存已更新，LittleFS 写盘防抖到 poll，避免连续加减卡顿
-        return;
+    // L2：-= 改值；L3 不用 -=
+    if (g_settings_layer == SettingsLayer::Detail) {
+        const int val_delta = getSettingsValueDelta(status);
+        if (val_delta != 0) {
+            applySettingsValueDelta(val_delta);
+            drawSettingsApp();
+            flushBrightnessSave();
+            return;
+        }
     }
 
     if (status.enter) {
-        if (g_settings_focus == SettingsFocus::List) {
-            g_settings_focus = SettingsFocus::Panel;
+        if (g_settings_layer == SettingsLayer::List) {
+            g_settings_layer = SettingsLayer::Detail;
             clampSettingsRow();
+        } else if (g_settings_layer == SettingsLayer::Detail) {
+            if (settingsRowOpensPicker(g_settings_module, g_settings_row)) {
+                openSettingsPickerForCurrentRow();
+            } else {
+                applySettingsValueDelta(1);
+            }
         } else {
-            applySettingsValueDelta(1);
+            applySettingsPickerSelection();
         }
         drawSettingsApp();
         flushBrightnessSave();
         return;
     }
 
+    // 亮度数字快捷 / invert r / mijia m：仅 L2 screen·sound
+    if (g_settings_layer != SettingsLayer::Detail) {
+        return;
+    }
     String key;
     for (const char c : status.word) {
         key += c;
     }
-
     if (g_settings_module == SettingsModule::Screen) {
         if (key.length() == 1 && key[0] >= '0' && key[0] <= '9') {
             const int level = key[0] - '0';
@@ -1474,8 +1727,8 @@ void handleSettingsApp(const Keyboard_Class::KeysState& status) {
             drawSettingsApp();
         }
     }
-
     if (g_settings_module == SettingsModule::Sound && key == "m") {
+        flushSpeakerVolumeSave();
         saveAppConfigMijiaOnOffSound(!isMijiaOnOffSoundEnabled());
         drawSettingsApp();
     }
@@ -2699,6 +2952,9 @@ void loop() {
             if (currentState == AppState::HARDWARE_TESTS && handleHardwareTestsBack()) {
                 return;
             }
+            if (currentState == AppState::SETTINGS && handleSettingsBack()) {
+                return;
+            }
             if (currentState == AppState::MIC) {
                 leaveMicApp();
             }
@@ -2737,6 +2993,7 @@ void loop() {
                    currentState != AppState::NEON_FX && currentState != AppState::DICE &&
                    currentState != AppState::NEWTON_CRADLE && currentState != AppState::GAMES &&
                    currentState != AppState::HARDWARE_TESTS &&
+                   // Time 全屏无 header（含 Help），不刷状态图标
                    !(currentState == AppState::RTC && isTimePureMode()) &&
                    !(currentState == AppState::CURSOR && isCursorDisplayBlanked()) &&
                    !(currentState == AppState::MIJIA && mijiaAppSuppressesHeader()) &&

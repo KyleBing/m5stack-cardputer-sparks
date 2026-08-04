@@ -4,7 +4,7 @@
 #include "app_common.h"
 #include <cstdint>
 
-// 大字时间区（无底栏 tip，铺满 header 以下）
+// 大字时间区（无 header / 底栏 tip，整屏）
 void getTimeDisplayArea(int& area_y, int& area_h);
 
 // Pure 模式：整屏内容区

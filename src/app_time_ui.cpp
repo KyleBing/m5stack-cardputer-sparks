@@ -4,10 +4,10 @@
 #include <cstdio>
 
 void getTimeDisplayArea(int& area_y, int& area_h) {
-    // 模式在 Header accent；按键说明在 Help，内容区铺满 header 以下
+    // Time 无 header；内容区从顶部铺满（与 Pure 一致）
     const int screen_h = M5Cardputer.Display.height();
-    area_y = APP_CONTENT_INSET_Y;
-    area_h = screen_h - area_y;
+    area_y = 0;
+    area_h = screen_h;
 }
 
 void getTimePureDisplayArea(int& area_y, int& area_h) {

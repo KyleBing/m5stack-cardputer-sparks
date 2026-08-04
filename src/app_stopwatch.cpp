@@ -2,7 +2,6 @@
 #include "app_colors.h"
 #include "app_common.h"
 #include "app_header.h"
-#include "app_rtc.h"
 #include "app_time_ui.h"
 #include <cstdio>
 
@@ -23,11 +22,7 @@ static uint32_t swElapsedMs() {
 static void drawStopwatchStateBanner() {
     int area_y = 0;
     int area_h = 0;
-    if (isTimePureMode()) {
-        getTimePureDisplayArea(area_y, area_h);
-    } else {
-        getTimeDisplayArea(area_y, area_h);
-    }
+    getTimePureDisplayArea(area_y, area_h);
 
     M5Cardputer.Display.fillRect(APP_CONTENT_X, area_y + area_h - 10,
                                  M5Cardputer.Display.width() - APP_CONTENT_X * 2, 10, BLACK);
@@ -63,24 +58,12 @@ static void drawStopwatchTimeArea(const int area_y, const int area_h, const bool
 static void drawStopwatchApp(const bool full_init) {
     int area_y = 0;
     int area_h = 0;
-    if (isTimePureMode()) {
-        getTimePureDisplayArea(area_y, area_h);
-    } else {
-        getTimeDisplayArea(area_y, area_h);
-    }
+    getTimePureDisplayArea(area_y, area_h);
 
     if (full_init || !swScreenReady) {
-        if (isTimePureMode()) {
-            if (full_init) {
-                M5Cardputer.Display.fillScreen(BLACK);
-            }
-            swScreenReady = true;
-            swTimeState = BigTimeState{};
-            drawStopwatchChrome();
-            drawStopwatchTimeArea(area_y, area_h, true);
-            return;
+        if (full_init) {
+            M5Cardputer.Display.fillScreen(BLACK);
         }
-        beginAppScreenAccent("Time ", "SW", APP_COLOR_LABEL);
         swScreenReady = true;
         swTimeState = BigTimeState{};
         drawStopwatchChrome();
@@ -102,11 +85,7 @@ static void swReset() {
     drawStopwatchChrome();
     int area_y = 0;
     int area_h = 0;
-    if (isTimePureMode()) {
-        getTimePureDisplayArea(area_y, area_h);
-    } else {
-        getTimeDisplayArea(area_y, area_h);
-    }
+    getTimePureDisplayArea(area_y, area_h);
     drawStopwatchTimeArea(area_y, area_h, true);
 }
 

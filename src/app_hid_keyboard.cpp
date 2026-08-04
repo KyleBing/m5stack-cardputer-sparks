@@ -47,7 +47,9 @@ static constexpr int kModMarginX = 5;            // 左侧特殊键距屏左边�
 static constexpr int kModMarginY = 5;            // 左侧特殊键距上下边界
 static constexpr int kModCount = 5;              // Fn Aa Opt Ctrl Alt（IMU 由鼠标区表示）
 static constexpr int kKbTopY = 2;                // 主界面无 header，内容顶边
+static constexpr int kAppNameH = 10;             // 右上角 app 名预留高度（防被回显区擦掉）
 static constexpr int kFooterH = 12;              // 底栏（x1 匹配信息）
+static constexpr uint32_t kUsbReportMinIntervalMs = 8;  // USB 非松开报告最小间隔，避免阻塞堆积
 static constexpr int kSensBarW = 20;             // 灵敏度块宽
 static constexpr int kSensSegH = 5;              // 灵敏度块高
 static constexpr int kSensSegGap = 2;
@@ -182,6 +184,7 @@ static size_t g_ble_q_head = 0;
 static size_t g_ble_q_tail = 0;
 static size_t g_ble_q_count = 0;
 static uint32_t g_ble_last_send_ms = 0;
+static uint32_t g_usb_last_send_ms = 0;  // USB 发送节流
 static KeyReport g_last_kb_report{};  // 上次已发给主机的键盘报告（防漏松键）
 static bool g_last_kb_valid = false;
 
@@ -200,6 +203,7 @@ static void drainBleReportQueueBurst();
 static void buildKeyReport(const Keyboard_Class::KeysState& status, KeyReport& report);
 static void sendKeyReportToHost(const KeyReport& report);
 static void drawEchoOnly();
+static void drawAppNameCorner();
 static void drawModStateCol(const Keyboard_Class::KeysState& status, bool force);
 static void drawImuHud(bool force);
 static void drawPairFooter(bool force);
@@ -1701,7 +1705,12 @@ static void enqueueBleMouseReport(const uint8_t buttons, const int8_t dx, const 
 }
 
 static void notifyBleRaw(BLECharacteristic* ch, uint8_t* data, const size_t len) {
-    if (ch == nullptr || !g_ble_connected) {
+    if (ch == nullptr || !g_ble_connected || !g_ble_ready) {
+        return;
+    }
+    // 主机未订阅时 notify 易打满 GATT 缓冲；先查 CCCD
+    BLE2902* cccd = (BLE2902*)ch->getDescriptorByUUID(BLEUUID((uint16_t)0x2902));
+    if (cccd != nullptr && !cccd->getNotifications()) {
         return;
     }
     ch->setValue(data, len);
@@ -1731,9 +1740,9 @@ static void drainBleReportQueue() {
     g_ble_last_send_ms = now;
 }
 
-// 一帧尽量多排空（松开优先已在 drain 内）
+// 一帧少排几条，避免连打时 GATT notify 洪水卡死主循环
 static void drainBleReportQueueBurst() {
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 3; i++) {
         const size_t before = g_ble_q_count;
         drainBleReportQueue();
         if (g_ble_q_count == before) {
@@ -1748,12 +1757,22 @@ static void sendKeyReportToHost(const KeyReport& report) {
         if (!g_usb_ready) {
             return;
         }
+        // 主机未枚举 / HID 未就绪时 SendReport 会阻塞至超时（默认 100ms），连按极易卡死
+        if (!tud_hid_ready()) {
+            return;
+        }
+        const uint32_t now = millis();
+        if (!empty && (now - g_usb_last_send_ms) < kUsbReportMinIntervalMs) {
+            // 非松开：合并到下一帧 sync，避免 USB 互斥排队
+            return;
+        }
         if (empty) {
             g_usb_kb.releaseAll();
         } else {
             KeyReport tmp = report;
             g_usb_kb.sendReport(&tmp);
         }
+        g_usb_last_send_ms = now;
         g_last_kb_report = report;
         g_last_kb_valid = true;
         return;
@@ -1792,11 +1811,13 @@ static void releaseAllToHost() {
     KeyReport empty{};
     g_last_kb_valid = false;  // 强制再发一次空报告
     if (g_transport == HidTransport::USB && g_usb_ready) {
-        g_usb_kb.releaseAll();
-        g_usb_mouse.release(MOUSE_ALL);
+        if (tud_hid_ready()) {
+            g_usb_kb.releaseAll();
+            g_usb_mouse.release(MOUSE_ALL);
+            delay(20);
+            g_usb_kb.releaseAll();
+        }
         g_mouse_buttons = 0;
-        delay(20);
-        g_usb_kb.releaseAll();
         g_last_kb_report = empty;
         g_last_kb_valid = true;
         return;
@@ -1822,7 +1843,7 @@ static void sendMouseReport(const int8_t dx, const int8_t dy, const uint8_t butt
     g_imu_dx = dx;
     g_imu_dy = dy;
     if (g_transport == HidTransport::USB) {
-        if (!g_usb_ready) {
+        if (!g_usb_ready || !tud_hid_ready()) {
             return;
         }
         if (buttons != g_mouse_buttons) {
@@ -2121,12 +2142,6 @@ static void buildKeyReport(const Keyboard_Class::KeysState& status, KeyReport& r
     }
 }
 
-static void sendHostReport(const Keyboard_Class::KeysState& status) {
-    KeyReport report{};
-    buildKeyReport(status, report);
-    sendKeyReportToHost(report);
-}
-
 static int contentBottomY() {
     return M5Cardputer.Display.height() - kFooterH;
 }
@@ -2135,10 +2150,10 @@ static int rightPanelX() {
     return kModMarginX + kModColW + 2;
 }
 
-// 中间内容区；IMU 时右侧留给灵敏度条（含边距）
+// 中间内容区；顶部留给 app 名；IMU 时右侧留给灵敏度条（含边距）
 static void centerPanelGeom(int& x, int& y, int& w, int& h) {
     x = rightPanelX();
-    y = kKbTopY;
+    y = kKbTopY + kAppNameH;
     const int sens_reserve = g_imu_mouse_on ? (kSensBarW + kSensMargin + 2) : 0;
     w = M5Cardputer.Display.width() - x - 2 - sens_reserve;
     h = contentBottomY() - y;
@@ -2311,7 +2326,7 @@ static void drawPairFooter(const bool force) {
 static void clearRightPanel() {
     int x, y, w, h;
     x = rightPanelX();
-    y = kKbTopY;
+    y = kKbTopY + kAppNameH;
     w = M5Cardputer.Display.width() - x;
     h = contentBottomY() - y;
     M5Cardputer.Display.fillRect(x, y, w, h, BLACK);
@@ -2321,6 +2336,18 @@ static void clearRightPanel() {
     g_drawn_label[0] = '\0';
     g_drawn_imu_sens = -1;
     g_drawn_imu_buttons = 0xFF;
+}
+
+// 右上角暗色 app 名（避开回显 / IMU 清屏区）
+static void drawAppNameCorner() {
+    constexpr char kAppName[] = "Keyboard";
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_MUTED, BLACK);
+    const int name_w = M5Cardputer.Display.textWidth(kAppName);
+    const int x = M5Cardputer.Display.width() - name_w - 4;
+    M5Cardputer.Display.fillRect(x - 1, 0, name_w + 2, kAppNameH, BLACK);
+    M5Cardputer.Display.setCursor(x, 2);
+    M5Cardputer.Display.print(kAppName);
 }
 
 // 仅左上角圆角
@@ -2376,7 +2403,7 @@ static void drawMouseIcon(const int cx, const int cy, const uint8_t buttons) {
     constexpr int body_h = 40;
     constexpr int gap = 2;  // 键与机身 / 左右键间隔
     constexpr int r_btn = 5;
-    constexpr int r_body = 10;
+    constexpr int r_body = 16; // 机身左右下角加大一档圆角
     const int total_h = btn_h + gap + body_h;
     const int x = cx - mw / 2;
     const int y = cy - total_h / 2;
@@ -2390,7 +2417,7 @@ static void drawMouseIcon(const int cx, const int cy, const uint8_t buttons) {
     // 右键：仅右上 5px 圆角
     fillRectRoundTR(x + btn_w + gap, y, btn_w, btn_h, r_btn,
                     (buttons & MOUSE_RIGHT) ? lit : idle);
-    // 机身：仅左右下角 10px 圆角
+    // 机身：仅左右下角加大圆角
     fillRectRoundBLBR(x, y + btn_h + gap, mw, body_h, r_body, body);
 }
 
@@ -2920,6 +2947,7 @@ static void drawHidKeyboardApp(const bool full_init) {
     }
     refreshRightPanel(true);
     drawPairFooter(true);
+    drawAppNameCorner();
 }
 
 void enterHidKeyboardApp() {
@@ -3100,7 +3128,10 @@ void handleHidKeyboardApp(const Keyboard_Class::KeysState& status) {
     if (!g_active) {
         return;
     }
-    if (tryHandleModeHotkey(status)) {
+    // 拷一份，避免绘制 / 发送期间 keysState 缓冲被 update 改写导致迭代器失效
+    const Keyboard_Class::KeysState snap = status;
+
+    if (tryHandleModeHotkey(snap)) {
         // 打开帮助时已自绘；模式切换需刷新主界面
         if (!g_help_visible) {
             drawHidKeyboardApp(false);
@@ -3108,14 +3139,14 @@ void handleHidKeyboardApp(const Keyboard_Class::KeysState& status) {
         return;
     }
 
-    // IMU 模式：灵敏度 / 鼠标键；字母作点击，其它功能键仍发给主机
+    // IMU 模式：灵敏度 / 鼠标键；字母作点击，其它功能键由 syncKeysToHost 发给主机
     if (g_imu_mouse_on && !g_help_visible && !g_hosts_ui) {
-        (void)tryHandleImuSensKey(status);
-        const uint8_t mb = mouseButtonsFromKeys(status);
+        (void)tryHandleImuSensKey(snap);
+        const uint8_t mb = mouseButtonsFromKeys(snap);
         if (mb != g_mouse_buttons) {
             sendMouseReport(0, 0, mb);
         }
-        drawModStateCol(status, false);
+        drawModStateCol(snap, false);
         drawImuHud(false);
         if (!M5Cardputer.Keyboard.isPressed()) {
             if (g_mouse_buttons != 0) {
@@ -3124,9 +3155,6 @@ void handleHidKeyboardApp(const Keyboard_Class::KeysState& status) {
                 drawModStateCol(empty, false);
                 drawImuHud(false);
             }
-            sendHostReport(Keyboard_Class::KeysState{});
-        } else {
-            sendHostReport(status);
         }
         if (g_transport == HidTransport::BLE) {
             drainBleReportQueueBurst();
@@ -3135,24 +3163,17 @@ void handleHidKeyboardApp(const Keyboard_Class::KeysState& status) {
     }
 
     if (!g_help_visible && !g_hosts_ui) {
-        drawModStateCol(status, false);
+        drawModStateCol(snap, false);
     }
 
     if (!M5Cardputer.Keyboard.isPressed()) {
-        Keyboard_Class::KeysState empty{};
-        sendHostReport(empty);
-        if (g_transport == HidTransport::BLE) {
-            drainBleReportQueueBurst();
-        }
+        // 键位同步交给 update 里的 syncKeysToHost，避免与 USB sendReport 双重阻塞
         return;
     }
 
-    sendHostReport(status);
-    updateEchoBuffer(status);
+    // 仅刷新回显；HID 报告由每帧 syncKeysToHost 统一发送
+    updateEchoBuffer(snap);
     drawEchoOnly();
-    if (g_transport == HidTransport::BLE) {
-        drainBleReportQueueBurst();
-    }
 }
 
 bool pollHidKeyboardBtnAExit() {
