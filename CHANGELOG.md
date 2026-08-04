@@ -6,7 +6,7 @@
 
 ---
 
-## 2026-08-04
+## 2026-08-04 — v1.10
 
 ### 改进
 
@@ -15,6 +15,7 @@
 - **Header**：子界面顶栏不再绘制右侧返回图标；状态图标与分页圆点靠右对齐；返回仍用 `ESC` / `GO`
 - **Hub 卡片**：Mini Games / Hardware Test 序号徽章左移 1px，与标题间距更匀
 - **Neon FX**：FPS 叠字改为画在 canvas 上再 `pushSprite`，避免二次绘制闪烁；文案改为 `fps: N`
+- **版本**：固件 / M5Burner 元数据统一为 **v1.10**（`APP_VERSION` / `m5burner.json`）
 - **文档**：补 MATRIX / WAVE / PCLOCK / LISSA 中英文页与侧栏；同步 Mini Games（14 项）、Time（去 Pure 切换）、Hardware Test / Mic 分页键位、Options 侧栏导航；`APP_UPDATE_TIME` → `2026.08.04`
 
 ---

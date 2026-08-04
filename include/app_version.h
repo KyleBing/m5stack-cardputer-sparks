@@ -2,7 +2,7 @@
 
 // 固件版本与作者信息：发版时只改这里即可
 
-static constexpr const char* APP_VERSION = "1.03";
+static constexpr const char* APP_VERSION = "1.10";
 static constexpr const char* APP_UPDATE_TIME = "2026.08.04";
 static constexpr const char* APP_AUTHOR = "KyleBing";
 static constexpr const char* APP_GITHUB = "@KyleBing";
