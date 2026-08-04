@@ -198,6 +198,10 @@ export default defineConfig({
                   { text: 'Minesweeper 扫雷', link: '/apps/minesweeper' },
                   { text: 'Snake 贪吃蛇', link: '/apps/snake' },
                   { text: 'Conway Life 生命游戏', link: '/apps/conway-life' },
+                  { text: 'MATRIX 代码雨', link: '/apps/matrix' },
+                  { text: 'WAVE 丝波', link: '/apps/wave' },
+                  { text: 'PCLOCK 粒子时钟', link: '/apps/particle-clock' },
+                  { text: 'LISSA 利萨茹', link: '/apps/lissa' },
                 ],
               },
               {
@@ -330,6 +334,10 @@ export default defineConfig({
                   { text: 'Minesweeper', link: '/en/apps/minesweeper' },
                   { text: 'Snake', link: '/en/apps/snake' },
                   { text: 'Conway Life', link: '/en/apps/conway-life' },
+                  { text: 'MATRIX', link: '/en/apps/matrix' },
+                  { text: 'WAVE', link: '/en/apps/wave' },
+                  { text: 'PCLOCK', link: '/en/apps/particle-clock' },
+                  { text: 'LISSA', link: '/en/apps/lissa' },
                 ],
               },
               {

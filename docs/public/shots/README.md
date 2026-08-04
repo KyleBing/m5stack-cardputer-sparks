@@ -39,7 +39,7 @@ app_{app}_{子功能}.png
 - app_ble_list.png
 
 ### Time / Options / Info / Version
-- app_time_up.png / app_time_up_pure.png
+- app_time_up.png / app_time_up_pure.png（现默认全屏，文档主用 `_pure`）
 - app_time_ntp.png / app_time_ntp_pure.png
 - app_time_cd.png / app_time_cd_pure.png
 - app_time_sw.png / app_time_sw_pure.png

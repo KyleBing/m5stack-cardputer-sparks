@@ -862,10 +862,10 @@ static void drawHubCard(const int x, const int y, const int number, const char* 
     const uint16_t accent = gamesHubAccent();
     M5Cardputer.Display.fillRoundRect(x, y, APP_HUB_CARD_W, APP_HUB_CARD_H, 4, card_bg);
     M5Cardputer.Display.drawRoundRect(x, y, APP_HUB_CARD_W, APP_HUB_CARD_H, 4, gamesHubBorder());
-    M5Cardputer.Display.fillRoundRect(x + 4, y + 3, 18, 16, 3, accent);
+    M5Cardputer.Display.fillRoundRect(x + 3, y + 3, 18, 16, 3, accent); // 整块序号徽章左移 1px
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(BLACK, accent);
-    M5Cardputer.Display.setCursor(x + 10, y + 7);
+    M5Cardputer.Display.setCursor(x + 9, y + 7);
     M5Cardputer.Display.print(number);
     M5Cardputer.Display.setTextColor(gamesHubTitleColor(), card_bg);
     M5Cardputer.Display.setCursor(x + 28, y + 7);

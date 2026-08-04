@@ -2,7 +2,7 @@
 
 Main menu key: `g`
 
-A collection of ten full-screen interactive toys and games. The shelf holds 8 entries per page — flip pages with `[` `]` or the arrow keys, and the number keys are renumbered from `1` on each page. `ESC` / `GO` returns a child game to the shelf; press it again on the shelf to return to the main menu.
+A collection of fourteen full-screen interactive toys and games. The shelf holds 8 entries per page — flip pages with `[` `]` or the arrow keys, and the number keys are renumbered from `1` on each page. `ESC` / `GO` returns a child game to the shelf; press it again on the shelf to return to the main menu.
 
 ## Page 1
 
@@ -23,6 +23,10 @@ A collection of ten full-screen interactive toys and games. The shelf holds 8 en
 |-----|------|----------|
 | `1` | [Snake](./snake) | Arrows / `EASD` steer; `Space` pauses; `m` wall or wrap; `-` / `=` speed |
 | `2` | [Conway Life](./conway-life) | `Space` runs / pauses; `n` steps; `r` randomizes; `1`–`6` patterns; `Enter` edits a cell |
+| `3` | [MATRIX](./matrix) | `-` / `=` speed; `Space` / `GO` pulse burst; `r` reshuffles |
+| `4` | [WAVE](./wave) | `-` / `=` speed; `c` theme; `Space` / `GO` amplitude pulse |
+| `5` | [PCLOCK](./particle-clock) | `Space` / `GO` / `r` morph; `m` toggles `HH:MM` / with seconds |
+| `6` | [LISSA](./lissa) | `-` / `=` speed; `c` theme; `Space` / `GO` phase pulse |
 
 ## Common shortcuts
 

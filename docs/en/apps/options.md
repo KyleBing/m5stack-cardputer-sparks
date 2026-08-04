@@ -2,9 +2,7 @@
 
 Main menu key: `o`
 
-On-device settings are grouped into screen, sound, clock, calendar, and infrared modules. Changes write to `config.json` (volume is debounced to disk).
-
-Navigation is two layers (three when needed): module list → module detail; enums such as timezone / brand open a picker page.
+On-device settings are grouped into screen, sound, clock, calendar, and infrared. The UI is a left category sidebar plus a right field pane; enums such as timezone / brand open a picker. Changes write to `config.json` (volume is debounced to disk). The header title is **Options**.
 
 ## Screenshots
 
@@ -21,31 +19,31 @@ Navigation is two layers (three when needed): module list → module detail; enu
 
 ## Shortcuts
 
-### L1 module list
+### Sidebar (category focus)
 
 | Key | Action |
 |-----|--------|
-| ↑ ↓ | Select module |
-| Enter / → | Open module detail |
+| ↑ ↓ | Select category |
+| Enter / → | Edit fields on the right |
 
-### L2 module detail
+### Field pane
 
 | Key | Action |
 |-----|--------|
 | ↑ ↓ | Select setting row |
 | `-` `=` | Decrease / increase value (toggles flip) |
 | Enter | Toggle switches; open picker for enums |
-| `` ` `` / ← | Back to module list |
+| `` ` `` / ← | Back to sidebar |
 
-### L3 picker (timezone, brand, default, etc.)
+### Picker (timezone, brand, default, etc.)
 
 | Key | Action |
 |-----|--------|
 | ↑ ↓ | Select option |
-| Enter | Confirm and return to detail |
-| `` ` `` / ← | Cancel and return to detail |
+| Enter | Confirm and return to fields |
+| `` ` `` / ← | Cancel and return to fields |
 
-Press `` ` `` again on L1 to return to the main menu. On screen detail, `0`–`9` set brightness quickly.
+Press `` ` `` again on the sidebar to return to the main menu. On screen fields, `0`–`9` set brightness quickly.
 
 ## Usage
 

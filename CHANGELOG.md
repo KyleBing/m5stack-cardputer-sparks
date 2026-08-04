@@ -6,6 +6,19 @@
 
 ---
 
+## 2026-08-04
+
+### 改进
+
+- **Options**：侧栏分类 + 右侧字段 / 选择页；header 标题改为 `Options`；模块覆盖 screen / sound / clock / calendar / infrared
+- **Time**：Uptime / Clock / Countdown / Stopwatch 始终全屏无 header；切模式时左上角短暂显示模式名
+- **Header**：子界面顶栏不再绘制右侧返回图标；状态图标与分页圆点靠右对齐；返回仍用 `ESC` / `GO`
+- **Hub 卡片**：Mini Games / Hardware Test 序号徽章左移 1px，与标题间距更匀
+- **Neon FX**：FPS 叠字改为画在 canvas 上再 `pushSprite`，避免二次绘制闪烁；文案改为 `fps: N`
+- **文档**：补 MATRIX / WAVE / PCLOCK / LISSA 中英文页与侧栏；同步 Mini Games（14 项）、Time（去 Pure 切换）、Hardware Test / Mic 分页键位、Options 侧栏导航；`APP_UPDATE_TIME` → `2026.08.04`
+
+---
+
 ## 2026-08-03
 
 ### 新增

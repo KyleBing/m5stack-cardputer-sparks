@@ -24,7 +24,7 @@ Most screens share the keys below. Each App may also have its own shortcuts — 
 
 ## Top Bar
 
-The main menu and most Apps show WiFi / BLE status, battery, page number, and similar info in the top bar; exact contents depend on the screen.
+The main menu and most Apps show WiFi / BLE status, battery, page dots, and similar info in the top bar. Back always uses `ESC` / `GO` — headers no longer draw a return icon.
 
 ## Sound Feedback
 

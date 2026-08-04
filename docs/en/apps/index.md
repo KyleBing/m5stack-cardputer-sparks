@@ -62,5 +62,5 @@ More detail: [Getting Started · Main Menu](/en/guide/getting-started#main-menu)
 
 | Key | App | Description |
 |-----|-----|-------------|
-| `g` | [Mini Games](./mini-games) | [Coin](./coin-toss), [pendulum](./double-pendulum), [wheel](./prize-wheel), [Dice](./dice), [Newton cradle](./newton-cradle), [Neon FX](./neon-fx), [curves](./curves), [Minesweeper](./minesweeper), [Snake](./snake), [Conway Life](./conway-life) |
-| `h` | [Hardware Test](./hardware-test) | Display, IMU, Font, Icons, LED, BLE, I2C, [Mic](./mic) |
+| `g` | [Mini Games](./mini-games) | [Coin](./coin-toss), [pendulum](./double-pendulum), [wheel](./prize-wheel), [Dice](./dice), [Newton cradle](./newton-cradle), [Neon FX](./neon-fx), [curves](./curves), [Minesweeper](./minesweeper), [Snake](./snake), [Conway Life](./conway-life), [MATRIX](./matrix), [WAVE](./wave), [PCLOCK](./particle-clock), [LISSA](./lissa) |
+| `h` | [Hardware Test](./hardware-test) | Display, IMU, Font, Icons, LED, BLE, I2C, page-2 [Mic](./mic) |

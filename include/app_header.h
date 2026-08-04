@@ -23,7 +23,7 @@ static constexpr int APP_HUB_CARD_ORIGIN_X = 5;
 static constexpr int APP_HUB_CARD_ORIGIN_Y = APP_CONTENT_INSET_Y - 3; // 相对默认 inset 上移 3px
 static constexpr int APP_HUB_CARD_COLS = 2;
 
-// 子界面 header：应用名 + btngo 返回图标（右侧）
+// 子界面 header：应用名 + 状态图标（右侧）
 void drawAppScreenHeader(const char* title, bool draw_divider = true);
 // 标题 + 次要色后缀（如 Infrared + TV）
 void drawAppScreenHeaderAccent(const char* title, const char* accent, uint16_t accent_color,

@@ -327,16 +327,17 @@ static void fxRenderCube(const uint32_t now) {
     }
 }
 
+// 画到 canvas 上再随 pushSprite 一并刷新，避免 Display 二次绘制造成闪烁
 static void fxDrawFpsOverlay() {
-    char fps_line[12];
-    snprintf(fps_line, sizeof(fps_line), "%u", fxFps);
-    constexpr int fps_pad_w = 26;
+    char fps_line[16];
+    snprintf(fps_line, sizeof(fps_line), "fps: %u", fxFps);
+    constexpr int fps_pad_w = 52;
     constexpr int fps_pad_h = 10;
-    M5Cardputer.Display.fillRect(0, 0, fps_pad_w, fps_pad_h, BLACK);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(YELLOW, BLACK);
-    M5Cardputer.Display.setCursor(2, 1);
-    M5Cardputer.Display.print(fps_line);
+    fxCanvas.fillRect(0, 0, fps_pad_w, fps_pad_h, BLACK);
+    fxCanvas.setTextSize(1);
+    fxCanvas.setTextColor(YELLOW, BLACK);
+    fxCanvas.setCursor(2, 1);
+    fxCanvas.print(fps_line);
 }
 
 static void fxMoveCore(const int dx, const int dy) {
@@ -513,8 +514,8 @@ void updateNeonFxApp() {
         fxFrameCount = 0;
         fxFpsWindowMs = now;
     }
-    fxCanvas.pushSprite(0, 0);
     fxDrawFpsOverlay();
+    fxCanvas.pushSprite(0, 0);
 }
 
 void handleNeonFxApp(const Keyboard_Class::KeysState& status) {
@@ -532,6 +533,7 @@ void handleNeonFxApp(const Keyboard_Class::KeysState& status) {
             drawNeonFxHelpPage();
         } else {
             // 关闭 help：直接 push 当前画布恢复全屏 FX
+            fxDrawFpsOverlay();
             fxCanvas.pushSprite(0, 0);
             // 重置 FPS 计数窗口，避免 help 期间计入长间隔
             fxFpsWindowMs = millis();

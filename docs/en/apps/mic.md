@@ -1,6 +1,6 @@
 # Mic
 
-Hardware Test key: `9` (main menu `h` → `9`)
+Hardware Test page 2 key: `1` (main menu `h` → `[`/`]` to page 2 → `1`)
 
 Live oscilloscope waveform + VU meter + gain control. From v1.0.0, TF recording is **no longer** supported.
 

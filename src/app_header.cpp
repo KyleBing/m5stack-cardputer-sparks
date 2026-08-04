@@ -8,7 +8,6 @@
 
 static constexpr int MENU_LOGO_SIZE = 24;
 static constexpr int HEADER_STATUS_GAP = 5;
-static constexpr int APP_BACK_BTN_W = ICON_BACK_W;
 static constexpr int HEADER_STATUS_CLEAR_PAD = 2;
 static bool s_app_header_draw_divider = true;
 static bool s_app_header_include_battery = false;
@@ -39,14 +38,14 @@ static int getMenuStatusRightX(const int screen_w, const int page_count) {
     return right;
 }
 
-// 子界面分页圆点画在返回图标左侧
+// 子界面分页圆点靠右对齐
 static int getAppPageDotsX(const int screen_w) {
-    return screen_w - 2 - APP_BACK_BTN_W - 4 - headerPageDotsWidth(s_app_header_page_count);
+    return screen_w - 4 - headerPageDotsWidth(s_app_header_page_count);
 }
 
 // 子界面状态图标右边界；有分页圆点时为其让位
 static int getAppStatusRightX(const int screen_w) {
-    int right = screen_w - 2 - APP_BACK_BTN_W - 4;
+    int right = screen_w - 4;
     const int dots_w = headerPageDotsWidth(s_app_header_page_count);
     if (dots_w > 0) {
         right -= dots_w + 6;
@@ -117,15 +116,6 @@ static void clearHeaderStatusArea(const int left_x, const int right_x) {
     M5Cardputer.Display.fillRect(left_x, 0, right_x - left_x, APP_HEADER_H - 1, BLACK);
 }
 
-// btngo：绘制右侧返回图标（半个圆角矩形 + 左箭头）
-static void drawBackButton(const int screen_w) {
-    constexpr int btn_w = APP_BACK_BTN_W;
-    constexpr int btn_h = ICON_BACK_H;
-    const int btn_x = screen_w - btn_w - 2;
-    const int btn_y = (APP_HEADER_H - btn_h) / 2;
-    drawIconBack(btn_x, btn_y, WHITE);
-}
-
 static void drawHeaderDivider(const int screen_w) {
     // header 底边框 #3A3A3A
     M5Cardputer.Display.drawFastHLine(0, APP_HEADER_H - 1, screen_w,
@@ -154,7 +144,6 @@ static void drawAppHeaderCore(const char* title, const char* accent, const uint1
         drawIconPageDots(getAppPageDotsX(screen_w), APP_HEADER_H / 2, page, page_count);
     }
     drawHeaderStatusIcons(getAppStatusRightX(screen_w), s_app_header_include_battery);
-    drawBackButton(screen_w);
     if (draw_divider) {
         drawHeaderDivider(screen_w);
     }
