@@ -64,6 +64,20 @@ static char g_mem_maxa[20] = "-";
 static char g_mem_hmin[20] = "-";
 static bool g_mem_cache_valid = false;
 
+// Mem 上次已绘制快照（定时刷新只重画变化行）
+static uint32_t g_drawn_mem_heap_used = 0;
+static uint32_t g_drawn_mem_heap_total = 0;
+static uint32_t g_drawn_mem_psram_used = 0;
+static uint32_t g_drawn_mem_psram_total = 0;
+static uint32_t g_drawn_mem_sketch = 0;
+static uint32_t g_drawn_mem_sketch_part = 0;
+static uint32_t g_drawn_mem_lfs_used = 0;
+static uint32_t g_drawn_mem_lfs_total = 0;
+static bool g_drawn_mem_lfs_ok = false;
+static char g_drawn_mem_maxa[20] = "";
+static char g_drawn_mem_hmin[20] = "";
+static bool g_drawn_mem_valid = false;
+
 // Storage 页：Flash(LittleFS) + TF；无卡时只探测一次，避免反复 SD.begin
 static uint32_t g_sto_flash_used = 0;
 static uint32_t g_sto_flash_total = 0;
@@ -75,6 +89,22 @@ static uint32_t g_sto_tf_free = 0;
 static bool g_sto_tf_ok = false;
 static bool g_sto_tf_probed = false;
 static bool g_sto_cache_valid = false;
+
+// Storage 上次已绘制快照
+static uint32_t g_drawn_sto_flash_used = 0;
+static uint32_t g_drawn_sto_flash_free = 0;
+static uint32_t g_drawn_sto_flash_total = 0;
+static bool g_drawn_sto_flash_ok = false;
+static uint32_t g_drawn_sto_tf_used = 0;
+static uint32_t g_drawn_sto_tf_free = 0;
+static uint32_t g_drawn_sto_tf_total = 0;
+static bool g_drawn_sto_tf_ok = false;
+static bool g_drawn_sto_valid = false;
+
+// 文字页上次已绘制行（按值比较，跳过未变行）
+static char g_drawn_sec_vals[INFO_MAX_LINES][28] = {};
+static int g_drawn_sec_count = 0;
+static int g_drawn_sec_page = -1;
 
 // 文字页静态缓冲（build 时写入，draw 时读）
 static char g_buf_model[24];
@@ -273,7 +303,7 @@ static int drawMemBarRow(const int x, const int y, const int w, const char* labe
     const int bar_y = y + INFO_LINE_H;
     if (shell || total == 0) {
         drawInfoLineAt(x, y, label, shell ? "--" : "n/a", INFO_BODY_SIZE);
-        M5Cardputer.Display.drawRoundRect(x, bar_y, w, INFO_BAR_H, 2, APP_COLOR_MUTED);
+        M5Cardputer.Display.drawRect(x, bar_y, w, INFO_BAR_H, APP_COLOR_MUTED);
         return bar_y + INFO_BAR_H + INFO_BAR_GAP;
     }
 
@@ -287,11 +317,11 @@ static int drawMemBarRow(const int x, const int y, const int w, const char* labe
 
     drawInfoLineAt(x, y, label, right, INFO_BODY_SIZE);
 
-    M5Cardputer.Display.drawRoundRect(x, bar_y, w, INFO_BAR_H, 2, APP_COLOR_MUTED);
+    M5Cardputer.Display.drawRect(x, bar_y, w, INFO_BAR_H, APP_COLOR_MUTED);
     const int fill_w = (w - 2) * pct / 100;
     if (fill_w > 0) {
-        M5Cardputer.Display.fillRoundRect(x + 1, bar_y + 1, fill_w, INFO_BAR_H - 2, 1,
-                                          memUsedBarColor(pct));
+        M5Cardputer.Display.fillRect(x + 1, bar_y + 1, fill_w, INFO_BAR_H - 2,
+                                     memUsedBarColor(pct));
     }
     return bar_y + INFO_BAR_H + INFO_BAR_GAP;
 }
@@ -305,7 +335,7 @@ static int drawStorageBarRow(const int x, const int y, const int w, const char* 
     const int bar_y = y + INFO_LINE_H;
     if (shell || total == 0) {
         drawInfoLineAt(x, y, label, shell ? "--" : "n/a", INFO_BODY_SIZE);
-        M5Cardputer.Display.drawRoundRect(x, bar_y, w, INFO_BAR_H, 2, APP_COLOR_MUTED);
+        M5Cardputer.Display.drawRect(x, bar_y, w, INFO_BAR_H, APP_COLOR_MUTED);
         return bar_y + INFO_BAR_H + INFO_BAR_GAP;
     }
 
@@ -319,11 +349,11 @@ static int drawStorageBarRow(const int x, const int y, const int w, const char* 
 
     drawInfoLineAt(x, y, label, right, INFO_BODY_SIZE);
 
-    M5Cardputer.Display.drawRoundRect(x, bar_y, w, INFO_BAR_H, 2, APP_COLOR_MUTED);
+    M5Cardputer.Display.drawRect(x, bar_y, w, INFO_BAR_H, APP_COLOR_MUTED);
     const int fill_w = (w - 2) * pct / 100;
     if (fill_w > 0) {
-        M5Cardputer.Display.fillRoundRect(x + 1, bar_y + 1, fill_w, INFO_BAR_H - 2, 1,
-                                          memUsedBarColor(pct));
+        M5Cardputer.Display.fillRect(x + 1, bar_y + 1, fill_w, INFO_BAR_H - 2,
+                                     memUsedBarColor(pct));
     }
     return bar_y + INFO_BAR_H + INFO_BAR_GAP;
 }
@@ -386,33 +416,77 @@ static void sampleInfoMem(const bool force_slow) {
     g_mem_cache_valid = true;
 }
 
-static void drawInfoMemPage(const int x, const int y, const int w) {
+static void drawInfoMemPage(const int x, const int y, const int w, const bool force) {
     if (!g_mem_cache_valid) {
         drawInfoMemShell(x, y, w);
+        g_drawn_mem_valid = false;
         return;
     }
 
+    const int row_h = INFO_LINE_H + INFO_BAR_H + INFO_BAR_GAP;
     int cy = y;
-    cy = drawMemBarRow(x, cy, w, "Heap", g_mem_heap_used, g_mem_heap_total);
+
+    // Heap：数值变了才重画该行
+    if (force || !g_drawn_mem_valid || g_drawn_mem_heap_used != g_mem_heap_used ||
+        g_drawn_mem_heap_total != g_mem_heap_total) {
+        cy = drawMemBarRow(x, cy, w, "Heap", g_mem_heap_used, g_mem_heap_total);
+        g_drawn_mem_heap_used = g_mem_heap_used;
+        g_drawn_mem_heap_total = g_mem_heap_total;
+    } else {
+        cy += row_h;
+    }
 
     if (g_mem_psram_total > 0) {
-        cy = drawMemBarRow(x, cy, w, "PSRAM", g_mem_psram_used, g_mem_psram_total);
+        if (force || !g_drawn_mem_valid || g_drawn_mem_psram_used != g_mem_psram_used ||
+            g_drawn_mem_psram_total != g_mem_psram_total) {
+            cy = drawMemBarRow(x, cy, w, "PSRAM", g_mem_psram_used, g_mem_psram_total);
+            g_drawn_mem_psram_used = g_mem_psram_used;
+            g_drawn_mem_psram_total = g_mem_psram_total;
+        } else {
+            cy += row_h;
+        }
     }
 
-    cy = drawMemBarRow(x, cy, w, "Sketch", g_mem_sketch,
-                       g_mem_sketch_part > 0 ? g_mem_sketch_part : g_mem_sketch);
+    const uint32_t sketch_part = g_mem_sketch_part > 0 ? g_mem_sketch_part : g_mem_sketch;
+    if (force || !g_drawn_mem_valid || g_drawn_mem_sketch != g_mem_sketch ||
+        g_drawn_mem_sketch_part != sketch_part) {
+        cy = drawMemBarRow(x, cy, w, "Sketch", g_mem_sketch, sketch_part);
+        g_drawn_mem_sketch = g_mem_sketch;
+        g_drawn_mem_sketch_part = sketch_part;
+    } else {
+        cy += row_h;
+    }
 
     // LittleFS 未采到前保持空壳行，避免整页空白/跳动
-    if (g_mem_lfs_ok) {
-        cy = drawMemBarRow(x, cy, w, "LittleFS", g_mem_lfs_used, g_mem_lfs_total);
+    if (force || !g_drawn_mem_valid || g_drawn_mem_lfs_ok != g_mem_lfs_ok ||
+        g_drawn_mem_lfs_used != g_mem_lfs_used || g_drawn_mem_lfs_total != g_mem_lfs_total) {
+        if (g_mem_lfs_ok) {
+            cy = drawMemBarRow(x, cy, w, "LittleFS", g_mem_lfs_used, g_mem_lfs_total);
+        } else {
+            cy = drawMemBarRow(x, cy, w, "LittleFS", 0, 0, true);
+        }
+        g_drawn_mem_lfs_ok = g_mem_lfs_ok;
+        g_drawn_mem_lfs_used = g_mem_lfs_used;
+        g_drawn_mem_lfs_total = g_mem_lfs_total;
     } else {
-        cy = drawMemBarRow(x, cy, w, "LittleFS", 0, 0, true);
+        cy += row_h;
     }
 
-    M5Cardputer.Display.fillRect(x, cy, w, INFO_LINE_H * 2, BLACK);
-    drawInfoLineAt(x, cy, "Max Alloc", g_mem_maxa, INFO_BODY_SIZE);
+    if (force || !g_drawn_mem_valid || strcmp(g_drawn_mem_maxa, g_mem_maxa) != 0) {
+        M5Cardputer.Display.fillRect(x, cy, w, INFO_LINE_H, BLACK);
+        drawInfoLineAt(x, cy, "Max Alloc", g_mem_maxa, INFO_BODY_SIZE);
+        strncpy(g_drawn_mem_maxa, g_mem_maxa, sizeof(g_drawn_mem_maxa) - 1);
+        g_drawn_mem_maxa[sizeof(g_drawn_mem_maxa) - 1] = '\0';
+    }
     cy += INFO_LINE_H;
-    drawInfoLineAt(x, cy, "Min Free", g_mem_hmin, INFO_BODY_SIZE);
+    if (force || !g_drawn_mem_valid || strcmp(g_drawn_mem_hmin, g_mem_hmin) != 0) {
+        M5Cardputer.Display.fillRect(x, cy, w, INFO_LINE_H, BLACK);
+        drawInfoLineAt(x, cy, "Min Free", g_mem_hmin, INFO_BODY_SIZE);
+        strncpy(g_drawn_mem_hmin, g_mem_hmin, sizeof(g_drawn_mem_hmin) - 1);
+        g_drawn_mem_hmin[sizeof(g_drawn_mem_hmin) - 1] = '\0';
+    }
+
+    g_drawn_mem_valid = true;
 }
 
 // Storage 空壳
@@ -461,31 +535,63 @@ static void sampleInfoStorage(const bool force_slow) {
     g_sto_cache_valid = true;
 }
 
-static void drawInfoStoragePage(const int x, const int y, const int w) {
+static void drawInfoStoragePage(const int x, const int y, const int w, const bool force) {
     if (!g_sto_cache_valid) {
         drawInfoStorageShell(x, y, w);
+        g_drawn_sto_valid = false;
         return;
     }
 
+    const int row_h = INFO_LINE_H + INFO_BAR_H + INFO_BAR_GAP;
+    // 先记下挂载态是否变化（后面会写进 drawn 快照）
+    const bool footer_dirty =
+        force || !g_drawn_sto_valid || g_drawn_sto_tf_ok != g_sto_tf_ok;
     int cy = y;
-    if (g_sto_flash_ok) {
-        cy = drawStorageBarRow(x, cy, w, "Flash", g_sto_flash_used, g_sto_flash_free,
-                               g_sto_flash_total);
+
+    if (force || !g_drawn_sto_valid || g_drawn_sto_flash_ok != g_sto_flash_ok ||
+        g_drawn_sto_flash_used != g_sto_flash_used ||
+        g_drawn_sto_flash_free != g_sto_flash_free ||
+        g_drawn_sto_flash_total != g_sto_flash_total) {
+        if (g_sto_flash_ok) {
+            cy = drawStorageBarRow(x, cy, w, "Flash", g_sto_flash_used, g_sto_flash_free,
+                                   g_sto_flash_total);
+        } else {
+            cy = drawStorageBarRow(x, cy, w, "Flash", 0, 0, 0, true);
+        }
+        g_drawn_sto_flash_ok = g_sto_flash_ok;
+        g_drawn_sto_flash_used = g_sto_flash_used;
+        g_drawn_sto_flash_free = g_sto_flash_free;
+        g_drawn_sto_flash_total = g_sto_flash_total;
     } else {
-        cy = drawStorageBarRow(x, cy, w, "Flash", 0, 0, 0, true);
+        cy += row_h;
     }
 
-    if (g_sto_tf_ok) {
-        cy = drawStorageBarRow(x, cy, w, "TF", g_sto_tf_used, g_sto_tf_free, g_sto_tf_total);
+    if (force || !g_drawn_sto_valid || g_drawn_sto_tf_ok != g_sto_tf_ok ||
+        g_drawn_sto_tf_used != g_sto_tf_used || g_drawn_sto_tf_free != g_sto_tf_free ||
+        g_drawn_sto_tf_total != g_sto_tf_total) {
+        if (g_sto_tf_ok) {
+            cy = drawStorageBarRow(x, cy, w, "TF", g_sto_tf_used, g_sto_tf_free, g_sto_tf_total);
+        } else {
+            // 无卡：n/a（非空壳 --）
+            cy = drawStorageBarRow(x, cy, w, "TF", 0, 0, 0, false);
+        }
+        g_drawn_sto_tf_ok = g_sto_tf_ok;
+        g_drawn_sto_tf_used = g_sto_tf_used;
+        g_drawn_sto_tf_free = g_sto_tf_free;
+        g_drawn_sto_tf_total = g_sto_tf_total;
     } else {
-        // 无卡：n/a（非空壳 --）
-        cy = drawStorageBarRow(x, cy, w, "TF", 0, 0, 0, false);
+        cy += row_h;
     }
 
-    M5Cardputer.Display.fillRect(x, cy, w, INFO_LINE_H * 2, BLACK);
-    drawInfoLineAt(x, cy, "Flash", "LittleFS", INFO_BODY_SIZE);
-    cy += INFO_LINE_H;
-    drawInfoLineAt(x, cy, "TF", g_sto_tf_ok ? "mounted" : "not present", INFO_BODY_SIZE);
+    // 说明行：翻页强刷，或 TF 挂载状态变化时重画
+    if (footer_dirty) {
+        M5Cardputer.Display.fillRect(x, cy, w, INFO_LINE_H * 2, BLACK);
+        drawInfoLineAt(x, cy, "Flash", "LittleFS", INFO_BODY_SIZE);
+        cy += INFO_LINE_H;
+        drawInfoLineAt(x, cy, "TF", g_sto_tf_ok ? "mounted" : "not present", INFO_BODY_SIZE);
+    }
+
+    g_drawn_sto_valid = true;
 }
 
 // 采样当前文字页到 g_sec_cache（仅本页字段）
@@ -577,13 +683,25 @@ static void sampleInfoTextPage(const int page, const bool force_slow) {
     g_sec_cache_valid = true;
 }
 
-static void drawInfoSectionAt(const InfoSection& sec, const int x, const int y, const int w) {
+static void drawInfoSectionAt(const InfoSection& sec, const int x, const int y, const int w,
+                              const bool force) {
     int cy = y;
     for (int i = 0; i < sec.line_count; i++) {
-        M5Cardputer.Display.fillRect(x, cy, w, INFO_LINE_H, BLACK);
-        drawInfoLineAt(x, cy, sec.lines[i].label, sec.lines[i].value, INFO_BODY_SIZE);
+        const char* val = sec.lines[i].value != nullptr ? sec.lines[i].value : "";
+        // 仅当本行文案变化时清行重画
+        const bool dirty =
+            force || i >= g_drawn_sec_count || g_drawn_sec_page != g_info_page ||
+            strcmp(g_drawn_sec_vals[i], val) != 0;
+        if (dirty) {
+            M5Cardputer.Display.fillRect(x, cy, w, INFO_LINE_H, BLACK);
+            drawInfoLineAt(x, cy, sec.lines[i].label, val, INFO_BODY_SIZE);
+            strncpy(g_drawn_sec_vals[i], val, sizeof(g_drawn_sec_vals[i]) - 1);
+            g_drawn_sec_vals[i][sizeof(g_drawn_sec_vals[i]) - 1] = '\0';
+        }
         cy += INFO_LINE_H;
     }
+    g_drawn_sec_count = sec.line_count;
+    g_drawn_sec_page = g_info_page;
 }
 
 static void drawInfoHints() {
@@ -616,21 +734,32 @@ static void sampleInfoCurrentPage(const bool force_slow) {
     }
 }
 
-// 仅画内容区（用缓存；不清整屏）
-static void drawInfoContent() {
+// 仅画内容区（用缓存；不清整屏）。force：进页/翻页全量；否则只刷变化行
+static void drawInfoContent(const bool force) {
     const int x = APP_CONTENT_X;
     const int y = APP_CONTENT_INSET_Y;
     const int w = M5Cardputer.Display.width() - APP_CONTENT_X * 2;
 
     if (g_info_page == static_cast<int>(InfoPage::Mem)) {
-        drawInfoMemPage(x, y, w);
+        drawInfoMemPage(x, y, w, force);
     } else if (g_info_page == static_cast<int>(InfoPage::Storage)) {
-        drawInfoStoragePage(x, y, w);
+        drawInfoStoragePage(x, y, w, force);
     } else if (g_sec_cache_valid) {
-        drawInfoSectionAt(g_sec_cache, x, y, w);
+        drawInfoSectionAt(g_sec_cache, x, y, w, force);
     }
 
-    drawInfoHints();
+    // 底栏页码只在进页/翻页时重画
+    if (force) {
+        drawInfoHints();
+    }
+}
+
+// 翻页/进页时丢掉已绘制快照，避免跨页误跳过
+static void invalidateInfoDrawnCache() {
+    g_drawn_mem_valid = false;
+    g_drawn_sto_valid = false;
+    g_drawn_sec_count = 0;
+    g_drawn_sec_page = -1;
 }
 
 // full：进页/翻页；refresh：定时局部刷新
@@ -651,6 +780,7 @@ static void drawInfoApp(const bool full) {
         const int screen_w = M5Cardputer.Display.width();
         const int screen_h = M5Cardputer.Display.height();
         M5Cardputer.Display.fillRect(0, APP_HEADER_H, screen_w, screen_h - APP_HEADER_H, BLACK);
+        invalidateInfoDrawnCache();
     }
 
     // 进页/翻到 Memory / Storage：先画空壳，再采样填数（避免文件系统查询导致空白）
@@ -670,13 +800,15 @@ static void drawInfoApp(const bool full) {
         }
         drawInfoHints();
         updateAppHeaderStatus();
+        // 空壳已画，后续强制刷数据行时不要再跳过
+        invalidateInfoDrawnCache();
     }
 
     if (full || page_changed) {
         sampleInfoCurrentPage(true);
     }
 
-    drawInfoContent();
+    drawInfoContent(true);
     updateAppHeaderStatus();
     g_info_last_draw_ms = millis();
 }
@@ -690,6 +822,7 @@ static bool advanceInfoPage(const int delta) {
     g_sec_cache_valid = false;
     g_mem_cache_valid = false;
     g_sto_cache_valid = false;
+    invalidateInfoDrawnCache();
     return true;
 }
 
@@ -714,6 +847,7 @@ void enterInfoApp() {
     g_sto_cache_valid = false;
     g_sto_tf_probed = false;
     g_info_last_slow_ms = 0;
+    invalidateInfoDrawnCache();
     drawInfoApp(true);
 }
 
@@ -727,7 +861,8 @@ void updateInfoApp() {
 
     // heap/uptime 等快路径先采样；LittleFS/WiFi 字符串已降频，不拖住本帧
     sampleInfoCurrentPage(false);
-    drawInfoContent();
+    // 定时：只重画数值变化的行，不整页擦
+    drawInfoContent(false);
     updateAppHeaderStatus();
     g_info_last_draw_ms = millis();
 }

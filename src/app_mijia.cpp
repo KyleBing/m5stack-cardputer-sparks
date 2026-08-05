@@ -367,8 +367,8 @@ static bool mijiaPanelRightVisualChanged(const MijiaUiState& old_ui, const Mijia
 
 // 控制页局部刷新：仅重绘变化的图标/右栏区域
 static void applyMijiaControlRefresh(const bool force_full) {
-    // 无 Header 覆盖页：禁止 beginAppScreen / 局部刷控制页
-    if (mijiaQuickSelectMode || mijiaHotkeyEditMode) {
+    // Help / 快捷选 / 热键编辑：禁止盖住当前覆盖页（BLE 收包仍可写缓存）
+    if (mijiaHelpVisible || mijiaQuickSelectMode || mijiaHotkeyEditMode) {
         return;
     }
     const AppConfig& cfg = getAppConfig();

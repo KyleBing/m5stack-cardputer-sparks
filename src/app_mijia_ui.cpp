@@ -345,10 +345,10 @@ void drawMijiaPercentBar(const int x, const int y, const int w, const int h, con
     const int clamped = constrain(percent, 0, 100);
     const int inner_w = w - 2;
 
-    M5Cardputer.Display.drawRoundRect(x, y, w, h, 2, APP_COLOR_MUTED);
+    M5Cardputer.Display.drawRect(x, y, w, h, APP_COLOR_MUTED);
     const int fill_w = inner_w * clamped / 100;
     if (fill_w > 0) {
-        M5Cardputer.Display.fillRoundRect(x + 1, y + 1, fill_w, h - 2, 1, fill_color);
+        M5Cardputer.Display.fillRect(x + 1, y + 1, fill_w, h - 2, fill_color);
     }
 }
 
@@ -771,12 +771,12 @@ static void drawMijiaColorTempPercentBar(const int x, const int y, const int w, 
     const int inner_w = w - 2;
     const uint16_t bg = mijiaKelvinToColor565(kelvin, min_k, max_k);
 
-    M5Cardputer.Display.drawRoundRect(x, y, w, h, 2, APP_COLOR_MUTED);
-    M5Cardputer.Display.fillRoundRect(x + 1, y + 1, inner_w, h - 2, 1, bg);
+    M5Cardputer.Display.drawRect(x, y, w, h, APP_COLOR_MUTED);
+    M5Cardputer.Display.fillRect(x + 1, y + 1, inner_w, h - 2, bg);
 
     const int fill_w = max(2, inner_w * clamped / 100);
     if (clamped > 0) {
-        M5Cardputer.Display.fillRoundRect(x + 1, y + 1, fill_w, h - 2, 1, WHITE);
+        M5Cardputer.Display.fillRect(x + 1, y + 1, fill_w, h - 2, WHITE);
     }
 }
 
@@ -785,7 +785,7 @@ static void drawMijiaHuePercentBar(const int x, const int y, const int w, const 
                                    const int hue) {
     const int inner_w = max(1, w - 2);
     const int inner_h = max(1, h - 2);
-    M5Cardputer.Display.drawRoundRect(x, y, w, h, 2, APP_COLOR_MUTED);
+    M5Cardputer.Display.drawRect(x, y, w, h, APP_COLOR_MUTED);
     for (int i = 0; i < inner_w; i++) {
         const int hh = i * 360 / inner_w;
         M5Cardputer.Display.drawFastVLine(x + 1 + i, y + 1, inner_h, mijiaHueToColor565(hh));
