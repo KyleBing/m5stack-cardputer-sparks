@@ -7,8 +7,9 @@
 #include "M5Cardputer.h"
 
 static constexpr int MENU_LOGO_SIZE = 24;
-static constexpr int HEADER_STATUS_GAP = 5;
 static constexpr int HEADER_STATUS_CLEAR_PAD = 2;
+// 右侧图标/分页圆点相对屏幕右缘的最小间距
+static constexpr int HEADER_RIGHT_PAD = 8;
 static bool s_app_header_draw_divider = true;
 static bool s_app_header_include_battery = false;
 // 子界面 header 分页圆点（hub 页用）；page_count <= 1 表示不显示
@@ -30,29 +31,31 @@ static int headerPageDotsWidth(const int page_count) {
 }
 
 static int getMenuStatusRightX(const int screen_w, const int page_count) {
-    int right = screen_w - 4;
+    int right = screen_w - HEADER_RIGHT_PAD;
     const int dots_w = headerPageDotsWidth(page_count);
     if (dots_w > 0) {
-        right -= dots_w + 6;
+        // 状态图标与分页圆点间距
+        right -= dots_w + APP_HEADER_ICON_GAP;
     }
     return right;
 }
 
 // 子界面分页圆点靠右对齐
 static int getAppPageDotsX(const int screen_w) {
-    return screen_w - 4 - headerPageDotsWidth(s_app_header_page_count);
+    return screen_w - HEADER_RIGHT_PAD - headerPageDotsWidth(s_app_header_page_count);
 }
 
 // 子界面状态图标右边界；有分页圆点时为其让位
 static int getAppStatusRightX(const int screen_w) {
-    int right = screen_w - 4;
+    int right = screen_w - HEADER_RIGHT_PAD;
     const int dots_w = headerPageDotsWidth(s_app_header_page_count);
     if (dots_w > 0) {
-        right -= dots_w + 6;
+        right -= dots_w + APP_HEADER_ICON_GAP;
     }
     return right;
 }
 
+// 状态图标区总宽（仅在已放置图标之间插入 APP_HEADER_ICON_GAP）
 static int getHeaderStatusWidth(const bool include_battery, const bool wifi, const bool ble,
                                 const bool charging) {
     int w = 0;
@@ -60,10 +63,10 @@ static int getHeaderStatusWidth(const bool include_battery, const bool wifi, con
         w += getIconBatteryDisplayWidth(charging);
     }
     if (wifi) {
-        w += (w > 0 ? HEADER_STATUS_GAP : 0) + ICON_WIFI_W;
+        w += (w > 0 ? APP_HEADER_ICON_GAP : 0) + ICON_WIFI_W;
     }
     if (ble) {
-        w += (w > 0 ? HEADER_STATUS_GAP : 0) + ICON_BLE_W;
+        w += (w > 0 ? APP_HEADER_ICON_GAP : 0) + ICON_BLE_W;
     }
     return w;
 }
@@ -71,17 +74,7 @@ static int getHeaderStatusWidth(const bool include_battery, const bool wifi, con
 // 计算状态图标区最左 x（与 drawHeaderStatusIcons 布局一致）
 static int headerStatusLeftX(const int status_right, const bool include_battery, const bool wifi,
                              const bool ble, const bool charging) {
-    int x = status_right;
-    if (include_battery) {
-        x -= getIconBatteryDisplayWidth(charging);
-    }
-    if (wifi) {
-        x -= HEADER_STATUS_GAP + ICON_WIFI_W;
-    }
-    if (ble) {
-        x -= HEADER_STATUS_GAP + ICON_BLE_W;
-    }
-    return x;
+    return status_right - getHeaderStatusWidth(include_battery, wifi, ble, charging);
 }
 
 // 从右向左绘制连接状态图标，在 header 内垂直居中
@@ -92,18 +85,22 @@ static int drawHeaderStatusIcons(const int right_x, const bool include_battery) 
     const int body_h = getIconBatteryBodyHeight();
 
     int x = right_x;
+    bool placed = false;
     if (include_battery) {
         x -= getIconBatteryDisplayWidth(charging);
         drawIconBattery(x, headerStatusIconY(body_h), M5Cardputer.Power.getBatteryLevel(),
                         charging);
+        placed = true;
     }
     if (wifi) {
-        x -= HEADER_STATUS_GAP + ICON_WIFI_W;
+        x -= (placed ? APP_HEADER_ICON_GAP : 0) + ICON_WIFI_W;
         drawIconWifi(x, headerStatusIconY(ICON_WIFI_H), getWifiStaRssi(), WHITE);
+        placed = true;
     }
     if (ble) {
-        x -= HEADER_STATUS_GAP + ICON_BLE_W;
+        x -= (placed ? APP_HEADER_ICON_GAP : 0) + ICON_BLE_W;
         drawIconBle(x, headerStatusIconY(ICON_BLE_H), WHITE);
+        placed = true;
     }
     return x;
 }
@@ -175,7 +172,7 @@ void drawMenuScreenHeader(const char* app_name, const int page, const int page_c
     drawHeaderStatusIcons(status_right, true);
 
     if (page_count > 1) {
-        const int dot_x = screen_w - headerPageDotsWidth(page_count) - 4;
+        const int dot_x = screen_w - headerPageDotsWidth(page_count) - HEADER_RIGHT_PAD;
         drawIconPageDots(dot_x, APP_HEADER_H / 2, page, page_count);
     }
     // 主菜单 header 不画下边框
@@ -188,7 +185,7 @@ void updateMenuPageDots(const int page, const int page_count) {
     }
     const int screen_w = M5Cardputer.Display.width();
     const int dots_w = headerPageDotsWidth(page_count);
-    const int dot_x = screen_w - dots_w - 4;
+    const int dot_x = screen_w - dots_w - HEADER_RIGHT_PAD;
     // 只清圆点区域
     M5Cardputer.Display.fillRect(dot_x - 1, 0, dots_w + 2, APP_HEADER_H, BLACK);
     drawIconPageDots(dot_x, APP_HEADER_H / 2, page, page_count);
