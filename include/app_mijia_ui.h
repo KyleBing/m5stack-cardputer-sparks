@@ -16,14 +16,15 @@ static constexpr int MIJIA_LIST_ICON_PX = 28;          // 概览列表图标最�
 static constexpr int MIJIA_TAG_H = 12;
 static constexpr int MIJIA_TAG_H_2X = 20;              // 2x 字号 tag 高度
 static constexpr int MIJIA_PANEL_TEXT_SIZE = 1;        // 控制页右栏控制项字号
-static constexpr int MIJIA_PANEL_NAME_TEXT_SIZE = 2;   // 控制页设备名字号
-static constexpr int MIJIA_DEVICE_NAME_TOP_MARGIN = 0; // 设备名距内容区顶部
 static constexpr int MIJIA_PANEL_RIGHT_PAD = 10;        // 控制页右栏右边距
 static constexpr int MIJIA_PANEL_ICON_LEFT = 10;        // 控制页左图标左边距
 static constexpr int MIJIA_PANEL_ICON_INFO_GAP = 10;    // 图标与右栏文字间距
-static constexpr int MIJIA_PANEL_INFO_TOP_PAD = 3;      // 右栏文字区距上边
-static constexpr int MIJIA_PANEL_ICON_UP_OFFSET = 5;    // 左栏图标上移
 static constexpr int MIJIA_PANEL_BAR_TEXT_SIZE = 2;    // 进度条说明与数值字号
+// Header 设备 indicator：每格 3x3，间隔 1px；高度最多 4 行
+static constexpr int MIJIA_PAGER_CELL = 3;
+static constexpr int MIJIA_PAGER_GAP = 1;
+static constexpr int MIJIA_PAGER_MAX_ROWS = 4;
+static constexpr uint16_t MIJIA_PAGER_COLOR_IDLE = 0x9492; // #929292
 // 列表项高度：缩放图标 + 三行文字
 static constexpr int MIJIA_LIST_ITEM_H = 42;
 static constexpr int MIJIA_LIST_ITEM_GAP = 6;
@@ -77,10 +78,15 @@ int drawMijiaBarRow(int x, int y, const char* label, const char* value, int perc
 void drawMijiaLevelSegments(int x, int y, int w, int h, int level, int max_level,
                             uint16_t fill_color);
 
-// 控制页主面板：左大图标 + 开关状态，右设备信息与控制；net_status 非空时先显示网络状态
-int drawMijiaDevicePanel(const MijiaDevice* dev, MijiaDevKind kind, int device_idx,
-                         int device_count, const MijiaUiState& ui, int x, int y,
-                         const char* net_status = nullptr);
+// Header 设备 indicator 尺寸（0=不显示）
+int mijiaDevicePagerWidth(int device_count);
+int mijiaDevicePagerHeight(int device_count);
+// 绘制设备 indicator（current_idx 为黄块，其余灰块）
+void drawMijiaDevicePager(int x, int y, int current_idx, int device_count);
+
+// 控制页主面板：左大图标（内容区纵向居中）+ 右控制区（与图标顶对齐；设备名在 header）
+int drawMijiaDevicePanel(const MijiaDevice* dev, MijiaDevKind kind, const MijiaUiState& ui, int x,
+                         int y, const char* net_status = nullptr);
 
 // 控制页布局（局部刷新用）
 struct MijiaPanelLayout {
@@ -92,10 +98,12 @@ struct MijiaPanelLayout {
     int icon_y;
     int info_x;
     int info_w;
-    int right_top_y; // 名称行下方，状态与控制区起点
+    int right_top_y; // 右栏控制区起点（与图标顶对齐）
 };
 
-MijiaPanelLayout calcMijiaPanelLayout(int panel_y, int x = APP_CONTENT_X);
+MijiaPanelLayout calcMijiaPanelLayout(int panel_y, const MijiaDevice* dev, MijiaDevKind kind,
+                                     const MijiaUiState& ui, const char* net_status = nullptr,
+                                     int x = APP_CONTENT_X);
 
 // 是否显示行内连接/查询状态
 bool mijiaPanelShowsInlineStatus(const char* status, bool power_known);
@@ -103,10 +111,6 @@ bool mijiaPanelShowsInlineStatus(const char* status, bool power_known);
 // 绘制控制页左栏图标
 void drawMijiaPanelIcon(const MijiaDevice* dev, MijiaDevKind kind, const MijiaPanelLayout& layout,
                         const MijiaUiState& ui);
-
-// 绘制控制页名称与分页
-void drawMijiaPanelHeader(const MijiaDevice* dev, int device_idx, int device_count,
-                          const MijiaPanelLayout& layout);
 
 // 绘制控制页右栏状态与控制区
 void drawMijiaPanelRightColumn(const MijiaDevice* dev, MijiaDevKind kind,

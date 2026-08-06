@@ -30,6 +30,13 @@ void drawAppScreenHeader(const char* title, bool draw_divider = true);
 // 标题 + 次要色后缀（如 Infrared + TV）
 void drawAppScreenHeaderAccent(const char* title, const char* accent, uint16_t accent_color,
                                bool draw_divider = true);
+// 米家控制页：左上角设备 indicator + 设备名；右侧 WiFi / BLE
+void drawAppScreenHeaderWithDevicePager(const char* title, int device_idx, int device_count,
+                                        bool draw_divider = true);
+void beginAppScreenWithDevicePager(const char* title, int device_idx, int device_count,
+                                   bool draw_divider = true);
+// 清除 header 设备 indicator（离开控制页时调用）
+void clearAppHeaderDevicePager();
 
 // 主菜单 header：Logo + 应用名 + 电量/连接状态 + 分页圆点
 void drawMenuScreenHeader(const char* app_name, int page, int page_count);

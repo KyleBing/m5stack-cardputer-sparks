@@ -373,7 +373,8 @@ static void applyMijiaControlRefresh(const bool force_full) {
     }
     const AppConfig& cfg = getAppConfig();
     const MijiaDevice* dev = getCurrentMijiaDevice();
-    const int panel_y = APP_CONTENT_INSET_Y;
+    // 内容区顶边；图标在区内纵向居中（见 calcMijiaPanelLayout）
+    const int panel_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
 
     if (!cfg.loaded || dev == nullptr) {
         if (!mijiaControlInitialized) {
@@ -392,7 +393,7 @@ static void applyMijiaControlRefresh(const bool force_full) {
 
     const MijiaDevKind kind = mijiaClassifyModel(dev->model);
     const char* net = getMijiaNetworkStatusForUi();
-    const MijiaPanelLayout layout = calcMijiaPanelLayout(panel_y, APP_CONTENT_X);
+    const MijiaPanelLayout layout = calcMijiaPanelLayout(panel_y, dev, kind, mijiaUi, net);
     const bool device_changed = mijiaRenderedDeviceIdx != mijiaDeviceIdx;
     const bool icon_dirty = force_full || !mijiaControlInitialized || device_changed ||
                             mijiaPanelIconVisualChanged(mijiaRenderedUi, mijiaUi);
@@ -404,15 +405,12 @@ static void applyMijiaControlRefresh(const bool force_full) {
         return;
     }
 
+    // 设备名作 header 标题；右侧 WiFi / indicator / BLE
+    const char* title = (dev->name[0] != '\0') ? dev->name : "device";
     if (force_full || !mijiaControlInitialized || device_changed) {
-        if (!mijiaControlInitialized) {
-            beginAppScreen("Mijia");
-            mijiaControlInitialized = true;
-        } else {
-            clearAppContentArea();
-        }
-        drawMijiaDevicePanel(dev, kind, mijiaDeviceIdx, cfg.device_count, mijiaUi, APP_CONTENT_X,
-                             panel_y, net);
+        beginAppScreenWithDevicePager(title, mijiaDeviceIdx, cfg.device_count);
+        mijiaControlInitialized = true;
+        drawMijiaDevicePanel(dev, kind, mijiaUi, APP_CONTENT_X, panel_y, net);
         snapshotMijiaRenderedPanel(net);
         return;
     }
@@ -423,11 +421,11 @@ static void applyMijiaControlRefresh(const bool force_full) {
         drawMijiaPanelIcon(dev, kind, layout, mijiaUi);
     }
     if (right_dirty) {
-        // 留出底边 2px，避免擦掉开启态边框
-        const int clear_h = M5Cardputer.Display.height() - layout.right_top_y - 2;
+        // 右栏与图标顶对齐；整列擦除后重绘
+        const int clear_y = layout.right_top_y;
+        const int clear_h = M5Cardputer.Display.height() - clear_y - 2;
         if (clear_h > 0) {
-            M5Cardputer.Display.fillRect(layout.info_x, layout.right_top_y, layout.info_w, clear_h,
-                                         BLACK);
+            M5Cardputer.Display.fillRect(layout.info_x, clear_y, layout.info_w, clear_h, BLACK);
         }
         drawMijiaPanelRightColumn(dev, kind, layout, mijiaUi, net);
     }
@@ -677,13 +675,15 @@ static void updateMijiaFryerCountdownTick() {
         mijiaLastFryerRemainSec = -2;
         return;
     }
+    const char* net = getMijiaNetworkStatusForUi();
     const int remain = mijiaFryerRemainSec(mijiaUi);
     if (remain < 0) {
         if (mijiaLastFryerRemainSec >= 0) {
             mijiaLastFryerRemainSec = -2;
             // 倒计时消失：只清右侧时间区
-            const MijiaPanelLayout layout = calcMijiaPanelLayout(APP_CONTENT_INSET_Y, APP_CONTENT_X);
-            drawMijiaFryerRemainTick(mijiaUi, layout, getMijiaNetworkStatusForUi());
+            const MijiaPanelLayout layout = calcMijiaPanelLayout(
+                APP_CONTENT_Y_NO_TAP_TO_HEADER, dev, MijiaDevKind::AIR_FRYER, mijiaUi, net);
+            drawMijiaFryerRemainTick(mijiaUi, layout, net);
         }
         return;
     }
@@ -691,8 +691,9 @@ static void updateMijiaFryerCountdownTick() {
         return;
     }
     mijiaLastFryerRemainSec = remain;
-    const MijiaPanelLayout layout = calcMijiaPanelLayout(APP_CONTENT_INSET_Y, APP_CONTENT_X);
-    drawMijiaFryerRemainTick(mijiaUi, layout, getMijiaNetworkStatusForUi());
+    const MijiaPanelLayout layout = calcMijiaPanelLayout(
+        APP_CONTENT_Y_NO_TAP_TO_HEADER, dev, MijiaDevKind::AIR_FRYER, mijiaUi, net);
+    drawMijiaFryerRemainTick(mijiaUi, layout, net);
 }
 
 static void cancelMijiaPendingJobs() {

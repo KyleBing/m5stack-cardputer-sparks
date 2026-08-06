@@ -4,7 +4,9 @@
 #include "app_connectivity.h"
 #include "app_hid_keyboard.h"
 #include "app_mijia.h"
+#include "app_mijia_ui.h"
 #include "M5Cardputer.h"
+#include <cstring>
 
 static constexpr int MENU_LOGO_SIZE = 24;
 static constexpr int HEADER_STATUS_CLEAR_PAD = 2;
@@ -15,6 +17,9 @@ static bool s_app_header_include_battery = false;
 // 子界面 header 分页圆点（hub 页用）；page_count <= 1 表示不显示
 static int s_app_header_page = 0;
 static int s_app_header_page_count = 1;
+// 米家控制页设备 indicator；count <= 0 表示不显示
+static int s_app_header_pager_idx = 0;
+static int s_app_header_pager_count = 0;
 static constexpr int HEADER_DOT_R = 2;
 static constexpr int HEADER_DOT_GAP = 6;
 
@@ -56,6 +61,7 @@ static int getAppStatusRightX(const int screen_w) {
 }
 
 // 状态图标区总宽（仅在已放置图标之间插入 APP_HEADER_ICON_GAP）
+// 顺序（右→左）：battery? / wifi / ble（设备 indicator 在左侧标题旁）
 static int getHeaderStatusWidth(const bool include_battery, const bool wifi, const bool ble,
                                 const bool charging) {
     int w = 0;
@@ -128,32 +134,99 @@ static void drawAppHeaderCore(const char* title, const char* accent, const uint1
     const int screen_w = M5Cardputer.Display.width();
     M5Cardputer.Display.fillRect(0, 0, screen_w, APP_HEADER_H, BLACK);
 
+    const int status_right = getAppStatusRightX(screen_w);
+    const bool wifi = isWifiStaConnected();
+    const bool ble = isBleStackReady();
+    const bool charging = isBatteryCharging();
+    const int status_left =
+        headerStatusLeftX(status_right, s_app_header_include_battery, wifi, ble, charging);
+
+    // 左上角：设备 indicator，再画设备名
+    constexpr int left_pad = 4;
+    constexpr int pager_title_gap = 6; // indicator 与名称间隔
+    int title_x = left_pad;
+    const int pager_w = mijiaDevicePagerWidth(s_app_header_pager_count);
+    const int pager_h = mijiaDevicePagerHeight(s_app_header_pager_count);
+    if (pager_w > 0) {
+        // 相对 header 垂直居中再上移 2px
+        drawMijiaDevicePager(left_pad, headerStatusIconY(pager_h) - 2, s_app_header_pager_idx,
+                             s_app_header_pager_count);
+        title_x = left_pad + pager_w + pager_title_gap;
+    }
+    // 标题与状态区之间留 6px，超长则截断
+    const int title_max_w = max(0, status_left - title_x - 6);
+
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(WHITE, BLACK);
-    M5Cardputer.Display.setCursor(4, (APP_HEADER_H - 16) / 2);
-    M5Cardputer.Display.print(title);
-    if (accent != nullptr && accent[0] != '\0') {
-        M5Cardputer.Display.setTextColor(accent_color, BLACK);
-        M5Cardputer.Display.print(accent);
+    M5Cardputer.Display.setCursor(title_x, (APP_HEADER_H - 16) / 2);
+    if (title != nullptr && title[0] != '\0') {
+        char clipped[48];
+        strncpy(clipped, title, sizeof(clipped) - 1);
+        clipped[sizeof(clipped) - 1] = '\0';
+        while (clipped[0] != '\0' && M5Cardputer.Display.textWidth(clipped) > title_max_w) {
+            clipped[strlen(clipped) - 1] = '\0';
+        }
+        M5Cardputer.Display.print(clipped);
+        if (accent != nullptr && accent[0] != '\0') {
+            // 后缀也截到剩余宽度
+            const int used = M5Cardputer.Display.textWidth(clipped);
+            const int accent_max = max(0, title_max_w - used);
+            char accent_clipped[24];
+            strncpy(accent_clipped, accent, sizeof(accent_clipped) - 1);
+            accent_clipped[sizeof(accent_clipped) - 1] = '\0';
+            while (accent_clipped[0] != '\0' &&
+                   M5Cardputer.Display.textWidth(accent_clipped) > accent_max) {
+                accent_clipped[strlen(accent_clipped) - 1] = '\0';
+            }
+            M5Cardputer.Display.setTextColor(accent_color, BLACK);
+            M5Cardputer.Display.print(accent_clipped);
+        }
     }
 
     if (page_count > 1) {
         drawIconPageDots(getAppPageDotsX(screen_w), APP_HEADER_H / 2, page, page_count);
     }
-    drawHeaderStatusIcons(getAppStatusRightX(screen_w), s_app_header_include_battery);
+    drawHeaderStatusIcons(status_right, s_app_header_include_battery);
     if (draw_divider) {
         drawHeaderDivider(screen_w);
     }
     M5Cardputer.Display.setTextColor(WHITE, BLACK);
 }
 
+void clearAppHeaderDevicePager() {
+    s_app_header_pager_idx = 0;
+    s_app_header_pager_count = 0;
+}
+
+static void setAppHeaderDevicePager(const int device_idx, const int device_count) {
+    s_app_header_pager_idx = device_idx;
+    s_app_header_pager_count = device_count > 0 ? device_count : 0;
+}
+
 void drawAppScreenHeader(const char* title, const bool draw_divider) {
+    clearAppHeaderDevicePager();
     drawAppScreenHeaderAccent(title, nullptr, WHITE, draw_divider);
 }
 
 void drawAppScreenHeaderAccent(const char* title, const char* accent, const uint16_t accent_color,
                                const bool draw_divider) {
+    clearAppHeaderDevicePager();
     drawAppHeaderCore(title, accent, accent_color, draw_divider, 0, 1);
+}
+
+void drawAppScreenHeaderWithDevicePager(const char* title, const int device_idx,
+                                        const int device_count, const bool draw_divider) {
+    setAppHeaderDevicePager(device_idx, device_count);
+    drawAppHeaderCore(title, nullptr, WHITE, draw_divider, 0, 1);
+}
+
+void beginAppScreenWithDevicePager(const char* title, const int device_idx, const int device_count,
+                                   const bool draw_divider) {
+    s_app_header_include_battery = false;
+    M5Cardputer.Display.clear();
+    drawAppScreenHeaderWithDevicePager(title, device_idx, device_count, draw_divider);
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setTextColor(WHITE, BLACK);
 }
 
 void drawMenuScreenHeader(const char* app_name, const int page, const int page_count) {
@@ -310,6 +383,7 @@ void fillAppContentArea(const uint16_t color) {
 void beginAppHubScreen(const char* title, const uint16_t content_bg, const int page,
                        const int page_count) {
     s_app_header_include_battery = false;
+    clearAppHeaderDevicePager();
     M5Cardputer.Display.clear();
     drawAppHeaderCore(title, nullptr, WHITE, false, page, page_count);
     M5Cardputer.Display.setTextSize(2);

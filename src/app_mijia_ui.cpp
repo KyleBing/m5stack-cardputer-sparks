@@ -379,16 +379,73 @@ void drawMijiaLevelSegments(const int x, const int y, const int w, const int h, 
     const int seg_w = (w - gap * (max_level - 1)) / max_level;
     int sx = x;
     for (int i = 1; i <= max_level; i++) {
+        // 直角分段条（不用圆角）
         if (i <= level) {
-            M5Cardputer.Display.fillRoundRect(sx, y, seg_w, h, 2, fill_color);
+            M5Cardputer.Display.fillRect(sx, y, seg_w, h, fill_color);
         } else {
-            M5Cardputer.Display.drawRoundRect(sx, y, seg_w, h, 2, APP_COLOR_MUTED);
+            M5Cardputer.Display.drawRect(sx, y, seg_w, h, APP_COLOR_MUTED);
         }
         sx += seg_w + gap;
     }
 }
 
-// 控制页左栏：原生 PNG 图标占满内容区高度并纵向居中
+// 设备 indicator 行列：近似方形，高度最多 4
+static void mijiaDevicePagerGrid(const int count, int& rows, int& cols) {
+    if (count <= 0) {
+        rows = 0;
+        cols = 0;
+        return;
+    }
+    int r = 1;
+    while (r * r < count) {
+        r++;
+    }
+    if (r > MIJIA_PAGER_MAX_ROWS) {
+        r = MIJIA_PAGER_MAX_ROWS;
+    }
+    rows = r;
+    cols = (count + rows - 1) / rows;
+}
+
+int mijiaDevicePagerWidth(const int device_count) {
+    int rows = 0;
+    int cols = 0;
+    mijiaDevicePagerGrid(device_count, rows, cols);
+    if (cols <= 0) {
+        return 0;
+    }
+    return cols * MIJIA_PAGER_CELL + (cols - 1) * MIJIA_PAGER_GAP;
+}
+
+int mijiaDevicePagerHeight(const int device_count) {
+    int rows = 0;
+    int cols = 0;
+    mijiaDevicePagerGrid(device_count, rows, cols);
+    if (rows <= 0) {
+        return 0;
+    }
+    return rows * MIJIA_PAGER_CELL + (rows - 1) * MIJIA_PAGER_GAP;
+}
+
+void drawMijiaDevicePager(const int x, const int y, const int current_idx, const int device_count) {
+    int rows = 0;
+    int cols = 0;
+    mijiaDevicePagerGrid(device_count, rows, cols);
+    if (rows <= 0 || cols <= 0) {
+        return;
+    }
+    const int step = MIJIA_PAGER_CELL + MIJIA_PAGER_GAP;
+    for (int i = 0; i < device_count; i++) {
+        const int row = i / cols;
+        const int col = i % cols;
+        const int cx = x + col * step;
+        const int cy = y + row * step;
+        const uint16_t color = (i == current_idx) ? YELLOW : MIJIA_PAGER_COLOR_IDLE;
+        M5Cardputer.Display.fillRect(cx, cy, MIJIA_PAGER_CELL, MIJIA_PAGER_CELL, color);
+    }
+}
+
+// 控制页左栏：原生 PNG 图标尺寸；内容区高度用于纵向居中
 static void mijiaCalcPanelLayout(const int content_y, int& icon_px, int& left_w, int& content_h) {
     icon_px = DEVICE_ICON_NATIVE_PX;
     left_w = icon_px;
@@ -422,21 +479,24 @@ static int mijiaPanelInlineStatusLineH(const char* status) {
     return mijiaPanelStatusIsTimeout(status) ? INFO_LINE_H_2X : INFO_LINE_H;
 }
 
-MijiaPanelLayout calcMijiaPanelLayout(const int panel_y, const int x) {
+MijiaPanelLayout calcMijiaPanelLayout(const int panel_y, const MijiaDevice* dev,
+                                     const MijiaDevKind kind, const MijiaUiState& ui,
+                                     const char* net_status, const int x) {
+    (void)dev;
+    (void)kind;
+    (void)ui;
+    (void)net_status;
     (void)x;
     MijiaPanelLayout layout{};
-    layout.layout_y = panel_y + MIJIA_DEVICE_NAME_TOP_MARGIN;
+    layout.layout_y = panel_y;
     mijiaCalcPanelLayout(layout.layout_y, layout.icon_px, layout.left_w, layout.content_h);
-    // 图标左右各 10px
+    // 图标在内容区纵向居中；右栏与图标顶对齐
     layout.icon_x = MIJIA_PANEL_ICON_LEFT;
-    layout.icon_y =
-        layout.layout_y + (layout.content_h - layout.icon_px) / 2 - MIJIA_PANEL_ICON_UP_OFFSET;
+    layout.icon_y = layout.layout_y + (layout.content_h - layout.icon_px) / 2;
     layout.info_x = layout.icon_x + layout.icon_px + MIJIA_PANEL_ICON_INFO_GAP;
     const int screen_w = M5Cardputer.Display.width();
     layout.info_w = screen_w - layout.info_x - MIJIA_PANEL_RIGHT_PAD;
-    // 右栏文字区整体下移 MIJIA_PANEL_INFO_TOP_PAD
-    const int info_top = layout.layout_y + MIJIA_PANEL_INFO_TOP_PAD;
-    layout.right_top_y = info_top + INFO_LINE_H_2X + 2;
+    layout.right_top_y = layout.icon_y;
     return layout;
 }
 
@@ -447,42 +507,11 @@ void drawMijiaPanelIcon(const MijiaDevice* dev, const MijiaDevKind kind,
                            MIJIA_ICON_SCALE_DEFAULT);
 }
 
-void drawMijiaPanelHeader(const MijiaDevice* dev, const int device_idx, const int device_count,
-                          const MijiaPanelLayout& layout) {
-    char pager[12];
-    snprintf(pager, sizeof(pager), "%d/%d", device_idx + 1, device_count);
-    // 右栏文字区上边距
-    const int name_y = layout.layout_y + MIJIA_PANEL_INFO_TOP_PAD;
-
-    M5Cardputer.Display.setTextSize(1);
-    const int pager_w = M5Cardputer.Display.textWidth(pager);
-    const int content_right = M5Cardputer.Display.width() - MIJIA_PANEL_RIGHT_PAD;
-    const int pager_x = content_right - pager_w;
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(pager_x, name_y);
-    M5Cardputer.Display.print(pager);
-
-    M5Cardputer.Display.setTextSize(MIJIA_PANEL_NAME_TEXT_SIZE);
-    const int name_max_w = max(0, pager_x - layout.info_x - 6);
-    M5Cardputer.Display.setTextColor(APP_COLOR_VALUE, BLACK);
-    M5Cardputer.Display.setCursor(layout.info_x, name_y);
-    if (dev != nullptr && dev->name[0] != '\0') {
-        char name[32];
-        strncpy(name, dev->name, sizeof(name) - 1);
-        name[sizeof(name) - 1] = '\0';
-        while (name[0] != '\0' && M5Cardputer.Display.textWidth(name) > name_max_w) {
-            name[strlen(name) - 1] = '\0';
-        }
-        M5Cardputer.Display.print(name);
-    } else {
-        M5Cardputer.Display.print("device");
-    }
-}
-
 void drawMijiaPanelRightColumn(const MijiaDevice* dev, const MijiaDevKind kind,
                                const MijiaPanelLayout& layout, const MijiaUiState& ui,
                                const char* net_status) {
     constexpr int text_size = MIJIA_PANEL_TEXT_SIZE;
+    (void)text_size;
     int info_y = layout.right_top_y;
 
     if (net_status != nullptr && net_status[0] != '\0') {
@@ -559,12 +588,10 @@ void drawMijiaFryerRemainTick(const MijiaUiState& ui, const MijiaPanelLayout& la
     }
 }
 
-int drawMijiaDevicePanel(const MijiaDevice* dev, const MijiaDevKind kind, const int device_idx,
-                         const int device_count, const MijiaUiState& ui, const int x, const int y,
-                         const char* net_status) {
-    const MijiaPanelLayout layout = calcMijiaPanelLayout(y, x);
+int drawMijiaDevicePanel(const MijiaDevice* dev, const MijiaDevKind kind, const MijiaUiState& ui,
+                         const int x, const int y, const char* net_status) {
+    const MijiaPanelLayout layout = calcMijiaPanelLayout(y, dev, kind, ui, net_status, x);
     drawMijiaPanelIcon(dev, kind, layout, ui);
-    drawMijiaPanelHeader(dev, device_idx, device_count, layout);
     drawMijiaPanelRightColumn(dev, kind, layout, ui, net_status);
     // 开启态：贴紧 header 的 2px 状态框（底角圆角）
     drawMijiaControlPowerBorder(ui.power_known && ui.power_on);
