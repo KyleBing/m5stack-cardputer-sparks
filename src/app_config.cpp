@@ -160,6 +160,15 @@ bool loadAppConfig() {
     g_config.infrared_default = IrDefaultCategory::Tv;
     g_config.infrared_tv_brand = 0; // Samsung
     g_config.infrared_ac_brand = 0; // Midea
+    // 空调自动化默认：29℃开 / 26℃关 / 过滤 3 次 / 制冷 26℃
+    g_config.ac_auto = {};
+    g_config.ac_auto.on_temp_c = 29;
+    g_config.ac_auto.off_temp_c = 26;
+    g_config.ac_auto.filter_count = 3;
+    g_config.ac_auto.ac_brand = 0;
+    g_config.ac_auto.ac_mode = 0; // cool
+    g_config.ac_auto.ac_temp_c = 26;
+    g_config.ac_auto.ac_fan = 0; // auto
     g_config.hid_keyboard_transport = HidKeyboardTransport::Ble;
     g_config.hid_keyboard_imu_sensitivity = 5;
     copyField(g_config.timezone, sizeof(g_config.timezone), APP_TIMEZONE_DEFAULT);
@@ -299,6 +308,33 @@ bool loadAppConfig() {
         g_config.infrared_default = parseIrDefaultCategory(ir_obj["default"]);
         g_config.infrared_tv_brand = parseIrTvBrand(ir_obj["tv_brand"]);
         g_config.infrared_ac_brand = parseIrAcBrand(ir_obj["ac_brand"]);
+    }
+
+    // ac_auto：温湿度触发开关空调
+    g_config.ac_auto = {};
+    g_config.ac_auto.on_temp_c = 29;
+    g_config.ac_auto.off_temp_c = 26;
+    g_config.ac_auto.filter_count = 3;
+    g_config.ac_auto.ac_brand = g_config.infrared_ac_brand;
+    g_config.ac_auto.ac_mode = 0;
+    g_config.ac_auto.ac_temp_c = 26;
+    g_config.ac_auto.ac_fan = 0;
+    JsonObject ac_auto_obj = doc["ac_auto"];
+    if (!ac_auto_obj.isNull()) {
+        copyField(g_config.ac_auto.sensor_id, sizeof(g_config.ac_auto.sensor_id),
+                  ac_auto_obj["sensor_id"] | "");
+        int on_t = ac_auto_obj["on_temp"] | 29;
+        int off_t = ac_auto_obj["off_temp"] | 26;
+        int filter = ac_auto_obj["filter"] | 3;
+        int set_t = ac_auto_obj["ac_temp"] | 26;
+        g_config.ac_auto.on_temp_c = static_cast<uint8_t>(constrain(on_t, 16, 40));
+        g_config.ac_auto.off_temp_c = static_cast<uint8_t>(constrain(off_t, 10, 35));
+        g_config.ac_auto.filter_count = static_cast<uint8_t>(constrain(filter, 1, 10));
+        g_config.ac_auto.ac_temp_c = static_cast<uint8_t>(constrain(set_t, 16, 30));
+        g_config.ac_auto.ac_brand = parseIrAcBrand(ac_auto_obj["ac_brand"]);
+        g_config.ac_auto.ac_mode = parseAcAutoMode(ac_auto_obj["ac_mode"]);
+        g_config.ac_auto.ac_fan = parseAcAutoFan(ac_auto_obj["ac_fan"]);
+        normalizeAcAutoConfig(g_config.ac_auto);
     }
 
     // HID Keyboard：缺字段时保持安全默认 BLE、灵敏度 5
@@ -1064,6 +1100,161 @@ bool saveAppConfigInfrared(const IrDefaultCategory category, const uint8_t tv_br
     ir_obj["default"] = irDefaultCategoryName(category);
     ir_obj["tv_brand"] = irTvBrandConfigName(tv_brand);
     ir_obj["ac_brand"] = irAcBrandConfigName(ac_brand);
+
+    if (doc["devices"].isNull()) {
+        doc["devices"].to<JsonArray>();
+    }
+
+    File out = LittleFS.open(CONFIG_PATH, "w");
+    if (!out) {
+        return false;
+    }
+    serializeJsonPretty(doc, out);
+    out.close();
+    return loadAppConfig();
+}
+
+const char* acAutoModeConfigName(const uint8_t idx) {
+    static const char* const kNames[] = {"cool", "heat", "dry", "fan", "auto"};
+    if (idx >= AC_AUTO_MODE_COUNT) {
+        return kNames[0];
+    }
+    return kNames[idx];
+}
+
+const char* acAutoModeDisplayName(const uint8_t idx) {
+    static const char* const kNames[] = {"Cool", "Heat", "Dry", "Fan", "Auto"};
+    if (idx >= AC_AUTO_MODE_COUNT) {
+        return kNames[0];
+    }
+    return kNames[idx];
+}
+
+uint8_t parseAcAutoMode(const char* s) {
+    if (s == nullptr || s[0] == '\0') {
+        return 0;
+    }
+    for (uint8_t i = 0; i < AC_AUTO_MODE_COUNT; i++) {
+        if (strcasecmp(s, acAutoModeConfigName(i)) == 0) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+uint8_t cycleAcAutoMode(const uint8_t cur, const int delta) {
+    int idx = static_cast<int>(cur) + delta;
+    idx = (idx % AC_AUTO_MODE_COUNT + AC_AUTO_MODE_COUNT) % AC_AUTO_MODE_COUNT;
+    return static_cast<uint8_t>(idx);
+}
+
+const char* acAutoFanConfigName(const uint8_t idx) {
+    static const char* const kNames[] = {"auto", "min", "low", "med", "high", "max"};
+    if (idx >= AC_AUTO_FAN_COUNT) {
+        return kNames[0];
+    }
+    return kNames[idx];
+}
+
+const char* acAutoFanDisplayName(const uint8_t idx) {
+    static const char* const kNames[] = {"Auto", "Min", "Low", "Med", "High", "Max"};
+    if (idx >= AC_AUTO_FAN_COUNT) {
+        return kNames[0];
+    }
+    return kNames[idx];
+}
+
+uint8_t parseAcAutoFan(const char* s) {
+    if (s == nullptr || s[0] == '\0') {
+        return 0;
+    }
+    for (uint8_t i = 0; i < AC_AUTO_FAN_COUNT; i++) {
+        if (strcasecmp(s, acAutoFanConfigName(i)) == 0) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+uint8_t cycleAcAutoFan(const uint8_t cur, const int delta) {
+    int idx = static_cast<int>(cur) + delta;
+    idx = (idx % AC_AUTO_FAN_COUNT + AC_AUTO_FAN_COUNT) % AC_AUTO_FAN_COUNT;
+    return static_cast<uint8_t>(idx);
+}
+
+void normalizeAcAutoConfig(AcAutoConfig& cfg) {
+    if (cfg.on_temp_c < 16) {
+        cfg.on_temp_c = 16;
+    }
+    if (cfg.on_temp_c > 40) {
+        cfg.on_temp_c = 40;
+    }
+    if (cfg.off_temp_c < 10) {
+        cfg.off_temp_c = 10;
+    }
+    if (cfg.off_temp_c > 35) {
+        cfg.off_temp_c = 35;
+    }
+    // 开阈值必须严格高于关阈值
+    if (cfg.on_temp_c <= cfg.off_temp_c) {
+        if (cfg.off_temp_c >= 40) {
+            cfg.off_temp_c = 39;
+            cfg.on_temp_c = 40;
+        } else {
+            cfg.on_temp_c = static_cast<uint8_t>(cfg.off_temp_c + 1);
+        }
+    }
+    if (cfg.filter_count < 1) {
+        cfg.filter_count = 1;
+    }
+    if (cfg.filter_count > 10) {
+        cfg.filter_count = 10;
+    }
+    if (cfg.ac_brand >= IR_AC_BRAND_COUNT) {
+        cfg.ac_brand = 0;
+    }
+    if (cfg.ac_mode >= AC_AUTO_MODE_COUNT) {
+        cfg.ac_mode = 0;
+    }
+    if (cfg.ac_fan >= AC_AUTO_FAN_COUNT) {
+        cfg.ac_fan = 0;
+    }
+    if (cfg.ac_temp_c < 16) {
+        cfg.ac_temp_c = 16;
+    }
+    if (cfg.ac_temp_c > 30) {
+        cfg.ac_temp_c = 30;
+    }
+}
+
+bool saveAppConfigAcAuto(const AcAutoConfig& cfg_in) {
+    AcAutoConfig cfg = cfg_in;
+    normalizeAcAutoConfig(cfg);
+
+    JsonDocument doc;
+    if (LittleFS.exists(CONFIG_PATH)) {
+        File in = LittleFS.open(CONFIG_PATH, "r");
+        if (in) {
+            const DeserializationError err = deserializeJson(doc, in);
+            in.close();
+            if (err) {
+                doc.clear();
+            }
+        }
+    }
+
+    JsonObject obj = doc["ac_auto"].as<JsonObject>();
+    if (obj.isNull()) {
+        obj = doc["ac_auto"].to<JsonObject>();
+    }
+    obj["sensor_id"] = cfg.sensor_id;
+    obj["on_temp"] = cfg.on_temp_c;
+    obj["off_temp"] = cfg.off_temp_c;
+    obj["filter"] = cfg.filter_count;
+    obj["ac_brand"] = irAcBrandConfigName(cfg.ac_brand);
+    obj["ac_mode"] = acAutoModeConfigName(cfg.ac_mode);
+    obj["ac_temp"] = cfg.ac_temp_c;
+    obj["ac_fan"] = acAutoFanConfigName(cfg.ac_fan);
 
     if (doc["devices"].isNull()) {
         doc["devices"].to<JsonArray>();

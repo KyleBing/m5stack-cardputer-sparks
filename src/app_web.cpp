@@ -454,6 +454,7 @@ enum class WebNavTab : uint8_t {
     Devices,
     Groups,
     Cursor,
+    AcAuto,
     System,
     Shots,
     Files,
@@ -487,6 +488,7 @@ static void appendTopBar(String& body, const char* title, const WebNavTab active
     appendNavLink(body, WebNavTab::Devices, active, "/", "米家设备");
     appendNavLink(body, WebNavTab::Groups, active, "/groups", "米家设备编组");
     appendNavLink(body, WebNavTab::Cursor, active, "/cursor", "Cursor");
+    appendNavLink(body, WebNavTab::AcAuto, active, "/ac-auto", "空调自动化");
     appendNavLink(body, WebNavTab::System, active, "/system", "系统");
     appendNavLink(body, WebNavTab::Shots, active, "/shots", "截图");
     appendNavLink(body, WebNavTab::Files, active, "/files", "TF文件");
@@ -515,6 +517,8 @@ static const char* JS_CFG_DEFAULT =
     "sound:{time_key:true,mijia_on_off:true,volume:25},"
     "time:{default:'up',timezone:'CST-8'},calendar:{week_start:'sunday'},"
     "infrared:{default:'tv',tv_brand:'samsung',ac_brand:'midea'},"
+    "ac_auto:{sensor_id:'',on_temp:29,off_temp:26,filter:3,ac_brand:'midea',"
+    "ac_mode:'cool',ac_temp:26,ac_fan:'auto'},"
     "hid_keyboard:{transport:'ble',imu_sensitivity:5}}";
 
 // 加载并规范化 cfg（各编辑页共用）
@@ -564,6 +568,15 @@ static void appendJsLoadCfg(String& body) {
               "if(!cfg.infrared.default)cfg.infrared.default='tv';"
               "if(!cfg.infrared.tv_brand)cfg.infrared.tv_brand='samsung';"
               "if(!cfg.infrared.ac_brand)cfg.infrared.ac_brand='midea';"
+              "if(!cfg.ac_auto)cfg.ac_auto={};"
+              "if(cfg.ac_auto.sensor_id==null)cfg.ac_auto.sensor_id='';"
+              "if(cfg.ac_auto.on_temp==null)cfg.ac_auto.on_temp=29;"
+              "if(cfg.ac_auto.off_temp==null)cfg.ac_auto.off_temp=26;"
+              "if(cfg.ac_auto.filter==null)cfg.ac_auto.filter=3;"
+              "if(!cfg.ac_auto.ac_brand)cfg.ac_auto.ac_brand='midea';"
+              "if(!cfg.ac_auto.ac_mode)cfg.ac_auto.ac_mode='cool';"
+              "if(cfg.ac_auto.ac_temp==null)cfg.ac_auto.ac_temp=26;"
+              "if(!cfg.ac_auto.ac_fan)cfg.ac_auto.ac_fan='auto';"
               "if(!cfg.hid_keyboard)cfg.hid_keyboard={};"
               "if(cfg.hid_keyboard.transport!=='usb')cfg.hid_keyboard.transport='ble';"
               "let hs=+cfg.hid_keyboard.imu_sensitivity;"
@@ -980,6 +993,103 @@ static void handleCursorPage() {
         "init();");
     body += F("</script>");
     sendHtmlPage(body, HTML_CSS_CURSOR);
+}
+
+// 空调自动化配置页
+static void handleAcAutoPage() {
+    const String cfg = sanitizeJsonForHtml(loadConfigText());
+
+    String body;
+    body.reserve(cfg.length() + 4096);
+    appendTopBar(body, "空调自动化", WebNavTab::AcAuto);
+    body += F(
+        "<form id='save-form' method='POST' action='/save'>"
+        "<input type='hidden' name='config' id='config-payload'>"
+        "<h2>空调自动化 <span class='key'>ac_auto</span></h2>"
+        "<p class='hint'>选择 BLE 温湿度计作为触发源；温度高于 on_temp 连续 filter 次开空调，"
+        "低于 off_temp 连续 filter 次关空调。设备菜单按 <code>n</code> 进入展示页。</p>"
+        "<label>温湿度计（sensor_id）"
+        "<select id='ac-sensor'></select></label>"
+        "<label>开空调温度（&gt;℃）"
+        "<input id='ac-on-temp' type='number' min='16' max='40' step='1'></label>"
+        "<label>关空调温度（&lt;℃）"
+        "<input id='ac-off-temp' type='number' min='10' max='35' step='1'></label>"
+        "<label>过滤次数"
+        "<input id='ac-filter' type='number' min='1' max='10' step='1'></label>"
+        "<label>空调品牌"
+        "<select id='ac-brand'>"
+        "<option value='midea'>Midea</option>"
+        "<option value='gree'>Gree</option>"
+        "<option value='haier'>Haier</option>"
+        "<option value='aux'>AUX</option>"
+        "<option value='hisense'>Hisense</option>"
+        "<option value='xiaomi'>Xiaomi</option>"
+        "</select></label>"
+        "<label>模式"
+        "<select id='ac-mode'>"
+        "<option value='cool'>Cool</option>"
+        "<option value='heat'>Heat</option>"
+        "<option value='dry'>Dry</option>"
+        "<option value='fan'>Fan</option>"
+        "<option value='auto'>Auto</option>"
+        "</select></label>"
+        "<label>设定温度（℃）"
+        "<input id='ac-temp' type='number' min='16' max='30' step='1'></label>"
+        "<label>风力"
+        "<select id='ac-fan'>"
+        "<option value='auto'>Auto</option>"
+        "<option value='min'>Min</option>"
+        "<option value='low'>Low</option>"
+        "<option value='med'>Med</option>"
+        "<option value='high'>High</option>"
+        "<option value='max'>Max</option>"
+        "</select></label>"
+        "<div class='save-bar'>"
+        "<button type='submit' class='primary'>保存到设备</button>"
+        "</div></form>");
+    appendCardEnd(body);
+    appendCfgDataScript(body, cfg);
+    body += F("<script>");
+    appendJsLoadCfg(body);
+    body += F(
+        "function isHt(d){const m=(d&&d.model)||'';"
+        "return m.indexOf('sensor_ht')>=0||m.indexOf('.ht.')>=0;}"
+        "function fillSensors(){"
+        "const sel=document.getElementById('ac-sensor');sel.innerHTML='';"
+        "const opt0=document.createElement('option');opt0.value='';opt0.textContent='(未选择)';"
+        "sel.appendChild(opt0);"
+        "(cfg.devices||[]).forEach(d=>{"
+        "if(!isHt(d)||!d.id)return;"
+        "const o=document.createElement('option');o.value=d.id;"
+        "o.textContent=(d.name_zh||d.name||d.id)+' ('+d.id+')';sel.appendChild(o);});}"
+        "function collect(){if(!cfg.ac_auto)cfg.ac_auto={};"
+        "cfg.ac_auto.sensor_id=document.getElementById('ac-sensor').value||'';"
+        "let on=+document.getElementById('ac-on-temp').value;if(isNaN(on))on=29;"
+        "let off=+document.getElementById('ac-off-temp').value;if(isNaN(off))off=26;"
+        "let f=+document.getElementById('ac-filter').value;if(isNaN(f))f=3;"
+        "let t=+document.getElementById('ac-temp').value;if(isNaN(t))t=26;"
+        "cfg.ac_auto.on_temp=Math.max(16,Math.min(40,Math.round(on)));"
+        "cfg.ac_auto.off_temp=Math.max(10,Math.min(35,Math.round(off)));"
+        "cfg.ac_auto.filter=Math.max(1,Math.min(10,Math.round(f)));"
+        "cfg.ac_auto.ac_temp=Math.max(16,Math.min(30,Math.round(t)));"
+        "cfg.ac_auto.ac_brand=document.getElementById('ac-brand').value||'midea';"
+        "cfg.ac_auto.ac_mode=document.getElementById('ac-mode').value||'cool';"
+        "cfg.ac_auto.ac_fan=document.getElementById('ac-fan').value||'auto';}"
+        "function init(){loadCfg();fillSensors();"
+        "const a=cfg.ac_auto||{};"
+        "document.getElementById('ac-sensor').value=a.sensor_id||'';"
+        "document.getElementById('ac-on-temp').value=String(a.on_temp??29);"
+        "document.getElementById('ac-off-temp').value=String(a.off_temp??26);"
+        "document.getElementById('ac-filter').value=String(a.filter??3);"
+        "document.getElementById('ac-brand').value=a.ac_brand||'midea';"
+        "document.getElementById('ac-mode').value=a.ac_mode||'cool';"
+        "document.getElementById('ac-temp').value=String(a.ac_temp??26);"
+        "document.getElementById('ac-fan').value=a.ac_fan||'auto';"
+        "document.getElementById('save-form').onsubmit=()=>{collect();"
+        "document.getElementById('config-payload').value=JSON.stringify(cfg,null,2);};}"
+        "init();");
+    body += F("</script>");
+    sendHtmlPage(body);
 }
 
 // 系统设置页
@@ -2257,6 +2367,7 @@ static void registerWebRoutes() {
     g_server.on("/wifi", HTTP_GET, handleWifiPage);
     g_server.on("/groups", HTTP_GET, handleGroupsPage);
     g_server.on("/cursor", HTTP_GET, handleCursorPage);
+    g_server.on("/ac-auto", HTTP_GET, handleAcAutoPage);
     g_server.on("/system", HTTP_GET, handleSystemPage);
     g_server.on("/advanced", HTTP_GET, handleAdvancedRoot);
     g_server.on("/save", HTTP_POST, handleSave);

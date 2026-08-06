@@ -9,6 +9,7 @@
 #include "app_wifi.h"
 #include "app_mijia.h"
 #include "app_mijia_ui.h"
+#include "mijia_control.h"
 #include "app_ble.h"
 #include "app_connectivity.h"
 #include "app_rtc.h"
@@ -28,6 +29,7 @@
 #include "app_hid_keyboard.h"
 #include "app_calendar.h"
 #include "app_screenshot.h"
+#include "app_ac_auto.h"
 #include <WiFi.h>
 #include <esp_sleep.h>
 #include <esp_timer.h>
@@ -81,6 +83,7 @@ enum class AppState {
     HID_KEYBOARD,
     INFO, // 系统信息 / 内存（字母 i）
     CALENDAR,
+    AC_AUTO, // 空调自动化
 };
 
 enum class HardwareTestMode {
@@ -120,6 +123,7 @@ static const MenuItem MENU_ITEMS[] = {
     {'v', "Ver", "VERSION", AppState::VERSION},
     {'j', "Mor", "MORSE", AppState::MORSE},
     {'x', "IR", "INFRARED", AppState::IR},
+    {'n', "AC", "AC AUTO", AppState::AC_AUTO},
 
     // 系统功能测试
     {'k', "KB", "KEYBOARD", AppState::HID_KEYBOARD},
@@ -231,6 +235,8 @@ const char* getCurrentAppShotSlug() {
             return "info";
         case AppState::CALENDAR:
             return "calendar";
+        case AppState::AC_AUTO:
+            return "acauto";
         default:
             return "unknown";
     }
@@ -369,6 +375,7 @@ void showMenu() {
     leaveLedApp();
     leaveHidKeyboardApp();
     leaveIrApp(); // 释放红外图标 RAM 缓存
+    leaveAcAutoApp();
     // leaveCountdownApp 不再停后台计时；到期由 poll 弹窗
     leaveMijiaApp();
     stopConfigWebServer();
@@ -940,7 +947,8 @@ enum class SettingsModule : uint8_t {
     Time = 2,
     Calendar = 3,
     Infrared = 4,
-    Count = 5,
+    AcAuto = 5,
+    Count = 6,
 };
 
 enum class SettingsLayer : uint8_t { List = 0, Detail = 1, Picker = 2 };
@@ -952,6 +960,10 @@ enum class SettingsPickerKind : uint8_t {
     IrDefault,
     IrTvBrand,
     IrAcBrand,
+    AcAutoSensor,
+    AcAutoBrand,
+    AcAutoMode,
+    AcAutoFan,
 };
 
 static SettingsModule g_settings_module = SettingsModule::Screen;
@@ -1001,6 +1013,8 @@ static const char* settingsModuleName(const SettingsModule mod) {
             return "calendar";
         case SettingsModule::Infrared:
             return "infrared";
+        case SettingsModule::AcAuto:
+            return "ac auto";
         default:
             return "?";
     }
@@ -1018,6 +1032,8 @@ static int settingsPanelRowCount(const SettingsModule mod) {
             return 1; // week start
         case SettingsModule::Infrared:
             return 3; // category / tv / ac
+        case SettingsModule::AcAuto:
+            return 8; // sensor / on / off / filter / brand / mode / temp / fan
         default:
             return 0;
     }
@@ -1150,6 +1166,59 @@ static int findSettingsTzPresetIndex(const char* tz) {
     return 0;
 }
 
+static int settingsAcAutoSensorCount() {
+    const AppConfig& cfg = getAppConfig();
+    int n = 0;
+    for (int i = 0; i < cfg.device_count; i++) {
+        if (mijiaBleCanScan(cfg.devices[i]) &&
+            mijiaClassifyModel(cfg.devices[i].model) == MijiaDevKind::SENSOR_HT) {
+            n++;
+        }
+    }
+    return n;
+}
+
+static int settingsAcAutoSensorDeviceIndex(const int picker_index) {
+    const AppConfig& cfg = getAppConfig();
+    int n = 0;
+    for (int i = 0; i < cfg.device_count; i++) {
+        if (mijiaBleCanScan(cfg.devices[i]) &&
+            mijiaClassifyModel(cfg.devices[i].model) == MijiaDevKind::SENSOR_HT) {
+            if (n == picker_index) {
+                return i;
+            }
+            n++;
+        }
+    }
+    return -1;
+}
+
+static int settingsAcAutoSensorPickerIndex(const char* sensor_id) {
+    if (sensor_id == nullptr || sensor_id[0] == '\0') {
+        return 0;
+    }
+    const AppConfig& cfg = getAppConfig();
+    int n = 0;
+    for (int i = 0; i < cfg.device_count; i++) {
+        if (mijiaBleCanScan(cfg.devices[i]) &&
+            mijiaClassifyModel(cfg.devices[i].model) == MijiaDevKind::SENSOR_HT) {
+            if (strcmp(cfg.devices[i].id, sensor_id) == 0) {
+                return n;
+            }
+            n++;
+        }
+    }
+    return 0;
+}
+
+static const char* settingsAcAutoSensorLabel(const int picker_index) {
+    const int dev_i = settingsAcAutoSensorDeviceIndex(picker_index);
+    if (dev_i < 0) {
+        return "(none)";
+    }
+    return mijiaDeviceDisplayName(getAppConfig().devices[dev_i]);
+}
+
 static int settingsPickerCount(const SettingsPickerKind kind) {
     switch (kind) {
         case SettingsPickerKind::TimeDefault:
@@ -1161,7 +1230,16 @@ static int settingsPickerCount(const SettingsPickerKind kind) {
         case SettingsPickerKind::IrTvBrand:
             return IR_TV_BRAND_COUNT;
         case SettingsPickerKind::IrAcBrand:
+        case SettingsPickerKind::AcAutoBrand:
             return IR_AC_BRAND_COUNT;
+        case SettingsPickerKind::AcAutoSensor: {
+            const int n = settingsAcAutoSensorCount();
+            return n > 0 ? n : 1; // 至少占位一行
+        }
+        case SettingsPickerKind::AcAutoMode:
+            return AC_AUTO_MODE_COUNT;
+        case SettingsPickerKind::AcAutoFan:
+            return AC_AUTO_FAN_COUNT;
         default:
             return 0;
     }
@@ -1181,7 +1259,14 @@ static const char* settingsPickerLabel(const SettingsPickerKind kind, const int 
         case SettingsPickerKind::IrTvBrand:
             return irTvBrandDisplayName(static_cast<uint8_t>(index));
         case SettingsPickerKind::IrAcBrand:
+        case SettingsPickerKind::AcAutoBrand:
             return irAcBrandDisplayName(static_cast<uint8_t>(index));
+        case SettingsPickerKind::AcAutoSensor:
+            return settingsAcAutoSensorLabel(index);
+        case SettingsPickerKind::AcAutoMode:
+            return acAutoModeDisplayName(static_cast<uint8_t>(index));
+        case SettingsPickerKind::AcAutoFan:
+            return acAutoFanDisplayName(static_cast<uint8_t>(index));
         default:
             return "?";
     }
@@ -1199,6 +1284,14 @@ static const char* settingsPickerTitle(const SettingsPickerKind kind) {
             return "tv brand";
         case SettingsPickerKind::IrAcBrand:
             return "ac brand";
+        case SettingsPickerKind::AcAutoSensor:
+            return "sensor";
+        case SettingsPickerKind::AcAutoBrand:
+            return "ac brand";
+        case SettingsPickerKind::AcAutoMode:
+            return "mode";
+        case SettingsPickerKind::AcAutoFan:
+            return "fan";
         default:
             return "pick";
     }
@@ -1211,6 +1304,9 @@ static bool settingsRowOpensPicker(const SettingsModule mod, const int row) {
             return row == 0 || row == 1;
         case SettingsModule::Infrared:
             return row >= 0 && row <= 2;
+        case SettingsModule::AcAuto:
+            // sensor / brand / mode / fan 进选择页；温度与过滤用 -=
+            return row == 0 || row == 4 || row == 5 || row == 7;
         default:
             return false;
     }
@@ -1239,6 +1335,21 @@ static void openSettingsPickerForCurrentRow() {
         } else if (g_settings_row == 2) {
             g_picker_kind = SettingsPickerKind::IrAcBrand;
             g_picker_index = cfg.infrared_ac_brand;
+        }
+    } else if (g_settings_module == SettingsModule::AcAuto) {
+        const AcAutoConfig& ac = cfg.ac_auto;
+        if (g_settings_row == 0) {
+            g_picker_kind = SettingsPickerKind::AcAutoSensor;
+            g_picker_index = settingsAcAutoSensorPickerIndex(ac.sensor_id);
+        } else if (g_settings_row == 4) {
+            g_picker_kind = SettingsPickerKind::AcAutoBrand;
+            g_picker_index = ac.ac_brand;
+        } else if (g_settings_row == 5) {
+            g_picker_kind = SettingsPickerKind::AcAutoMode;
+            g_picker_index = ac.ac_mode;
+        } else if (g_settings_row == 7) {
+            g_picker_kind = SettingsPickerKind::AcAutoFan;
+            g_picker_index = ac.ac_fan;
         }
     }
     if (g_picker_kind == SettingsPickerKind::None) {
@@ -1281,6 +1392,29 @@ static void applySettingsPickerSelection() {
                 ac = static_cast<uint8_t>(g_picker_index);
             }
             saveAppConfigInfrared(cat, tv, ac);
+            break;
+        }
+        case SettingsPickerKind::AcAutoSensor:
+        case SettingsPickerKind::AcAutoBrand:
+        case SettingsPickerKind::AcAutoMode:
+        case SettingsPickerKind::AcAutoFan: {
+            AcAutoConfig ac = getAppConfig().ac_auto;
+            if (g_picker_kind == SettingsPickerKind::AcAutoSensor) {
+                const int dev_i = settingsAcAutoSensorDeviceIndex(g_picker_index);
+                if (dev_i >= 0) {
+                    strncpy(ac.sensor_id, getAppConfig().devices[dev_i].id, sizeof(ac.sensor_id) - 1);
+                    ac.sensor_id[sizeof(ac.sensor_id) - 1] = '\0';
+                } else {
+                    ac.sensor_id[0] = '\0';
+                }
+            } else if (g_picker_kind == SettingsPickerKind::AcAutoBrand) {
+                ac.ac_brand = static_cast<uint8_t>(g_picker_index);
+            } else if (g_picker_kind == SettingsPickerKind::AcAutoMode) {
+                ac.ac_mode = static_cast<uint8_t>(g_picker_index);
+            } else {
+                ac.ac_fan = static_cast<uint8_t>(g_picker_index);
+            }
+            saveAppConfigAcAuto(ac);
             break;
         }
         default:
@@ -1456,6 +1590,28 @@ static void drawSettingsDetailLayer(const int content_x, const int content_y, co
             draw_row(0, "default", cat, APP_COLOR_VALUE);
             draw_row(1, "tv brand", irTvBrandDisplayName(cfg.infrared_tv_brand), APP_COLOR_VALUE);
             draw_row(2, "ac brand", irAcBrandDisplayName(cfg.infrared_ac_brand), APP_COLOR_VALUE);
+            break;
+        }
+        case SettingsModule::AcAuto: {
+            const AcAutoConfig& ac = getAppConfig().ac_auto;
+            char buf[16];
+            const char* sensor = "(none)";
+            if (ac.sensor_id[0] != '\0') {
+                const int di = mijiaFindDeviceIndexById(ac.sensor_id);
+                sensor = di >= 0 ? mijiaDeviceDisplayName(getAppConfig().devices[di]) : "(missing)";
+            }
+            draw_row(0, "sensor", sensor, APP_COLOR_VALUE);
+            snprintf(buf, sizeof(buf), "%uC", static_cast<unsigned>(ac.on_temp_c));
+            draw_row(1, "on temp", buf, APP_COLOR_VALUE);
+            snprintf(buf, sizeof(buf), "%uC", static_cast<unsigned>(ac.off_temp_c));
+            draw_row(2, "off temp", buf, APP_COLOR_VALUE);
+            snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(ac.filter_count));
+            draw_row(3, "filter", buf, APP_COLOR_VALUE);
+            draw_row(4, "brand", irAcBrandDisplayName(ac.ac_brand), APP_COLOR_VALUE);
+            draw_row(5, "mode", acAutoModeDisplayName(ac.ac_mode), APP_COLOR_VALUE);
+            snprintf(buf, sizeof(buf), "%uC", static_cast<unsigned>(ac.ac_temp_c));
+            draw_row(6, "ac temp", buf, APP_COLOR_VALUE);
+            draw_row(7, "fan", acAutoFanDisplayName(ac.ac_fan), APP_COLOR_VALUE);
             break;
         }
         default:
@@ -1663,6 +1819,42 @@ static void applySettingsValueDelta(const int val_delta) {
                 ac = cycleIrAcBrand(ac, val_delta);
             }
             saveAppConfigInfrared(cat, tv, ac);
+            break;
+        }
+        case SettingsModule::AcAuto: {
+            AcAutoConfig ac = getAppConfig().ac_auto;
+            if (g_settings_row == 0) {
+                const int n = settingsAcAutoSensorCount();
+                if (n > 0) {
+                    int cur = settingsAcAutoSensorPickerIndex(ac.sensor_id);
+                    cur = (cur + val_delta + n) % n;
+                    const int di = settingsAcAutoSensorDeviceIndex(cur);
+                    if (di >= 0) {
+                        strncpy(ac.sensor_id, getAppConfig().devices[di].id,
+                                sizeof(ac.sensor_id) - 1);
+                        ac.sensor_id[sizeof(ac.sensor_id) - 1] = '\0';
+                    }
+                }
+            } else if (g_settings_row == 1) {
+                ac.on_temp_c = static_cast<uint8_t>(
+                    constrain(static_cast<int>(ac.on_temp_c) + val_delta, 16, 40));
+            } else if (g_settings_row == 2) {
+                ac.off_temp_c = static_cast<uint8_t>(
+                    constrain(static_cast<int>(ac.off_temp_c) + val_delta, 10, 35));
+            } else if (g_settings_row == 3) {
+                ac.filter_count = static_cast<uint8_t>(
+                    constrain(static_cast<int>(ac.filter_count) + val_delta, 1, 10));
+            } else if (g_settings_row == 4) {
+                ac.ac_brand = cycleIrAcBrand(ac.ac_brand, val_delta);
+            } else if (g_settings_row == 5) {
+                ac.ac_mode = cycleAcAutoMode(ac.ac_mode, val_delta);
+            } else if (g_settings_row == 6) {
+                ac.ac_temp_c = static_cast<uint8_t>(
+                    constrain(static_cast<int>(ac.ac_temp_c) + val_delta, 16, 30));
+            } else if (g_settings_row == 7) {
+                ac.ac_fan = cycleAcAutoFan(ac.ac_fan, val_delta);
+            }
+            saveAppConfigAcAuto(ac);
             break;
         }
         default:
@@ -2778,6 +2970,15 @@ void enterApp(const AppState state) {
     if (currentState == AppState::CURSOR && state != AppState::CURSOR) {
         leaveCursorApp();
     }
+    if (currentState == AppState::AC_AUTO && state != AppState::AC_AUTO) {
+        leaveAcAutoApp();
+    }
+    if (currentState == AppState::MIJIA && state != AppState::MIJIA) {
+        leaveMijiaApp();
+    }
+    if (currentState == AppState::IR && state != AppState::IR) {
+        leaveIrApp();
+    }
     currentState = state;
 
     // Sleep 先显示 5 秒提示，再关屏
@@ -2876,6 +3077,12 @@ void enterApp(const AppState state) {
             break;
         case AppState::CALENDAR:
             enterCalendarApp();
+            break;
+        case AppState::AC_AUTO:
+            // 与米家抢 BLE 扫描会话，进入前先释放
+            leaveMijiaApp();
+            leaveIrApp();
+            enterAcAutoApp();
             break;
         default:
             break;
@@ -3047,6 +3254,7 @@ void loop() {
                    !(currentState == AppState::CURSOR && isCursorDisplayBlanked()) &&
                    !(currentState == AppState::MIJIA && mijiaAppSuppressesHeader()) &&
                    !(currentState == AppState::IR && irAppSuppressesHeader()) &&
+                   !(currentState == AppState::AC_AUTO && acAutoAppSuppressesHeader()) &&
                    !(currentState == AppState::WIFI && wifiAppSuppressesHeader()) &&
                    !(currentState == AppState::HID_KEYBOARD && hidKeyboardSuppressesHeader())) {
             updateAppHeaderStatus();
@@ -3127,6 +3335,9 @@ void loop() {
     } else if (currentState == AppState::IR) {
         pollIrBtnA();
         updateIrApp();
+    } else if (currentState == AppState::AC_AUTO) {
+        pollAcAutoBtnA();
+        updateAcAutoApp();
     } else if (currentState == AppState::HID_KEYBOARD) {
         if (pollHidKeyboardBtnAExit()) {
             showMenu();
@@ -3291,6 +3502,11 @@ void loop() {
             case AppState::IR:
                 if (M5Cardputer.Keyboard.isPressed()) {
                     handleIrApp(M5Cardputer.Keyboard.keysState());
+                }
+                break;
+            case AppState::AC_AUTO:
+                if (M5Cardputer.Keyboard.isPressed()) {
+                    handleAcAutoApp(M5Cardputer.Keyboard.keysState());
                 }
                 break;
             case AppState::FONT_DEMO:

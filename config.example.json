@@ -92,6 +92,16 @@
     "tv_brand": "samsung",
     "ac_brand": "midea"
   },
+  "ac_auto": {
+    "sensor_id": "blt.3.example",
+    "on_temp": 29,
+    "off_temp": 26,
+    "filter": 3,
+    "ac_brand": "midea",
+    "ac_mode": "cool",
+    "ac_temp": 26,
+    "ac_fan": "auto"
+  },
   "hid_keyboard": {
     "transport": "ble",
     "imu_sensitivity": 5

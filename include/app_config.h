@@ -61,6 +61,22 @@ enum class HidKeyboardTransport : uint8_t {
 static constexpr int IR_TV_BRAND_COUNT = 5;
 static constexpr int IR_AC_BRAND_COUNT = 6;
 
+// 空调自动化：模式 / 风速下标（与 irSendAc 一致）
+static constexpr int AC_AUTO_MODE_COUNT = 5; // cool heat dry fan auto
+static constexpr int AC_AUTO_FAN_COUNT = 6;  // auto min low med high max
+
+// 空调自动化配置（config: ac_auto）
+struct AcAutoConfig {
+    char sensor_id[48];   // 选用的温湿度计设备 id
+    uint8_t on_temp_c;    // 高于此温度开空调（默认 29）
+    uint8_t off_temp_c;   // 低于此温度关空调（默认 26）
+    uint8_t filter_count; // 连续满足次数后才动作（默认 3）
+    uint8_t ac_brand;     // 0..IR_AC_BRAND_COUNT-1
+    uint8_t ac_mode;      // 0..AC_AUTO_MODE_COUNT-1
+    uint8_t ac_temp_c;    // 开机设定温度 16..30
+    uint8_t ac_fan;       // 0..AC_AUTO_FAN_COUNT-1
+};
+
 // 多 WiFi 配置上限（wifis[]）
 static constexpr int WIFI_PROFILE_MAX = 5;
 
@@ -88,6 +104,7 @@ struct AppConfig {
     IrDefaultCategory infrared_default; // 进入红外时默认 TV / AC
     uint8_t infrared_tv_brand;          // 0..IR_TV_BRAND_COUNT-1
     uint8_t infrared_ac_brand;          // 0..IR_AC_BRAND_COUNT-1
+    AcAutoConfig ac_auto;               // 空调自动化
     HidKeyboardTransport hid_keyboard_transport; // HID Keyboard 默认 BLE / USB
     uint8_t hid_keyboard_imu_sensitivity;       // IMU 鼠标灵敏度 1..10
     MijiaDevice devices[MIJIA_DEVICE_MAX];
@@ -167,6 +184,22 @@ IrDefaultCategory cycleIrDefaultCategory(IrDefaultCategory cur, int delta);
 
 // 更新红外默认并写回（infrared 对象）
 bool saveAppConfigInfrared(IrDefaultCategory category, uint8_t tv_brand, uint8_t ac_brand);
+
+// 空调自动化：模式 / 风速 ↔ 配置字符串
+const char* acAutoModeConfigName(uint8_t idx);
+const char* acAutoModeDisplayName(uint8_t idx);
+uint8_t parseAcAutoMode(const char* s);
+uint8_t cycleAcAutoMode(uint8_t cur, int delta);
+const char* acAutoFanConfigName(uint8_t idx);
+const char* acAutoFanDisplayName(uint8_t idx);
+uint8_t parseAcAutoFan(const char* s);
+uint8_t cycleAcAutoFan(uint8_t cur, int delta);
+
+// 规范化空调自动化阈值（保证 on > off，温度/过滤在合理范围）
+void normalizeAcAutoConfig(AcAutoConfig& cfg);
+
+// 更新空调自动化配置并写回（ac_auto 对象）
+bool saveAppConfigAcAuto(const AcAutoConfig& cfg);
 
 // HID Keyboard 传输方式 ↔ 配置字符串
 const char* hidKeyboardTransportName(HidKeyboardTransport transport);

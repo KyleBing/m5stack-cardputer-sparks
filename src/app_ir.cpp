@@ -775,16 +775,61 @@ static void sendTvAction() {
     setTxStatus("sent");
 }
 
-static void sendAcState() {
+// mode 下标 → stdAc 模式
+static stdAc::opmode_t acModeFromIdx(const uint8_t mode) {
+    switch (mode) {
+        case 1:
+            return stdAc::opmode_t::kHeat;
+        case 2:
+            return stdAc::opmode_t::kDry;
+        case 3:
+            return stdAc::opmode_t::kFan;
+        case 4:
+            return stdAc::opmode_t::kAuto;
+        case 0:
+        default:
+            return stdAc::opmode_t::kCool;
+    }
+}
+
+// fan 下标 → stdAc 风速
+static stdAc::fanspeed_t acFanFromIdx(const uint8_t fan) {
+    switch (fan) {
+        case 1:
+            return stdAc::fanspeed_t::kMin;
+        case 2:
+            return stdAc::fanspeed_t::kLow;
+        case 3:
+            return stdAc::fanspeed_t::kMedium;
+        case 4:
+            return stdAc::fanspeed_t::kHigh;
+        case 5:
+            return stdAc::fanspeed_t::kMax;
+        case 0:
+        default:
+            return stdAc::fanspeed_t::kAuto;
+    }
+}
+
+bool irSendAc(const uint8_t brand, const bool power, const uint8_t mode, const uint8_t temp_c,
+              const uint8_t fan) {
     ensureIrReady();
+    const int brand_i = constrain(static_cast<int>(brand), 0, static_cast<int>(IrAcBrand::Count) - 1);
+    uint8_t temp = temp_c;
+    if (temp < 16) {
+        temp = 16;
+    }
+    if (temp > 30) {
+        temp = 30;
+    }
     stdAc::state_t s = {};
-    s.protocol = acProtocol(g_ac_brand);
+    s.protocol = acProtocol(brand_i);
     s.model = -1;
-    s.power = g_ac_power;
-    s.mode = g_ac_mode;
-    s.degrees = g_ac_temp;
+    s.power = power;
+    s.mode = acModeFromIdx(mode);
+    s.degrees = temp;
     s.celsius = true;
-    s.fanspeed = g_ac_fan;
+    s.fanspeed = acFanFromIdx(fan);
     s.swingv = stdAc::swingv_t::kOff;
     s.swingh = stdAc::swingh_t::kOff;
     s.quiet = false;
@@ -797,7 +842,57 @@ static void sendAcState() {
     s.sleep = -1;
     s.clock = -1;
     g_irac.sendAc(s, nullptr);
-    setTxStatus("sent");
+    return true;
+}
+
+static void sendAcState() {
+    // 把当前 UI 状态映射成共享 API 的下标
+    uint8_t mode_idx = 0;
+    switch (g_ac_mode) {
+        case stdAc::opmode_t::kHeat:
+            mode_idx = 1;
+            break;
+        case stdAc::opmode_t::kDry:
+            mode_idx = 2;
+            break;
+        case stdAc::opmode_t::kFan:
+            mode_idx = 3;
+            break;
+        case stdAc::opmode_t::kAuto:
+            mode_idx = 4;
+            break;
+        case stdAc::opmode_t::kCool:
+        default:
+            mode_idx = 0;
+            break;
+    }
+    uint8_t fan_idx = 0;
+    switch (g_ac_fan) {
+        case stdAc::fanspeed_t::kMin:
+            fan_idx = 1;
+            break;
+        case stdAc::fanspeed_t::kLow:
+            fan_idx = 2;
+            break;
+        case stdAc::fanspeed_t::kMedium:
+            fan_idx = 3;
+            break;
+        case stdAc::fanspeed_t::kHigh:
+            fan_idx = 4;
+            break;
+        case stdAc::fanspeed_t::kMax:
+            fan_idx = 5;
+            break;
+        case stdAc::fanspeed_t::kAuto:
+        default:
+            fan_idx = 0;
+            break;
+    }
+    if (irSendAc(static_cast<uint8_t>(g_ac_brand), g_ac_power, mode_idx, g_ac_temp, fan_idx)) {
+        setTxStatus("sent");
+    } else {
+        setTxStatus("fail");
+    }
 }
 
 static void sendCurrent() {
