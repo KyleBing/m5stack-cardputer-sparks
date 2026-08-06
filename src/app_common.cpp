@@ -89,6 +89,11 @@ int drawArrowUpDownBadge(const int x, const int y, const int text_size) {
     return drawArrowBadgeImpl(x, y, text_size, ICON_ARROW_W, ICON_ARROW_UD_H, drawIconArrowUpDown);
 }
 
+int drawArrowUpDownFlatBadge(const int x, const int y, const int text_size) {
+    return drawArrowBadgeImpl(x, y, text_size, ICON_ARROW_UD_FLAT_W, ICON_ARROW_H,
+                              drawIconArrowUpDownFlat);
+}
+
 int drawArrowLeftBadge(const int x, const int y, const int text_size) {
     return drawArrowBadgeImpl(x, y, text_size, ICON_ARROW_W, ICON_ARROW_H, drawIconArrowLeft);
 }

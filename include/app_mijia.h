@@ -4,7 +4,8 @@
 #include <WString.h>
 
 void enterMijiaApp();
-void leaveMijiaApp();
+// status：全屏提示文案（进入其他 BLE 应用用 "Entering."，真正退出用 "Exiting."）
+void leaveMijiaApp(const char* status = "Exiting.");
 void drawMijiaApp();
 void handleMijiaApp(const String& key);
 // Q 快速选择 / Fn+Q 编辑快捷键；在这些模式下吞掉按键

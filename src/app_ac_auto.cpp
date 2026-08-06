@@ -12,13 +12,20 @@
 #include <cstring>
 
 // ===== 常量 =====
-static constexpr uint32_t AC_AUTO_COUNTDOWN_S = 15;          // 进入自动态前倒计时
+static constexpr uint32_t AC_AUTO_COUNTDOWN_S = 5;           // 按 S 后倒计时再息屏
 static constexpr uint32_t AC_AUTO_IDLE_BLANK_S = 15;         // 亮屏空闲后再息屏
-static constexpr uint32_t AC_AUTO_BLE_SCAN_S = 20;           // BLE 一轮扫描窗口（秒）
+// BLE：有的温湿度计约 5 分钟才广播一次，息屏最长连听覆盖该周期
+static constexpr uint32_t AC_AUTO_BLE_SCAN_LIT_S = 15;       // 亮屏一轮扫描
+static constexpr uint32_t AC_AUTO_BLE_SCAN_BLANK_S = 360;    // 息屏一轮最长听 6 分钟
+static constexpr uint32_t AC_AUTO_BLE_GAP_LIT_S = 5;         // 亮屏：扫完歇几秒
+static constexpr uint32_t AC_AUTO_BLE_NAP_BLANK_S = 240;     // 息屏：收到读数后歇 4 分钟
+static constexpr uint32_t AC_AUTO_BLE_BURST_BLANK_S = 45;    // 息屏：首包后再听一会攒 filter
 static constexpr uint32_t AC_AUTO_HIST_INTERVAL_MS = 60000;  // 每分钟记一点
 static constexpr int AC_AUTO_HIST_LEN = 12 * 60;             // 12 小时
 static constexpr int AC_AUTO_HINT_H = 12;
 static constexpr int AC_AUTO_CFG_ROWS = 8;
+static constexpr int AC_AUTO_LINE_H = 11;
+static constexpr int AC_AUTO_STATS_H = AC_AUTO_LINE_H * 2 + 12; // 温湿度/计数/阈值三行
 
 enum class AcAutoPage : uint8_t { Display = 0, Config = 1 };
 
@@ -29,9 +36,13 @@ static bool g_display_blanked = false;
 static uint8_t g_saved_brightness = 30;
 
 static bool g_auto_active = false;
-static uint32_t g_enter_ms = 0;
+static bool g_countdown_active = false; // 按 S 后开始倒计时
+static uint32_t g_countdown_ms = 0;
 static uint32_t g_last_input_ms = 0;
 static int g_countdown_shown = -1;
+static uint32_t g_ble_next_ms = 0; // 下一轮扫描最早时刻
+static bool g_ble_got_reading = false; // 本轮扫描是否已收到温度
+static uint32_t g_ble_burst_until_ms = 0; // 息屏首包后的短突发窗口终点
 
 static AcAutoConfig g_cfg = {};
 static bool g_cfg_dirty = false;
@@ -68,13 +79,26 @@ static void applyAutomation(float temp_c);
 static int listHtSensors(int* out_indices, int max_n);
 static const char* sensorLabel();
 static void reloadWatchDevice();
+static void drawDisplayStats();
+static void drawDisplayHint();
+static void drawDisplayChartArea();
+static void refreshDisplayStats();
+static void refreshDisplayHint();
+static void refreshDisplayChart();
+static int displayStatsY();
+static int displayChartY();
+static int displayChartH();
 
 static void blankAcAutoDisplay() {
     if (g_display_blanked) {
         return;
     }
     g_saved_brightness = M5Cardputer.Display.getBrightness();
+    if (g_saved_brightness == 0) {
+        g_saved_brightness = 30;
+    }
     M5Cardputer.Display.sleep();
+    M5Cardputer.Display.waitDisplay();
     M5Cardputer.Display.setBrightness(0);
     g_display_blanked = true;
 }
@@ -87,6 +111,8 @@ static void wakeAcAutoDisplay(const bool redraw) {
     M5Cardputer.Display.setBrightness(g_saved_brightness);
     g_display_blanked = false;
     g_last_input_ms = millis();
+    // 亮屏后立刻扫一轮，方便看最新温湿度
+    g_ble_next_ms = 0;
     if (redraw) {
         drawAcAutoApp();
     }
@@ -144,6 +170,9 @@ static void stopBleWatch() {
     if (mijiaBleScanIsRunning()) {
         mijiaBleScanAbort();
     }
+    g_ble_next_ms = 0;
+    g_ble_got_reading = false;
+    g_ble_burst_until_ms = 0;
 }
 
 static void ensureBleWatch() {
@@ -153,8 +182,28 @@ static void ensureBleWatch() {
     if (mijiaBleScanIsRunning()) {
         return;
     }
-    // 单设备后台监听：扫满窗口，期间可多次上报（约数秒一条广播）
-    (void)mijiaBleWatchStart(&g_watch_dev, 1, AC_AUTO_BLE_SCAN_S);
+    if (static_cast<int32_t>(millis() - g_ble_next_ms) < 0) {
+        return;
+    }
+    // 息屏最长连听 6 分钟，覆盖约 5 分钟一发的广播；亮屏短扫即可
+    const uint32_t scan_s =
+        g_display_blanked ? AC_AUTO_BLE_SCAN_BLANK_S : AC_AUTO_BLE_SCAN_LIT_S;
+    g_ble_got_reading = false;
+    g_ble_burst_until_ms = 0;
+    (void)mijiaBleWatchStart(&g_watch_dev, 1, scan_s);
+}
+
+// got_reading：本轮是否收到过温度。息屏未收到则立刻再听，避免错过 5 分钟窗
+static void scheduleNextBleWatch(const bool got_reading) {
+    if (g_display_blanked) {
+        if (got_reading) {
+            g_ble_next_ms = millis() + AC_AUTO_BLE_NAP_BLANK_S * 1000;
+        } else {
+            g_ble_next_ms = 0;
+        }
+    } else {
+        g_ble_next_ms = millis() + AC_AUTO_BLE_GAP_LIT_S * 1000;
+    }
 }
 
 static void pushHistorySample() {
@@ -241,15 +290,16 @@ static void drawHelpPage() {
     };
 
     line('c', "config / display");
+    line('s', "start auto / blank");
     line('h', "help");
     line('r', "reset counts");
     y += 2;
     M5Cardputer.Display.setTextColor(APP_COLOR_MUTED, BLACK);
     M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
-    M5Cardputer.Display.print("15s -> auto; any key wake");
+    M5Cardputer.Display.print("S: 5s blank; again to blank");
     y += 11;
     M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
-    M5Cardputer.Display.print("BLE watch ~20s window");
+    M5Cardputer.Display.print("BLE: listen then nap 4m");
 }
 
 static void drawHistoryChart(const int x, const int y, const int w, const int h) {
@@ -318,11 +368,22 @@ static void drawHistoryChart(const int x, const int y, const int w, const int h)
     }
 }
 
-static void drawDisplayPage() {
-    beginAppScreen("AC Auto");
-    const int content_bottom = M5Cardputer.Display.height() - AC_AUTO_HINT_H;
-    int y = APP_CONTENT_INSET_Y;
+static int displayStatsY() {
+    return APP_CONTENT_INSET_Y;
+}
 
+static int displayChartY() {
+    return displayStatsY() + AC_AUTO_STATS_H;
+}
+
+static int displayChartH() {
+    const int content_bottom = M5Cardputer.Display.height() - AC_AUTO_HINT_H;
+    return content_bottom - displayChartY() - 2;
+}
+
+// 温湿度 / 计数 / 阈值（不含 chart、tip）
+static void drawDisplayStats() {
+    int y = displayStatsY();
     char line[48];
     M5Cardputer.Display.setTextSize(1);
     if (g_has_reading) {
@@ -341,7 +402,7 @@ static void drawDisplayPage() {
     const int ac_w = M5Cardputer.Display.textWidth(ac_state);
     M5Cardputer.Display.setCursor(M5Cardputer.Display.width() - ac_w - 4, y);
     M5Cardputer.Display.print(ac_state);
-    y += 11;
+    y += AC_AUTO_LINE_H;
 
     snprintf(line, sizeof(line), "on:%u off:%u  f:%u/%u", static_cast<unsigned>(g_on_times),
              static_cast<unsigned>(g_off_times),
@@ -350,26 +411,30 @@ static void drawDisplayPage() {
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
     M5Cardputer.Display.print(line);
-    y += 11;
+    y += AC_AUTO_LINE_H;
 
     snprintf(line, sizeof(line), ">%u on  <%u off", static_cast<unsigned>(g_cfg.on_temp_c),
              static_cast<unsigned>(g_cfg.off_temp_c));
     M5Cardputer.Display.setTextColor(APP_COLOR_MUTED, BLACK);
     M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
     M5Cardputer.Display.print(line);
-    y += 12;
+}
 
-    const int chart_h = content_bottom - y - 2;
+static void drawDisplayChartArea() {
+    const int chart_h = displayChartH();
     const int chart_w = M5Cardputer.Display.width() - APP_CONTENT_X * 2;
     if (chart_h >= 28) {
-        drawHistoryChart(APP_CONTENT_X, y, chart_w, chart_h);
+        drawHistoryChart(APP_CONTENT_X, displayChartY(), chart_w, chart_h);
     }
+}
 
+// 底栏 tip：倒计时 / AUTO / S 启动
+static void drawDisplayHint() {
     const int hint_y = M5Cardputer.Display.height() - AC_AUTO_HINT_H + 1;
     int cx = APP_CONTENT_X;
-    if (!g_auto_active) {
+    if (g_countdown_active && !g_auto_active) {
         const int left = static_cast<int>(AC_AUTO_COUNTDOWN_S) -
-                         static_cast<int>((millis() - g_enter_ms) / 1000);
+                         static_cast<int>((millis() - g_countdown_ms) / 1000);
         const int sec = left < 0 ? 0 : left;
         char cd[16];
         snprintf(cd, sizeof(cd), "auto %ds", sec);
@@ -378,12 +443,27 @@ static void drawDisplayPage() {
         M5Cardputer.Display.setCursor(cx, hint_y);
         M5Cardputer.Display.print(cd);
         cx += M5Cardputer.Display.textWidth(cd) + 6;
-    } else {
+    } else if (g_auto_active) {
         M5Cardputer.Display.setTextSize(1);
         M5Cardputer.Display.setTextColor(APP_COLOR_OK, BLACK);
         M5Cardputer.Display.setCursor(cx, hint_y);
-        M5Cardputer.Display.print("AUTO");
-        cx += M5Cardputer.Display.textWidth("AUTO") + 6;
+        M5Cardputer.Display.print("AUTO ");
+        cx = M5Cardputer.Display.getCursorX();
+        // 工作态亮屏：S 可再灭屏
+        cx += drawKeyBadge(cx, hint_y, 's', 1);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(cx, hint_y);
+        M5Cardputer.Display.print("blank ");
+        cx = M5Cardputer.Display.getCursorX();
+    } else {
+        // 未启动：手动按 S 开始 5s 倒计时
+        cx += drawKeyBadge(cx, hint_y, 's', 1);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(cx, hint_y);
+        M5Cardputer.Display.print("auto ");
+        cx = M5Cardputer.Display.getCursorX();
     }
     cx += drawKeyBadge(cx, hint_y, 'c', 1);
     M5Cardputer.Display.setTextSize(1);
@@ -393,8 +473,46 @@ static void drawDisplayPage() {
     drawHelpHintRight("help", 1);
 }
 
+static void refreshDisplayStats() {
+    if (g_display_blanked || g_page != AcAutoPage::Display || g_help_visible) {
+        return;
+    }
+    M5Cardputer.Display.fillRect(0, displayStatsY(), M5Cardputer.Display.width(), AC_AUTO_STATS_H,
+                                 BLACK);
+    drawDisplayStats();
+}
+
+static void refreshDisplayHint() {
+    if (g_display_blanked || g_page != AcAutoPage::Display || g_help_visible) {
+        return;
+    }
+    const int hint_top = M5Cardputer.Display.height() - AC_AUTO_HINT_H;
+    M5Cardputer.Display.fillRect(0, hint_top, M5Cardputer.Display.width(), AC_AUTO_HINT_H, BLACK);
+    drawDisplayHint();
+}
+
+static void refreshDisplayChart() {
+    if (g_display_blanked || g_page != AcAutoPage::Display || g_help_visible) {
+        return;
+    }
+    const int chart_h = displayChartH();
+    if (chart_h < 28) {
+        return;
+    }
+    M5Cardputer.Display.fillRect(APP_CONTENT_X, displayChartY(),
+                                 M5Cardputer.Display.width() - APP_CONTENT_X * 2, chart_h, BLACK);
+    drawDisplayChartArea();
+}
+
+static void drawDisplayPage() {
+    beginAppScreen("AC Auto");
+    drawDisplayStats();
+    drawDisplayChartArea();
+    drawDisplayHint();
+}
+
 static void drawConfigPage() {
-    beginAppScreenAccent("AC Auto", "cfg", APP_COLOR_LABEL);
+    beginAppScreenAccent("AC Auto ", "cfg", APP_COLOR_LABEL);
 
     char val[40];
     const char* labels[AC_AUTO_CFG_ROWS] = {"sensor", "on temp", "off temp", "filter",
@@ -454,7 +572,8 @@ static void drawConfigPage() {
 
     const int hint_y = M5Cardputer.Display.height() - AC_AUTO_HINT_H + 1;
     int cx = APP_CONTENT_X;
-    cx += drawArrowUpDownBadge(cx, hint_y, 1);
+    // 横向并排上下箭头，避免纵向合成超出 tip 高度
+    cx += drawArrowUpDownFlatBadge(cx, hint_y, 1);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.setCursor(cx, hint_y);
@@ -578,9 +697,11 @@ void enterAcAutoApp() {
     g_help_visible = false;
     g_display_blanked = false;
     g_auto_active = false;
-    g_enter_ms = millis();
-    g_last_input_ms = g_enter_ms;
+    g_countdown_active = false;
+    g_countdown_ms = 0;
+    g_last_input_ms = millis();
     g_countdown_shown = -1;
+    g_ble_next_ms = 0;
     g_cfg = getAppConfig().ac_auto;
     normalizeAcAutoConfig(g_cfg);
     g_cfg_dirty = false;
@@ -620,6 +741,7 @@ void leaveAcAutoApp() {
         wakeAcAutoDisplay(false);
     }
     g_auto_active = false;
+    g_countdown_active = false;
     g_help_visible = false;
 }
 
@@ -640,7 +762,7 @@ void pollAcAutoBtnA() {
 void updateAcAutoApp() {
     const uint32_t now = millis();
 
-    // BLE 读数
+    // BLE 读数：只局部刷统计区，避免整屏闪
     if (g_watch_valid) {
         MijiaBleReading reading = {};
         const bool done = mijiaBleScanPoll(reading, nullptr);
@@ -650,36 +772,44 @@ void updateAcAutoApp() {
                 g_hum = reading.humidity;
             }
             g_has_reading = true;
+            g_ble_got_reading = true;
             applyAutomation(g_temp_c);
-            if (!g_display_blanked && g_page == AcAutoPage::Display && !g_help_visible) {
-                drawAcAutoApp();
+            refreshDisplayStats();
+            // 息屏：首包开启短突发窗口，方便频繁广播攒 filter
+            if (g_display_blanked && g_ble_burst_until_ms == 0) {
+                g_ble_burst_until_ms = millis() + AC_AUTO_BLE_BURST_BLANK_S * 1000;
             }
         }
-        if (done) {
-            ensureBleWatch(); // 一轮结束立刻再开
-        } else {
-            ensureBleWatch();
+        // 突发窗口结束：停扫进入 nap（5 分钟一发的传感器本轮通常只有 1 包）
+        if (g_display_blanked && g_ble_burst_until_ms != 0 && mijiaBleScanIsRunning() &&
+            static_cast<int32_t>(millis() - g_ble_burst_until_ms) >= 0) {
+            mijiaBleScanAbort();
+            scheduleNextBleWatch(true);
+            g_ble_burst_until_ms = 0;
         }
+        if (done) {
+            scheduleNextBleWatch(g_ble_got_reading);
+        }
+        ensureBleWatch();
     }
 
-    // 每分钟记历史
+    // 每分钟记历史：只刷 chart
     if (g_has_reading && (now - g_last_hist_ms) >= AC_AUTO_HIST_INTERVAL_MS) {
         g_last_hist_ms = now;
         pushHistorySample();
-        if (!g_display_blanked && g_page == AcAutoPage::Display && !g_help_visible) {
-            drawAcAutoApp();
-        }
+        refreshDisplayChart();
     }
 
-    // 倒计时 → 自动工作 + 息屏
-    if (!g_auto_active && g_page == AcAutoPage::Display && !g_help_visible) {
-        const uint32_t elapsed_s = (now - g_enter_ms) / 1000;
+    // 按 S 后倒计时 → 自动工作 + 息屏
+    if (g_countdown_active && !g_auto_active && g_page == AcAutoPage::Display && !g_help_visible) {
+        const uint32_t elapsed_s = (now - g_countdown_ms) / 1000;
         const int left = static_cast<int>(AC_AUTO_COUNTDOWN_S) - static_cast<int>(elapsed_s);
         if (left != g_countdown_shown && !g_display_blanked) {
             g_countdown_shown = left;
-            drawAcAutoApp();
+            refreshDisplayHint();
         }
         if (elapsed_s >= AC_AUTO_COUNTDOWN_S) {
+            g_countdown_active = false;
             g_auto_active = true;
             blankAcAutoDisplay();
         }
@@ -690,6 +820,11 @@ void updateAcAutoApp() {
         if ((now - g_last_input_ms) / 1000 >= AC_AUTO_IDLE_BLANK_S) {
             blankAcAutoDisplay();
         }
+    }
+
+    // 息屏时降低主循环空转，略省电
+    if (g_display_blanked) {
+        delay(50);
     }
 }
 
@@ -727,16 +862,30 @@ void handleAcAutoApp(const Keyboard_Class::KeysState& status) {
             if (g_page == AcAutoPage::Config) {
                 flushConfigIfDirty();
                 g_page = AcAutoPage::Display;
-                // 回到展示页重置倒计时，避免配置完立刻息屏
-                g_enter_ms = millis();
+                // 离开配置取消未完成的倒计时，需再按 S
+                g_countdown_active = false;
                 g_countdown_shown = -1;
-                if (!g_auto_active) {
-                    // 保持未自动；若已自动则继续
-                }
             } else {
+                // 进配置时暂停倒计时
+                g_countdown_active = false;
+                g_countdown_shown = -1;
                 g_page = AcAutoPage::Config;
             }
             drawAcAutoApp();
+            return;
+        }
+        // S：未启动 → 5s 倒计时进 AUTO；已 AUTO 亮屏 → 立刻灭屏
+        if ((c == 's' || c == 'S') && g_page == AcAutoPage::Display) {
+            if (g_auto_active) {
+                blankAcAutoDisplay();
+                return;
+            }
+            if (!g_countdown_active) {
+                g_countdown_active = true;
+                g_countdown_ms = millis();
+                g_countdown_shown = -1;
+                refreshDisplayHint();
+            }
             return;
         }
         if ((c == 'r' || c == 'R') && g_page == AcAutoPage::Display) {
@@ -744,7 +893,7 @@ void handleAcAutoApp(const Keyboard_Class::KeysState& status) {
             g_off_times = 0;
             g_on_streak = 0;
             g_off_streak = 0;
-            drawAcAutoApp();
+            refreshDisplayStats();
             return;
         }
     }

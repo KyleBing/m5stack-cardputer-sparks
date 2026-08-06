@@ -71,10 +71,16 @@ void drawIconArrowLeftRight(const int x, const int cy, const uint16_t color) {
     drawIconArrowRight(x + ICON_ARROW_W + 2, cy, color);
 }
 
-// 上下箭头合成（x 为左缘，cy 为垂直中心）
+// 上下箭头纵向合成（x 为左缘，cy 为垂直中心；偏高，tip 慎用）
 void drawIconArrowUpDown(const int x, const int cy, const uint16_t color) {
     drawIconArrowUp(x, cy - 4, color);
     drawIconArrowDown(x, cy + 4, color);
+}
+
+// 上下箭头横向并排（与左右合成同高，适合 tip）
+void drawIconArrowUpDownFlat(const int x, const int cy, const uint16_t color) {
+    drawIconArrowUp(x, cy, color);
+    drawIconArrowDown(x + ICON_ARROW_W + 2, cy, color);
 }
 
 // ===== 返回图标（header） =====

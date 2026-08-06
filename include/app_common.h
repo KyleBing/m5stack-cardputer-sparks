@@ -31,8 +31,10 @@ int drawTextBadge(int x, int y, const char* label, int text_size = 1);
 // 绘制左右箭头徽章（黄底黑箭头），text_size 仅支持 1 或 2，返回占用宽度（含右侧间距）
 int drawArrowBadge(int x, int y, int text_size = 1);
 
-// 绘制上下箭头徽章（黄底黑箭头）
+// 绘制上下箭头徽章（黄底黑箭头，纵向合成，偏高）
 int drawArrowUpDownBadge(int x, int y, int text_size = 1);
+// 绘制上下箭头徽章（黄底黑箭头，横向并排，适合 tip）
+int drawArrowUpDownFlatBadge(int x, int y, int text_size = 1);
 
 // 绘制单方向箭头徽章（黄底黑箭头）
 int drawArrowLeftBadge(int x, int y, int text_size = 1);

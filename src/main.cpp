@@ -3079,8 +3079,8 @@ void enterApp(const AppState state) {
             enterCalendarApp();
             break;
         case AppState::AC_AUTO:
-            // 与米家抢 BLE 扫描会话，进入前先释放
-            leaveMijiaApp();
+            // 与米家抢 BLE 扫描会话，进入前先释放；文案用 Entering 而非 Exiting
+            leaveMijiaApp("Entering.");
             leaveIrApp();
             enterAcAutoApp();
             break;

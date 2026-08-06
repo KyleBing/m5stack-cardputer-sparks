@@ -55,6 +55,11 @@ static void drawDemoArrowUpDown(const int x, const int y) {
         drawIconArrowUpDown(bx, by + 7, WHITE);
     });
 }
+static void drawDemoArrowUpDownFlat(const int x, const int y) {
+    drawDemoInBox(x, y, ICON_ARROW_UD_FLAT_W, ICON_ARROW_H, [](const int bx, const int by) {
+        drawIconArrowUpDownFlat(bx, by + 4, WHITE);
+    });
+}
 static void drawDemoSignalBars(const int x, const int y) {
     drawDemoInBox(x, y, ICON_SIGNAL_W, ICON_SIGNAL_H, [](const int bx, const int by) {
         drawSignalBars(bx, by, -56, WHITE);
@@ -167,6 +172,7 @@ static const IconDemoItem ICON_DEMO_ITEMS[] = {
     {"arrow down", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoArrowDown},
     {"arrow left-right", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoArrowLeftRight},
     {"arrow up-down", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoArrowUpDown},
+    {"arrow up-down flat", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoArrowUpDownFlat},
     {"signal bars", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoSignalBars},
     {"wifi", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoWifi},
     {"ble", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoBle},
