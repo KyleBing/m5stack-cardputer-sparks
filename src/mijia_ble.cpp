@@ -168,14 +168,14 @@ static bool parseXiaomiValue(const uint16_t value_type, const uint8_t* data, con
         out.motion = u32le(data) == 0;
         return true;
     }
-    if ((value_type == 0x4C01) && value_length == 4) {
+    if ((value_type == 0x4C01 || value_type == 0x4801) && value_length == 4) {
         float t = 0;
         memcpy(&t, data, sizeof(t));
         out.has_temp = true;
         out.temperature = t;
         return true;
     }
-    if ((value_type == 0x4C02) && value_length == 1) {
+    if ((value_type == 0x4C02 || value_type == 0x4802) && value_length == 1) {
         out.has_humidity = true;
         out.humidity = data[0];
         return true;
