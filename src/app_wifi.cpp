@@ -55,6 +55,7 @@ static int wifiScanCount = 0;
 static int wifiListPage = 0;
 static int wifiSavedPage = 0;
 static int wifiSavedSel = 0; // 已保存列表选中项（全局下标，跨页）
+static bool wifiSavedCursorVisible = false; // 上下键移动后才显示黄框光标
 static int wifiSelectedIdx = -1;
 static char wifiPassword[WIFI_PASS_MAX + 1] = "";
 static char wifiStatus[48] = "";
@@ -138,12 +139,13 @@ static void clampWifiSavedSel() {
     wifiSavedPage = wifiSavedSel / WIFI_SAVED_PAGE_SIZE;
 }
 
-// 上下键移动选中项（跨页循环）
+// 上下键移动选中项（跨页循环）；首次移动后显示黄框光标
 static void moveWifiSavedSel(const int delta) {
     const AppConfig& cfg = getAppConfig();
     if (cfg.wifi_count <= 0) {
         return;
     }
+    wifiSavedCursorVisible = true;
     wifiSavedSel = (wifiSavedSel + delta + cfg.wifi_count) % cfg.wifi_count;
     wifiSavedPage = wifiSavedSel / WIFI_SAVED_PAGE_SIZE;
 }
@@ -167,25 +169,24 @@ static int wifiScanSlotHeight() {
     return wifiScanListHeight() / WIFI_SCAN_PAGE_SIZE;
 }
 
-// 已保存卡片：选中项才铺底色；可选描边；序号 x2 垂直居中，返回 label 起始 x
+// 已保存行：光标可见时才铺底色/黄框；边框贴屏边直角；序号黄字 x2 垂直居中，返回 label 起始 x
 static int drawWifiItemCard(const int x, const int y, const int w, const int h, const int num,
-                            const uint16_t accent, const uint16_t border, const bool draw_border,
-                            const bool draw_bg) {
+                            const uint16_t border, const bool draw_border, const bool draw_bg) {
     const uint16_t card_bg = draw_bg ? wifiCardBg() : BLACK;
     if (draw_bg) {
-        M5Cardputer.Display.fillRoundRect(x, y, w, h, 4, card_bg);
+        M5Cardputer.Display.fillRect(x, y, w, h, card_bg);
     }
     if (draw_border) {
-        M5Cardputer.Display.drawRoundRect(x, y, w, h, 4, border);
+        M5Cardputer.Display.drawRect(x, y, w, h, border);
     }
 
-    constexpr int NUM_PAD_L = 10; // 序号左边 padding
-    constexpr int NUM_LABEL_GAP = 10;
+    constexpr int NUM_PAD_L = 15; // 序号左边 padding
+    constexpr int NUM_LABEL_GAP = 15; // 序号与 SSID 间距
     char num_buf[4];
     snprintf(num_buf, sizeof(num_buf), "%d", num);
     const int num_h = infoLineHeight(2);
     M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setTextColor(accent, card_bg);
+    M5Cardputer.Display.setTextColor(YELLOW, card_bg);
     M5Cardputer.Display.setCursor(x + NUM_PAD_L, y + (h - num_h) / 2);
     M5Cardputer.Display.print(num_buf);
     return x + NUM_PAD_L + M5Cardputer.Display.textWidth(num_buf) + NUM_LABEL_GAP;
@@ -333,9 +334,10 @@ static void drawWifiSavedScreen() {
     const int start = wifiSavedPage * WIFI_SAVED_PAGE_SIZE;
     const int end = start + WIFI_SAVED_PAGE_SIZE < cfg.wifi_count ? start + WIFI_SAVED_PAGE_SIZE
                                                                   : cfg.wifi_count;
+    // 选择/选中边框贴左右屏幕边缘，无圆角
     const int screen_w = M5Cardputer.Display.width();
-    const int card_x = APP_HUB_CARD_ORIGIN_X;
-    const int card_w = screen_w - card_x * 2;
+    const int card_x = 0;
+    const int card_w = screen_w;
     constexpr int ROW_RIGHT_GAP = 6;
     constexpr int SSID_STATUS_GAP = 4;
     const int ssid_h = infoLineHeight(2);
@@ -359,18 +361,16 @@ static void drawWifiSavedScreen() {
                                    is_active && !is_connected;
 
         const bool is_sel = i == wifiSavedSel;
+        // 黄框光标：仅上下键移动后显示；绿框仍标 active / 已连接
+        const bool show_cursor = is_sel && wifiSavedCursorVisible;
 
-        const uint16_t accent =
-            is_connected ? APP_COLOR_OK : (is_connecting ? APP_COLOR_WARN : wifiCardAccentGold());
-        // 仅选中项铺底色；active / 已连上绿框，光标项黄框优先
-        const bool show_border = is_sel || is_active || is_connected;
-        const uint16_t border =
-            is_sel ? YELLOW : ((is_active || is_connected) ? APP_COLOR_OK : accent);
-        // 序号 x2 居中，返回与 label 间距 10px 后的起始 x
-        const int name_x = drawWifiItemCard(card_x, card_y, card_w, card_h, row + 1, accent, border,
-                                            show_border, is_sel);
+        const bool show_border = show_cursor || is_active || is_connected;
+        const uint16_t border = show_cursor ? YELLOW : APP_COLOR_OK;
+        // 序号黄字 x2 居中，返回与 label 间距后的起始 x
+        const int name_x = drawWifiItemCard(card_x, card_y, card_w, card_h, row + 1, border,
+                                            show_border, show_cursor);
 
-        const uint16_t card_bg = is_sel ? wifiCardBg() : BLACK;
+        const uint16_t card_bg = show_cursor ? wifiCardBg() : BLACK;
         int name_max_w = card_x + card_w - ROW_RIGHT_GAP - name_x;
 
         if (is_connected) {
@@ -1030,8 +1030,9 @@ void enterWifiApp() {
 
     const AppConfig& cfg = getAppConfig();
 
-    // 光标默认落在当前 active 档案上
+    // 光标默认落在当前 active 档案上；黄框等上下键再显示
     wifiSavedSel = 0;
+    wifiSavedCursorVisible = false;
     for (int i = 0; i < cfg.wifi_count; i++) {
         if (strcmp(cfg.wifis[i].ssid, cfg.wifi_active) == 0) {
             wifiSavedSel = i;

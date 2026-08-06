@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <esp_sntp.h>
 #include <esp_timer.h>
 #include <time.h>
 
@@ -38,7 +39,8 @@ static constexpr int RTC_PURE_DATE_TEXT_SIZE = 2;
 static constexpr int RTC_PURE_DATE_LINE_H = 8 * RTC_PURE_DATE_TEXT_SIZE;
 static constexpr int RTC_PURE_TIME_DATE_GAP = 4;
 static constexpr int RTC_FAIL_TEXT_SIZE = 2;
-static constexpr uint32_t RTC_SYNC_TIMEOUT_MS = 10000;  // 超时时间 10 seconds
+static constexpr uint32_t RTC_SYNC_TIMEOUT_MS = 10000;  // WiFi 连接超时
+static constexpr uint32_t RTC_NTP_TIMEOUT_MS = 8000;    // NTP 单独超时（WiFi 成功后）
 static constexpr uint32_t UPTIME_UPDATE_MS = 1000;       // 更新间隔 1 second
 static constexpr uint32_t BIG_CLOCK_UPDATE_MS = 15000;    // big time 仅 HH:MM，活跃时 15s 检查一次
 static constexpr uint32_t TIME_IDLE_SLOW_MS = 60000;    // 无操作 1 分钟后主循环 1s 一拍
@@ -268,11 +270,20 @@ static bool trySyncNtpTime(const uint32_t deadline_ms) {
 
     // NTP 只返回 UTC；显示时区来自 config（缺省 CST-8）
     const char* tz = getAppTimezone();
+    // 已有系统/RTC 时间时 getLocalTime 会立刻成功（只看年份>2016），
+    // 必须等 SNTP 真正完成，否则一夜漂移后按 r 仍写回旧时间。
+    // SMOOTH 对 ≤35min 误差只渐调，强制 IMMED 立刻跳到线上时间。
+    sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED);
+    sntp_set_sync_status(SNTP_SYNC_STATUS_RESET);
     configTzTime(tz, "ntp.aliyun.com", "pool.ntp.org", "time.windows.com");
 
-    struct tm timeinfo{};
     while (static_cast<int32_t>(millis() - deadline_ms) < 0) {
-        if (getLocalTime(&timeinfo, 200)) {
+        // get 读到 COMPLETED 后会清回 RESET，只判断一次即可
+        if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
+            struct tm timeinfo{};
+            if (!getLocalTime(&timeinfo, 0)) {
+                return false;
+            }
             if (M5.Rtc.isEnabled()) {
                 // 硬件 RTC 按 UTC 存：与 M5 setSystemTimeFromRtc 约定一致
                 const time_t now = time(nullptr);
@@ -362,13 +373,11 @@ static bool syncClockTimeIfNeeded(const bool force) {
         releaseConfigWifi();
         return hasValidClockTime();
     }
-    if (static_cast<int32_t>(millis() - deadline) < 0) {
-        drawRtcBusyScreen("ntp syncing...");
-        if (trySyncNtpTime(deadline)) {
-            clockSyncedOnce = true;
-        } else {
-            rtcSyncTimedOut = static_cast<int32_t>(millis() - deadline) >= 0;
-        }
+    // WiFi 成功后给 NTP 单独预算，避免重连占满总超时导致假失败
+    drawRtcBusyScreen("ntp syncing...");
+    const uint32_t ntp_deadline = millis() + RTC_NTP_TIMEOUT_MS;
+    if (trySyncNtpTime(ntp_deadline)) {
+        clockSyncedOnce = true;
     } else {
         rtcSyncTimedOut = true;
     }
