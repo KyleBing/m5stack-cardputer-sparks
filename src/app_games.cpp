@@ -107,10 +107,18 @@ static bool g_coin_has_tossed = false;
 static float g_coin_result_reveal = 0.0f;
 
 // 双摆状态。
+static constexpr float PEND_L1_PX = 44.0f;
+static constexpr float PEND_L2_PX_DEFAULT = 58.0f;
+static constexpr float PEND_L2_PX_MIN = 28.0f;
+static constexpr float PEND_L2_PX_MAX = 76.0f;
+static constexpr float PEND_L2_PX_STEP = 4.0f;
+static constexpr float PEND_L1_PHYS = 1.0f;
+static constexpr float PEND_L2_PHYS_DEFAULT = 1.45f;
 static float g_pend_a1 = 1.72f;
 static float g_pend_a2 = 1.10f;
 static float g_pend_w1 = 0.0f;
 static float g_pend_w2 = 0.0f;
+static float g_pend_l2_px = PEND_L2_PX_DEFAULT; // 第二段像素长度，-= 调节
 static TracePoint g_trace[72];
 static int g_trace_count = 0;
 static int g_trace_head = 0;
@@ -407,14 +415,28 @@ static void drawCoin() {
     drawCoinResultBanner();
 }
 
+static void clearPendulumTrace() {
+    g_trace_count = 0;
+    g_trace_head = 0;
+    g_trace_accum = 0.0f;
+}
+
 static void resetPendulum(const bool randomize) {
     g_pend_a1 = randomize ? (0.8f + randomUnit() * 1.6f) : 1.72f;
     g_pend_a2 = randomize ? (-1.2f + randomUnit() * 2.4f) : 1.10f;
     g_pend_w1 = 0.0f;
     g_pend_w2 = 0.0f;
-    g_trace_count = 0;
-    g_trace_head = 0;
-    g_trace_accum = 0.0f;
+    clearPendulumTrace();
+}
+
+// 调节第二段长度；改长后清空残影，避免旧轨迹错位
+static void changePendulumL2(const float delta) {
+    const float next = constrain(g_pend_l2_px + delta, PEND_L2_PX_MIN, PEND_L2_PX_MAX);
+    if (next == g_pend_l2_px) {
+        return;
+    }
+    g_pend_l2_px = next;
+    clearPendulumTrace();
 }
 
 static void stepPendulum(const float dt) {
@@ -422,8 +444,9 @@ static void stepPendulum(const float dt) {
     constexpr float m1 = 1.0f;
     // 末端质量更小、第二段更长，更容易走出混沌轨迹
     constexpr float m2 = 0.35f;
-    constexpr float l1 = 1.0f;
-    constexpr float l2 = 1.45f;
+    constexpr float l1 = PEND_L1_PHYS;
+    // 物理 l2 随像素长度同比缩放，保持默认比例
+    const float l2 = PEND_L2_PHYS_DEFAULT * (g_pend_l2_px / PEND_L2_PX_DEFAULT);
     const float delta = g_pend_a1 - g_pend_a2;
     const float den = 2.0f * m1 + m2 - m2 * cosf(2.0f * delta);
     if (fabsf(den) < 0.001f) {
@@ -454,9 +477,8 @@ static void stepPendulum(const float dt) {
 static void pendulumPoints(int& x1, int& y1, int& x2, int& y2) {
     constexpr int pivot_x = 120;
     constexpr int pivot_y = 18;
-    // 整体加长，第二段尤其更长（与物理 l2/l1 比例接近）
-    constexpr float l1 = 44.0f;
-    constexpr float l2 = 58.0f;
+    const float l1 = PEND_L1_PX;
+    const float l2 = g_pend_l2_px;
     x1 = pivot_x + static_cast<int>(l1 * sinf(g_pend_a1));
     y1 = pivot_y + static_cast<int>(l1 * cosf(g_pend_a1));
     x2 = x1 + static_cast<int>(l2 * sinf(g_pend_a2));
@@ -480,7 +502,9 @@ static void addPendulumTrace(const float dt) {
 
 static void drawPendulum() {
     gamesCanvas.fillSprite(0);
-    drawTopLabel("CHAOS");
+    char l2_label[12];
+    snprintf(l2_label, sizeof(l2_label), "L2 %d", static_cast<int>(g_pend_l2_px + 0.5f));
+    drawTopLabel(l2_label);
 
     for (int i = 1; i < g_trace_count; ++i) {
         const int capacity = static_cast<int>(sizeof(g_trace) / sizeof(g_trace[0]));
@@ -927,7 +951,8 @@ static void drawHelp() {
         case GameMode::DOUBLE_PENDULUM:
             drawHelpLine(20, "SPC", "reset");
             drawHelpLine(34, "R", "random initial pose");
-            drawHelpLine(48, "", "Coupled chaotic pendulum");
+            drawHelpLine(48, "-=", "2nd arm length");
+            drawHelpLine(62, "", "Coupled chaotic pendulum");
             break;
         case GameMode::WHEEL:
             drawHelpLine(20, "SPC", "hold = power");
@@ -1388,6 +1413,10 @@ void handleGamesApp(const Keyboard_Class::KeysState& status) {
             resetPendulum(false);
         } else if (c == 'r' && g_mode == GameMode::DOUBLE_PENDULUM) {
             resetPendulum(true);
+        } else if (c == '-' && g_mode == GameMode::DOUBLE_PENDULUM) {
+            changePendulumL2(-PEND_L2_PX_STEP);
+        } else if ((c == '=' || c == '+') && g_mode == GameMode::DOUBLE_PENDULUM) {
+            changePendulumL2(PEND_L2_PX_STEP);
         } else if ((c == '-' || c == ',') && g_mode == GameMode::WHEEL) {
             changeWheelSegments(-1);
         } else if ((c == '=' || c == '+' || c == '.') && g_mode == GameMode::WHEEL) {

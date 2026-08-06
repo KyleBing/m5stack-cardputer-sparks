@@ -10,6 +10,7 @@ A coupled double-pendulum chaos demo. A lighter tip mass and longer second arm m
 |-----|--------|
 | `Space` / `GO` | Reset to the default pose |
 | `r` | Randomize angles and clear the trail |
+| `-=` | Adjust second-arm length (top label shows `L2`) |
 | `h` | Help |
 
 ## Notes
