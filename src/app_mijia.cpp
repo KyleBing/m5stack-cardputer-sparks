@@ -3532,14 +3532,19 @@ void enterMijiaApp() {
 }
 
 void leaveMijiaApp(const char* status) {
-    // 先进入 exiting：立刻全屏覆盖 header，并继续压制状态图标刷新
-    mijiaExiting = true;
-    M5Cardputer.Display.fillScreen(BLACK);
-    M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     const char* text = (status != nullptr && status[0] != '\0') ? status : "Exiting.";
-    M5Cardputer.Display.drawCenterString(text, M5Cardputer.Display.width() / 2,
-                                         M5Cardputer.Display.height() / 2 - 8);
+    // 有实际 BLE / 后台任务时才全屏提示；避免空手进其它 App 仍闪 Exiting
+    const bool show_status =
+        isBleStackReady() || mijiaBleScanIsRunning() || mijiaRefreshTaskRunning;
+
+    if (show_status) {
+        mijiaExiting = true;
+        M5Cardputer.Display.fillScreen(BLACK);
+        M5Cardputer.Display.setTextSize(2);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.drawCenterString(text, M5Cardputer.Display.width() / 2,
+                                             M5Cardputer.Display.height() / 2 - 8);
+    }
 
     mijiaBleBgEnabled = false;
     mijiaBleScanPending = false;

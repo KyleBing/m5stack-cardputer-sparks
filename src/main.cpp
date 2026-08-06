@@ -2974,7 +2974,8 @@ void enterApp(const AppState state) {
         leaveAcAutoApp();
     }
     if (currentState == AppState::MIJIA && state != AppState::MIJIA) {
-        leaveMijiaApp();
+        // 切到 AC Auto 是交接 BLE，提示 Entering 而非 Exiting
+        leaveMijiaApp(state == AppState::AC_AUTO ? "Entering." : "Exiting.");
     }
     if (currentState == AppState::IR && state != AppState::IR) {
         leaveIrApp();

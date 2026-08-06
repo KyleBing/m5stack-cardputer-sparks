@@ -14,12 +14,10 @@
 // ===== 常量 =====
 static constexpr uint32_t AC_AUTO_COUNTDOWN_S = 5;           // 按 S 后倒计时再息屏
 static constexpr uint32_t AC_AUTO_IDLE_BLANK_S = 15;         // 亮屏空闲后再息屏
-// BLE：有的温湿度计约 5 分钟才广播一次，息屏最长连听覆盖该周期
-static constexpr uint32_t AC_AUTO_BLE_SCAN_LIT_S = 15;       // 亮屏一轮扫描
-static constexpr uint32_t AC_AUTO_BLE_SCAN_BLANK_S = 360;    // 息屏一轮最长听 6 分钟
-static constexpr uint32_t AC_AUTO_BLE_GAP_LIT_S = 5;         // 亮屏：扫完歇几秒
-static constexpr uint32_t AC_AUTO_BLE_NAP_BLANK_S = 240;     // 息屏：收到读数后歇 4 分钟
-static constexpr uint32_t AC_AUTO_BLE_BURST_BLANK_S = 45;    // 息屏：首包后再听一会攒 filter
+// BLE：有的温湿度计约 5 分钟才广播一次；进入 APP 即按此节奏监听（与 AUTO 开/关无关）
+static constexpr uint32_t AC_AUTO_BLE_SCAN_S = 360;          // 一轮最长听 6 分钟
+static constexpr uint32_t AC_AUTO_BLE_NAP_S = 240;           // 收到读数后歇 4 分钟
+static constexpr uint32_t AC_AUTO_BLE_BURST_S = 45;          // 首包后再听一会攒 filter
 static constexpr uint32_t AC_AUTO_HIST_INTERVAL_MS = 60000;  // 每分钟记一点
 static constexpr int AC_AUTO_HIST_LEN = 12 * 60;             // 12 小时
 static constexpr int AC_AUTO_HINT_H = 12;
@@ -42,7 +40,9 @@ static uint32_t g_last_input_ms = 0;
 static int g_countdown_shown = -1;
 static uint32_t g_ble_next_ms = 0; // 下一轮扫描最早时刻
 static bool g_ble_got_reading = false; // 本轮扫描是否已收到温度
-static uint32_t g_ble_burst_until_ms = 0; // 息屏首包后的短突发窗口终点
+static uint32_t g_ble_burst_until_ms = 0; // 首包后的短突发窗口终点
+static bool g_ble_napping = false; // 「收到读数后长歇」为 true（UI 显示 NAP）
+static int8_t g_ble_ui_shown = -1; // 界面上一次绘制的 BLE 状态（局部刷新用）
 
 static AcAutoConfig g_cfg = {};
 static bool g_cfg_dirty = false;
@@ -111,8 +111,11 @@ static void wakeAcAutoDisplay(const bool redraw) {
     M5Cardputer.Display.setBrightness(g_saved_brightness);
     g_display_blanked = false;
     g_last_input_ms = millis();
-    // 亮屏后立刻扫一轮，方便看最新温湿度
-    g_ble_next_ms = 0;
+    // 亮屏后若在 nap，立刻再听一轮方便看最新温湿度
+    if (g_ble_napping) {
+        g_ble_napping = false;
+        g_ble_next_ms = 0;
+    }
     if (redraw) {
         drawAcAutoApp();
     }
@@ -173,6 +176,7 @@ static void stopBleWatch() {
     g_ble_next_ms = 0;
     g_ble_got_reading = false;
     g_ble_burst_until_ms = 0;
+    g_ble_napping = false;
 }
 
 static void ensureBleWatch() {
@@ -185,24 +189,21 @@ static void ensureBleWatch() {
     if (static_cast<int32_t>(millis() - g_ble_next_ms) < 0) {
         return;
     }
-    // 息屏最长连听 6 分钟，覆盖约 5 分钟一发的广播；亮屏短扫即可
-    const uint32_t scan_s =
-        g_display_blanked ? AC_AUTO_BLE_SCAN_BLANK_S : AC_AUTO_BLE_SCAN_LIT_S;
+    // 最长连听 6 分钟，覆盖约 5 分钟一发的广播（亮/息屏同一节奏）
     g_ble_got_reading = false;
     g_ble_burst_until_ms = 0;
-    (void)mijiaBleWatchStart(&g_watch_dev, 1, scan_s);
+    g_ble_napping = false;
+    (void)mijiaBleWatchStart(&g_watch_dev, 1, AC_AUTO_BLE_SCAN_S);
 }
 
-// got_reading：本轮是否收到过温度。息屏未收到则立刻再听，避免错过 5 分钟窗
+// got_reading：本轮是否收到过温度。未收到则立刻再听，避免错过 5 分钟窗
 static void scheduleNextBleWatch(const bool got_reading) {
-    if (g_display_blanked) {
-        if (got_reading) {
-            g_ble_next_ms = millis() + AC_AUTO_BLE_NAP_BLANK_S * 1000;
-        } else {
-            g_ble_next_ms = 0;
-        }
+    if (got_reading) {
+        g_ble_napping = true;
+        g_ble_next_ms = millis() + AC_AUTO_BLE_NAP_S * 1000;
     } else {
-        g_ble_next_ms = millis() + AC_AUTO_BLE_GAP_LIT_S * 1000;
+        g_ble_napping = false;
+        g_ble_next_ms = 0;
     }
 }
 
@@ -271,7 +272,7 @@ static void markCfgDirty() {
 }
 
 static void drawHelpPage() {
-    beginAppScreen("AC Auto");
+    beginAppScreenWithBattery("AC Auto");
     int y = APP_CONTENT_INSET_Y;
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
@@ -381,6 +382,34 @@ static int displayChartH() {
     return content_bottom - displayChartY() - 2;
 }
 
+// 0=无传感器 1=正在听 2=收到后长歇 3=空闲（不应长时间停留）
+static int bleListenUiState() {
+    if (!g_watch_valid) {
+        return 0;
+    }
+    if (mijiaBleScanIsRunning()) {
+        return 1;
+    }
+    // NAP：本轮确有读数后的长歇
+    if (g_ble_napping && static_cast<int32_t>(millis() - g_ble_next_ms) < 0) {
+        return 2;
+    }
+    return 3;
+}
+
+static const char* bleListenUiLabel(const int state) {
+    switch (state) {
+        case 1:
+            return "LISTEN";
+        case 2:
+            return "NAP";
+        case 3:
+            return "IDLE";
+        default:
+            return "NO BLE";
+    }
+}
+
 // 温湿度 / 计数 / 阈值（不含 chart、tip）
 static void drawDisplayStats() {
     int y = displayStatsY();
@@ -418,6 +447,17 @@ static void drawDisplayStats() {
     M5Cardputer.Display.setTextColor(APP_COLOR_MUTED, BLACK);
     M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
     M5Cardputer.Display.print(line);
+
+    // 阈值行右侧：BLE 监听状态
+    const int ble_st = bleListenUiState();
+    g_ble_ui_shown = static_cast<int8_t>(ble_st);
+    const char* ble_label = bleListenUiLabel(ble_st);
+    const uint16_t ble_color =
+        ble_st == 1 ? APP_COLOR_OK : (ble_st == 2 ? APP_COLOR_WARN : APP_COLOR_MUTED);
+    M5Cardputer.Display.setTextColor(ble_color, BLACK);
+    const int ble_w = M5Cardputer.Display.textWidth(ble_label);
+    M5Cardputer.Display.setCursor(M5Cardputer.Display.width() - ble_w - 4, y);
+    M5Cardputer.Display.print(ble_label);
 }
 
 static void drawDisplayChartArea() {
@@ -505,14 +545,14 @@ static void refreshDisplayChart() {
 }
 
 static void drawDisplayPage() {
-    beginAppScreen("AC Auto");
+    beginAppScreenWithBattery("AC Auto");
     drawDisplayStats();
     drawDisplayChartArea();
     drawDisplayHint();
 }
 
 static void drawConfigPage() {
-    beginAppScreenAccent("AC Auto ", "cfg", APP_COLOR_LABEL);
+    beginAppScreenAccentWithBattery("AC Auto ", "cfg", APP_COLOR_LABEL);
 
     char val[40];
     const char* labels[AC_AUTO_CFG_ROWS] = {"sensor", "on temp", "off temp", "filter",
@@ -765,6 +805,8 @@ void updateAcAutoApp() {
     // BLE 读数：只局部刷统计区，避免整屏闪
     if (g_watch_valid) {
         MijiaBleReading reading = {};
+        // 仅在本帧结束了一轮扫描时排程；已 idle 时 poll 也会返回 done，不能反复刷新 nap 终点
+        const bool was_running = mijiaBleScanIsRunning();
         const bool done = mijiaBleScanPoll(reading, nullptr);
         if (reading.ok && reading.has_temp) {
             g_temp_c = reading.temperature;
@@ -775,22 +817,29 @@ void updateAcAutoApp() {
             g_ble_got_reading = true;
             applyAutomation(g_temp_c);
             refreshDisplayStats();
-            // 息屏：首包开启短突发窗口，方便频繁广播攒 filter
-            if (g_display_blanked && g_ble_burst_until_ms == 0) {
-                g_ble_burst_until_ms = millis() + AC_AUTO_BLE_BURST_BLANK_S * 1000;
+            // 首包开启短突发窗口，方便频繁广播攒 filter
+            if (g_ble_burst_until_ms == 0) {
+                g_ble_burst_until_ms = millis() + AC_AUTO_BLE_BURST_S * 1000;
             }
         }
         // 突发窗口结束：停扫进入 nap（5 分钟一发的传感器本轮通常只有 1 包）
-        if (g_display_blanked && g_ble_burst_until_ms != 0 && mijiaBleScanIsRunning() &&
+        if (g_ble_burst_until_ms != 0 && mijiaBleScanIsRunning() &&
             static_cast<int32_t>(millis() - g_ble_burst_until_ms) >= 0) {
             mijiaBleScanAbort();
             scheduleNextBleWatch(true);
             g_ble_burst_until_ms = 0;
-        }
-        if (done) {
+        } else if (done && was_running) {
             scheduleNextBleWatch(g_ble_got_reading);
         }
         ensureBleWatch();
+    }
+
+    // BLE 监听状态变化时局部刷统计行（LISTEN / NAP / IDLE）
+    if (!g_display_blanked && g_page == AcAutoPage::Display && !g_help_visible) {
+        const int ble_st = bleListenUiState();
+        if (ble_st != g_ble_ui_shown) {
+            refreshDisplayStats();
+        }
     }
 
     // 每分钟记历史：只刷 chart
