@@ -1260,7 +1260,7 @@ static void openHostsUi() {
     }
 }
 
-// 只在偏好发生变化时写盘，避免按键持续按住时重复擦写 LittleFS
+// 仅退出 App 时写盘；设置过程只改内存，避免 LittleFS 擦写卡顿
 static void persistHidKeyboardSettings() {
     const AppConfig& cfg = getAppConfig();
     const HidKeyboardTransport transport = g_transport == HidTransport::USB
@@ -1289,7 +1289,6 @@ static void applyTransport(const HidTransport next) {
         stopUsbKeyboard();
         startBleKeyboard();
     }
-    persistHidKeyboardSettings();
 }
 
 static void drawHelpPage();
@@ -2000,7 +1999,6 @@ static bool tryHandleImuSensKey(const Keyboard_Class::KeysState& status) {
         }
         if (g_imu_sens != sensitivity) {
             g_imu_sens = sensitivity;
-            persistHidKeyboardSettings();
         }
         return true;
     }
@@ -2421,7 +2419,7 @@ static void drawMouseIcon(const int cx, const int cy, const uint8_t buttons) {
     fillRectRoundBLBR(x, y + btn_h + gap, mw, body_h, r_body, body);
 }
 
-// 右侧灵敏度：固定 20x5 直角块，距右缘 10px
+// 右侧灵敏度：固定 20x5 直角块，距右缘 10px；顶部避开 Keyboard 文字
 static void drawSensBar(const bool force) {
     if (!g_imu_mouse_on) {
         return;
@@ -2431,10 +2429,11 @@ static void drawSensBar(const bool force) {
     }
     const int screen_w = M5Cardputer.Display.width();
     const int bar_x = screen_w - kSensBarW - kSensMargin;
+    const int area_top = kKbTopY + kAppNameH;
+    const int area_h = contentBottomY() - area_top;
     const int total_h = kImuSensMax * kSensSegH + (kImuSensMax - 1) * kSensSegGap;
-    const int top = kKbTopY + (contentBottomY() - kKbTopY - total_h) / 2;
-    M5Cardputer.Display.fillRect(bar_x - 1, kKbTopY, kSensBarW + 2, contentBottomY() - kKbTopY,
-                                 BLACK);
+    const int top = area_top + (area_h - total_h) / 2;
+    M5Cardputer.Display.fillRect(bar_x - 1, area_top, kSensBarW + 2, area_h, BLACK);
     for (int i = 0; i < kImuSensMax; i++) {
         const int level = kImuSensMax - i;
         const int sy = top + i * (kSensSegH + kSensSegGap);
@@ -3019,6 +3018,9 @@ void leaveHidKeyboardApp() {
     // 先抬键再拆栈，否则主机端会一直认为键还按着
     releaseAllToHost();
     clearBleReportQueue();
+
+    // 退出时再写 config.json（传输方式 / IMU 灵敏度）
+    persistHidKeyboardSettings();
 
     stopBleKeyboard();
     // 退出应用时务必把 USB 还给 JTAG，否则无法 upload

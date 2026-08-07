@@ -10,6 +10,7 @@
 
 ### 改进
 
+- **Keyboard**：传输方式 / IMU 灵敏度仅退出 App 时写入 `config.json`，设置过程不落盘，避免卡顿
 - **截图改存 PNG**：`Fn+s` 直接流式编码 PNG（M5GFX miniz），体积远小于旧 BMP；Config `/shots` 预览兼容旧 `.bmp`
 - **截图反馈**：成功后屏幕反色闪一下；提示音可由 Options / Config Web 的 `sound.screenshot` 开关
 - **空调自动化 Web**：品牌 / 模式 / 风力 / 传感器选择改为 radio
