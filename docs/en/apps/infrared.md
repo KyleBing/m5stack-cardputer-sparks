@@ -48,9 +48,13 @@ Exact actions follow the on-screen keypad and Help.
 
 ### TV
 
-Supported brands: Samsung, Sony, LG, Panasonic, NEC.
+Supported brands: Samsung, Sony, LG, Panasonic, NEC, Xiaomi, Hisense.
 
 Common actions: Power, Vol±, Mute, Ch±, Input. Pick brand and action, then send.
+
+> Xiaomi uses the Xiaomi IR protocol (most Mi TV / Mi Box). Some models are Bluetooth-only with no IR receiver. Ch± maps to Page Up/Down.
+>
+> Hisense uses NEC (customer `04FB`, official discrete / common VIDAA codes). Some older EN* remotes use address `00BF`; if no response, try the generic NEC brand.
 
 ### AC
 

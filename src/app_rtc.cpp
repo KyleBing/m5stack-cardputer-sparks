@@ -2,6 +2,7 @@
 #include "app_colors.h"
 #include "app_common.h"
 #include "app_config.h"
+#include "app_connectivity.h"
 #include "app_countdown.h"
 #include "app_header.h"
 #include "app_stopwatch.h"
@@ -41,6 +42,7 @@ static constexpr int RTC_PURE_TIME_DATE_GAP = 4;
 static constexpr int RTC_FAIL_TEXT_SIZE = 2;
 static constexpr uint32_t RTC_SYNC_TIMEOUT_MS = 10000;  // WiFi 连接超时
 static constexpr uint32_t RTC_NTP_TIMEOUT_MS = 8000;    // NTP 单独超时（WiFi 成功后）
+static constexpr uint32_t RTC_WIFI_RETRY_MS = 3500;     // 与 ensureStaWifi 一致：主动重发 begin
 static constexpr uint32_t UPTIME_UPDATE_MS = 1000;       // 更新间隔 1 second
 static constexpr uint32_t BIG_CLOCK_UPDATE_MS = 15000;    // big time 仅 HH:MM，活跃时 15s 检查一次
 static constexpr uint32_t TIME_IDLE_SLOW_MS = 60000;    // 无操作 1 分钟后主循环 1s 一拍
@@ -51,6 +53,19 @@ static constexpr int TIME_MODE_LABEL_H = 8; // text size 1
 // tm_wday: 0=Sun .. 6=Sat
 static constexpr const char* RTC_WEEKDAY_ABBR[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 
+// 后台 WiFi + NTP（不阻塞主循环，同步中可切模块 / 回菜单）
+enum class RtcTimeSync : uint8_t {
+    Idle = 0,
+    BeginWifi,
+    WaitWifi,
+    BeginNtp,
+    WaitNtp,
+};
+static RtcTimeSync g_rtc_sync = RtcTimeSync::Idle;
+static uint32_t g_rtc_sync_deadline_ms = 0;
+static uint32_t g_rtc_wifi_retry_ms = 0;
+static const char* g_rtc_busy_msg = nullptr; // 同步中提示文案
+
 static void drawRtcApp(const bool full_init);
 static void drawRtcPureApp(const bool full_init);
 static void drawRtcPureLargeClockApp(const bool full_init);
@@ -59,6 +74,12 @@ static void drawTimePureApp(const bool full_init);
 static void drawTimeModeLabelOverlay();
 static void showTimeModeLabel();
 static void noteTimeActivity();
+static bool rtcSyncBusy();
+static void abortClockSync();
+static void finishClockSync(bool ok, bool timed_out);
+static void startClockSync(bool force);
+static void updateClockSync();
+static bool applyNtpResultToRtc();
 
 static void noteTimeActivity() {
     timeLastActivityMs = millis();
@@ -254,53 +275,30 @@ static void redrawCurrentTimeMode() {
 }
 
 static void drawRtcBusyScreen(const char* msg) {
-    // 同步中提示：无 header，全屏
+    // 同步中提示：无 header，全屏（不阻塞按键；update 里继续推进 NTP）
     M5Cardputer.Display.fillScreen(BLACK);
     rtcScreenReady = true;
+    g_rtc_busy_msg = msg;
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.setCursor(APP_CONTENT_X, 8);
     M5Cardputer.Display.println(msg);
 }
 
-static bool trySyncNtpTime(const uint32_t deadline_ms) {
-    if (WiFi.status() != WL_CONNECTED) {
-        return false;
-    }
+static bool rtcSyncBusy() {
+    return g_rtc_sync == RtcTimeSync::BeginWifi || g_rtc_sync == RtcTimeSync::WaitWifi ||
+           g_rtc_sync == RtcTimeSync::BeginNtp || g_rtc_sync == RtcTimeSync::WaitNtp;
+}
 
-    // NTP 只返回 UTC；显示时区来自 config（缺省 CST-8）
-    const char* tz = getAppTimezone();
-    // 已有系统/RTC 时间时 getLocalTime 会立刻成功（只看年份>2016），
-    // 必须等 SNTP 真正完成，否则一夜漂移后按 r 仍写回旧时间。
-    // SMOOTH 对 ≤35min 误差只渐调，强制 IMMED 立刻跳到线上时间。
-    sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED);
-    sntp_set_sync_status(SNTP_SYNC_STATUS_RESET);
-    configTzTime(tz, "ntp.aliyun.com", "pool.ntp.org", "time.windows.com");
-
-    while (static_cast<int32_t>(millis() - deadline_ms) < 0) {
-        // get 读到 COMPLETED 后会清回 RESET，只判断一次即可
-        if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
-            struct tm timeinfo{};
-            if (!getLocalTime(&timeinfo, 0)) {
-                return false;
-            }
-            if (M5.Rtc.isEnabled()) {
-                // 硬件 RTC 按 UTC 存：与 M5 setSystemTimeFromRtc 约定一致
-                const time_t now = time(nullptr);
-                struct tm utc{};
-                gmtime_r(&now, &utc);
-                M5.Rtc.setDateTime(&utc);
-                M5.Rtc.setSystemTimeFromRtc();
-                // setSystemTimeFromRtc 会临时改 TZ，写回本地时区
-                applyLocalTimezone();
-            }
-            // 同步成功后把时区写入 config.json
-            saveAppConfigTimezone(tz);
-            return true;
-        }
-        delay(100);
+static void abortClockSync() {
+    if (!rtcSyncBusy()) {
+        g_rtc_sync = RtcTimeSync::Idle;
+        g_rtc_busy_msg = nullptr;
+        return;
     }
-    return false;
+    releaseConfigWifi();
+    g_rtc_sync = RtcTimeSync::Idle;
+    g_rtc_busy_msg = nullptr;
 }
 
 static bool readCurrentTime(struct tm& out, const char*& source) {
@@ -347,42 +345,147 @@ static bool hasValidClockTime() {
     return readCurrentTime(timeinfo, source);
 }
 
-// 首次有效时间或首次 NTP 成功后不再自动同步；按 r 强制刷新
-static bool syncClockTimeIfNeeded(const bool force) {
+// 将已完成的 SNTP 结果写入硬件 RTC / 时区配置
+static bool applyNtpResultToRtc() {
+    struct tm timeinfo{};
+    if (!getLocalTime(&timeinfo, 0)) {
+        return false;
+    }
+    const char* tz = getAppTimezone();
+    if (M5.Rtc.isEnabled()) {
+        // 硬件 RTC 按 UTC 存：与 M5 setSystemTimeFromRtc 约定一致
+        const time_t now = time(nullptr);
+        struct tm utc{};
+        gmtime_r(&now, &utc);
+        M5.Rtc.setDateTime(&utc);
+        M5.Rtc.setSystemTimeFromRtc();
+        // setSystemTimeFromRtc 会冲掉改 TZ，写回本地时区
+        applyLocalTimezone();
+    }
+    saveAppConfigTimezone(tz);
+    return true;
+}
+
+static void finishClockSync(const bool ok, const bool timed_out) {
+    releaseConfigWifi();
+    g_rtc_sync = RtcTimeSync::Idle;
+    g_rtc_busy_msg = nullptr;
+    if (ok) {
+        clockSyncedOnce = true;
+        rtcSyncTimedOut = false;
+    } else {
+        rtcSyncTimedOut = timed_out;
+    }
+    // 仍在 Clock 页时刷新结果；已切走则只收尾 WiFi
+    if (timeMode == TimeMode::CLOCK && !timeHelpVisible) {
+        drawRtcPureApp(true);
+        drawTimeModeLabelOverlay();
+    }
+}
+
+// 启动后台同步；立刻返回，主循环可继续响应切模块
+static void startClockSync(const bool force) {
     if (!force && clockSyncedOnce) {
-        return hasValidClockTime();
+        return;
     }
     if (!force && hasValidClockTime()) {
         clockSyncedOnce = true;
-        return true;
+        return;
+    }
+    if (rtcSyncBusy()) {
+        // 已在同步中：强制刷新则重启；否则沿用当前请求
+        if (!force) {
+            return;
+        }
+        abortClockSync();
     }
 
     rtcSyncTimedOut = false;
     const AppConfig& cfg = getAppConfig();
     if (!cfg.loaded || cfg.wifi_ssid[0] == '\0') {
-        return hasValidClockTime();
+        if (timeMode == TimeMode::CLOCK) {
+            drawRtcApp(true);
+        }
+        return;
     }
 
-    const uint32_t deadline = millis() + RTC_SYNC_TIMEOUT_MS;
     drawRtcBusyScreen("wifi connecting...");
+    g_rtc_sync = RtcTimeSync::BeginWifi;
+}
 
-    const uint32_t remain = deadline - millis();
-    const bool wifi_ok = remain > 0 && ensureConfigWifi(remain);
-    if (!wifi_ok) {
-        rtcSyncTimedOut = static_cast<int32_t>(millis() - deadline) >= 0;
-        releaseConfigWifi();
-        return hasValidClockTime();
+static void updateClockSync() {
+    if (!rtcSyncBusy()) {
+        return;
     }
-    // WiFi 成功后给 NTP 单独预算，避免重连占满总超时导致假失败
-    drawRtcBusyScreen("ntp syncing...");
-    const uint32_t ntp_deadline = millis() + RTC_NTP_TIMEOUT_MS;
-    if (trySyncNtpTime(ntp_deadline)) {
-        clockSyncedOnce = true;
-    } else {
-        rtcSyncTimedOut = true;
+    // 已离开 Clock：取消同步，避免后台占 WiFi
+    if (timeMode != TimeMode::CLOCK) {
+        abortClockSync();
+        return;
     }
-    releaseConfigWifi();
-    return hasValidClockTime();
+
+    const AppConfig& cfg = getAppConfig();
+    switch (g_rtc_sync) {
+        case RtcTimeSync::Idle:
+            return;
+        case RtcTimeSync::BeginWifi: {
+            if (!cfg.loaded || cfg.wifi_ssid[0] == '\0') {
+                finishClockSync(false, false);
+                return;
+            }
+            if (WiFi.status() == WL_CONNECTED && WiFi.SSID() == cfg.wifi_ssid) {
+                claimStaWifi();
+                g_rtc_sync = RtcTimeSync::BeginNtp;
+                return;
+            }
+            claimStaWifi();
+            if (WiFi.status() == WL_CONNECTED) {
+                WiFi.disconnect(true);
+                delay(50);
+            }
+            WiFi.mode(WIFI_STA);
+            applyWifiRadioSleepPolicy();
+            WiFi.setAutoReconnect(true);
+            WiFi.begin(cfg.wifi_ssid, cfg.wifi_password);
+            g_rtc_sync_deadline_ms = millis() + RTC_SYNC_TIMEOUT_MS;
+            g_rtc_wifi_retry_ms = millis() + RTC_WIFI_RETRY_MS;
+            g_rtc_sync = RtcTimeSync::WaitWifi;
+            break;
+        }
+        case RtcTimeSync::WaitWifi:
+            if (WiFi.status() == WL_CONNECTED) {
+                g_rtc_sync = RtcTimeSync::BeginNtp;
+            } else if (static_cast<int32_t>(millis() - g_rtc_sync_deadline_ms) >= 0) {
+                finishClockSync(hasValidClockTime(), true);
+            } else if (static_cast<int32_t>(millis() - g_rtc_wifi_retry_ms) >= 0) {
+                // Arduino 自动重连不可靠，主动重发 begin
+                WiFi.begin(cfg.wifi_ssid, cfg.wifi_password);
+                g_rtc_wifi_retry_ms = millis() + RTC_WIFI_RETRY_MS;
+            }
+            break;
+        case RtcTimeSync::BeginNtp: {
+            // 已有系统/RTC 时间时 getLocalTime 会立刻成功，必须等 SNTP COMPLETED
+            // SMOOTH 对 ≤35min 误差只渐调，强制 IMMED 立刻跳到线上时间
+            const char* tz = getAppTimezone();
+            sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED);
+            sntp_set_sync_status(SNTP_SYNC_STATUS_RESET);
+            configTzTime(tz, "ntp.aliyun.com", "pool.ntp.org", "time.windows.com");
+            g_rtc_busy_msg = "ntp syncing...";
+            if (!timeHelpVisible) {
+                drawRtcBusyScreen(g_rtc_busy_msg);
+            }
+            g_rtc_sync_deadline_ms = millis() + RTC_NTP_TIMEOUT_MS;
+            g_rtc_sync = RtcTimeSync::WaitNtp;
+            break;
+        }
+        case RtcTimeSync::WaitNtp:
+            // get 读到 COMPLETED 后会清回 RESET，只判断一次即可
+            if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
+                finishClockSync(applyNtpResultToRtc(), false);
+            } else if (static_cast<int32_t>(millis() - g_rtc_sync_deadline_ms) >= 0) {
+                finishClockSync(hasValidClockTime(), true);
+            }
+            break;
+    }
 }
 
 static void drawUptimePureApp(const bool full_init) {
@@ -475,6 +578,14 @@ static void drawRtcPureApp(const bool full_init) {
         return;
     }
 
+    // 同步进行中：保留忙屏，勿被 fail 页盖住
+    if (rtcSyncBusy()) {
+        if (full_init || g_rtc_busy_msg == nullptr) {
+            drawRtcBusyScreen(g_rtc_busy_msg != nullptr ? g_rtc_busy_msg : "syncing...");
+        }
+        return;
+    }
+
     struct tm timeinfo{};
     const char* source = "none";
     if (!readCurrentTime(timeinfo, source)) {
@@ -539,12 +650,16 @@ static void enterTimeMode(const TimeMode mode) {
     timeHelpVisible = false;
     if (mode != TimeMode::CLOCK) {
         rtcPureLargeClockVisible = false;
+        abortClockSync(); // 切走 Clock 时立刻停 NTP，不挡其它模块
     }
     if (mode == TimeMode::CLOCK) {
         timeMode = TimeMode::CLOCK;
         rtcScreenReady = false;
-        syncClockTimeIfNeeded(false);
-        drawRtcPureApp(true);
+        startClockSync(false);
+        // 未进同步忙屏时再画时钟 / 失败页
+        if (!rtcSyncBusy()) {
+            drawRtcPureApp(true);
+        }
         showTimeModeLabel();
         return;
     }
@@ -565,6 +680,7 @@ void enterRtcApp() {
     rtcScreenReady = false;
     timeModeLabelUntilMs = 0;
     timeModeLabelVisible = false;
+    abortClockSync();
     noteTimeActivity();
 
     // 按配置进入默认模块
@@ -585,7 +701,13 @@ void enterRtcApp() {
     }
 }
 
+void leaveRtcApp() {
+    abortClockSync();
+}
+
 void updateRtcApp() {
+    // 后台推进 WiFi/NTP；同步中主循环仍可处理按键
+    updateClockSync();
     if (timeHelpVisible) {
         return;
     }
@@ -599,6 +721,9 @@ void updateRtcApp() {
             break;
         }
         case TimeMode::CLOCK: {
+            if (rtcSyncBusy()) {
+                break; // 忙屏由 start/updateClockSync 维护
+            }
             static uint32_t last_pure_clock_ms = 0;
             // big time 仅 HH:MM：活跃时长间隔检查；空闲 1s 一拍时改为每秒，整分切换及时
             const uint32_t interval =
@@ -680,8 +805,10 @@ void handleTimeApp(const Keyboard_Class::KeysState& status) {
         return;
     }
     if (key == 'r' && timeMode == TimeMode::CLOCK) {
-        syncClockTimeIfNeeded(true);
-        drawRtcPureApp(true);
+        startClockSync(true);
+        if (!rtcSyncBusy()) {
+            drawRtcPureApp(true);
+        }
         drawTimeModeLabelOverlay();
         return;
     }
@@ -705,6 +832,10 @@ bool isTimeClockLikeMode() {
 }
 
 bool isTimeIdleSlowLoop() {
+    // 同步中保持较快轮询，便于超时与重连
+    if (rtcSyncBusy()) {
+        return false;
+    }
     return isTimeClockLikeMode() && (millis() - timeLastActivityMs) >= TIME_IDLE_SLOW_MS;
 }
 

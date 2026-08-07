@@ -25,8 +25,12 @@ static const char* const DEVICE_ICON_NAMES[] = {
 
 static char s_device_icon_path[64];
 
+// bake / 通用 .rgb565 上限：可大于设备图标 70px（如 /icon/btngo.png 138×88）
+// 不超过屏尺寸，便于左上角离屏解码
+static constexpr int RGB565_BAKE_MAX_W = 240;
+static constexpr int RGB565_BAKE_MAX_H = 135;
 static constexpr size_t RGB565_MAX_PIXELS =
-    static_cast<size_t>(DEVICE_ICON_NATIVE_PX * DEVICE_ICON_NATIVE_PX);
+    static_cast<size_t>(RGB565_BAKE_MAX_W * RGB565_BAKE_MAX_H);
 
 // .rgb565 头部：'R','5','6','5' + uint16 宽 + uint16 高（小端），其后为裸像素
 static constexpr size_t RGB565_HEADER_BYTES = 8;
@@ -155,7 +159,7 @@ static bool openRgb565Image(const char* path, File& f, int& w, int& h) {
     }
     w = static_cast<int>(hdr[4]) | (static_cast<int>(hdr[5]) << 8);
     h = static_cast<int>(hdr[6]) | (static_cast<int>(hdr[7]) << 8);
-    if (w <= 0 || h <= 0 || w > DEVICE_ICON_NATIVE_PX || h > DEVICE_ICON_NATIVE_PX) {
+    if (w <= 0 || h <= 0 || w > RGB565_BAKE_MAX_W || h > RGB565_BAKE_MAX_H) {
         f.close();
         return false;
     }
@@ -201,8 +205,8 @@ static bool drawRgb565Path(const char* path, const int x, const int y, const flo
     }
 
     if (scale > 0.99f && scale < 1.01f) {
-        // 行缓冲：最大 70×2 字节，无需常驻 scratch
-        uint16_t row[DEVICE_ICON_NATIVE_PX];
+        // 行缓冲：按 bake 最大宽度，无需常驻 scratch
+        uint16_t row[RGB565_BAKE_MAX_W];
         const size_t row_bytes = static_cast<size_t>(w) * 2u;
         for (int row_i = 0; row_i < h; row_i++) {
             if (f.read(reinterpret_cast<uint8_t*>(row), row_bytes) != row_bytes) {
@@ -303,8 +307,8 @@ static bool readPngIhdrSize(File& f, int& w, int& h) {
     }
     w = (hdr[16] << 24) | (hdr[17] << 16) | (hdr[18] << 8) | hdr[19];
     h = (hdr[20] << 24) | (hdr[21] << 16) | (hdr[22] << 8) | hdr[23];
-    return w > 0 && h > 0 && w <= DEVICE_ICON_NATIVE_PX && h <= DEVICE_ICON_NATIVE_PX &&
-           static_cast<size_t>(w * h) <= RGB565_MAX_PIXELS;
+    return w > 0 && h > 0 && w <= RGB565_BAKE_MAX_W && h <= RGB565_BAKE_MAX_H &&
+           static_cast<size_t>(w) * static_cast<size_t>(h) <= RGB565_MAX_PIXELS;
 }
 
 // M5GFX 现场解码 → readRect → .rgb565（与屏上观感一致）；缓冲仅 bake 时临时分配
@@ -336,7 +340,7 @@ bool bakePngToRgb565File(const char* png_path) {
     }
 
     // 先清最大烘焙区：只清 w×h 时，前面更大的图标会残留在周围
-    M5Cardputer.Display.fillRect(0, 0, DEVICE_ICON_NATIVE_PX, DEVICE_ICON_NATIVE_PX, BLACK);
+    M5Cardputer.Display.fillRect(0, 0, RGB565_BAKE_MAX_W, RGB565_BAKE_MAX_H, BLACK);
     if (!M5Cardputer.Display.drawPngFile(LittleFS, png_path, 0, 0, 0, 0, 0, 0, 1.0f, 1.0f,
                                         lgfx::v1::datum_t::top_left)) {
         free(px);

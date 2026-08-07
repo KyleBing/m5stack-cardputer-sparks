@@ -173,6 +173,8 @@ enum class IrTvBrand : uint8_t {
     Lg,
     Panasonic,
     Nec,
+    Xiaomi,
+    Hisense,
     Count,
 };
 
@@ -282,7 +284,7 @@ static uint32_t g_press_until_ms = 0;
 static constexpr uint32_t IR_PRESS_MS = 160;
 
 static const char* tvBrandName(const int idx) {
-    static const char* names[] = {"Samsung", "Sony", "LG", "Panasonic", "NEC"};
+    static const char* names[] = {"Samsung", "Sony", "LG", "Panasonic", "NEC", "Xiaomi", "Hisense"};
     if (idx < 0 || idx >= static_cast<int>(IrTvBrand::Count)) {
         return "?";
     }
@@ -310,7 +312,7 @@ static const char* acBrandIconStem(const int idx) {
 // TV 品牌 logo（NEC 无图）
 static const char* tvBrandIconStem(const int idx) {
     static const char* stems[] = {"brand_samsung", "brand_sony", "brand_lg", "brand_panasonic",
-                                  nullptr};
+                                  nullptr,        "brand_xiaomi", "brand_hisense"};
     if (idx < 0 || idx >= static_cast<int>(IrTvBrand::Count)) {
         return nullptr;
     }
@@ -611,6 +613,37 @@ static void setTxStatus(const char* text) {
     g_tx_status_until_ms = millis() + 1500;
 }
 
+// 小米电视 Xiaomi IR（RC-MM 变体）：36kHz，tick=290µs，20-bit D:8 F:8 C:4
+// IRP: {36k,290,msb}<2,-2|2,-3|2,-4|2,-5>(1000u,-2,D:8,F:8,C:4,2,^30m)*
+static uint32_t xiaomiIrPack(const uint8_t d, const uint8_t f) {
+    const uint8_t c =
+        static_cast<uint8_t>(((d >> 4) ^ (d & 0x0F) ^ (f >> 4) ^ (f & 0x0F)) & 0x0F);
+    return (static_cast<uint32_t>(d) << 12) | (static_cast<uint32_t>(f) << 4) | c;
+}
+
+static void sendXiaomiIr(const uint8_t d, const uint8_t f) {
+    const uint32_t data = xiaomiIrPack(d, f);
+    constexpr uint16_t kTick = 290;
+    // header(2) + 10 dibits(20) + footer(1)
+    uint16_t raw[23];
+    uint16_t n = 0;
+    raw[n++] = 1000;
+    raw[n++] = static_cast<uint16_t>(2 * kTick);
+    for (int i = 18; i >= 0; i -= 2) {
+        raw[n++] = static_cast<uint16_t>(2 * kTick);
+        const uint8_t dibit = static_cast<uint8_t>((data >> i) & 0x3U);
+        raw[n++] = static_cast<uint16_t>((2 + dibit) * kTick);
+    }
+    raw[n++] = static_cast<uint16_t>(2 * kTick);
+    // 连发几次，贴近原厂遥控按压
+    for (int r = 0; r < 3; r++) {
+        g_irsend.sendRaw(raw, n, 36);
+        if (r + 1 < 3) {
+            delay(30); // IRP ^30m 帧间隔
+        }
+    }
+}
+
 // 常用电视红外码（公开遥控码表，机型可能有差异）
 static void sendTvAction() {
     ensureIrReady();
@@ -761,6 +794,70 @@ static void sendTvAction() {
                     break;
                 case IrTvAction::Input:
                     code = 0x00FF22DD;
+                    break;
+                default:
+                    break;
+            }
+            g_irsend.sendNEC(code);
+            break;
+        }
+        case IrTvBrand::Xiaomi: {
+            // Mi TV / Mi Box 常用码（D 默认 0x86；Power 用 0x3C）
+            uint8_t d = 0x86;
+            uint8_t f = 0;
+            switch (action) {
+                case IrTvAction::Power:
+                    d = 0x3C;
+                    f = 0xCC;
+                    break;
+                case IrTvAction::VolUp:
+                    f = 0x0E;
+                    break;
+                case IrTvAction::VolDown:
+                    f = 0x0F;
+                    break;
+                case IrTvAction::Mute:
+                    f = 0xA1;
+                    break;
+                case IrTvAction::ChUp:
+                    f = 0x30; // Page Up
+                    break;
+                case IrTvAction::ChDown:
+                    f = 0x33; // Page Down
+                    break;
+                case IrTvAction::Input:
+                    f = 0x01;
+                    break;
+                default:
+                    break;
+            }
+            sendXiaomiIr(d, f);
+            break;
+        }
+        case IrTvBrand::Hisense: {
+            // 海信 VIDAA / 官方 discrete IR（NEC，customer 04FB）
+            uint64_t code = 0;
+            switch (action) {
+                case IrTvAction::Power:
+                    code = 0x04FB708F;
+                    break;
+                case IrTvAction::VolUp:
+                    code = 0x04FBA659;
+                    break;
+                case IrTvAction::VolDown:
+                    code = 0x04FBA55A;
+                    break;
+                case IrTvAction::Mute:
+                    code = 0x04FB09F6; // 同址消费级遥控常用 Mute
+                    break;
+                case IrTvAction::ChUp:
+                    code = 0x04FBA857;
+                    break;
+                case IrTvAction::ChDown:
+                    code = 0x04FBA758;
+                    break;
+                case IrTvAction::Input:
+                    code = 0x04FB738C;
                     break;
                 default:
                     break;

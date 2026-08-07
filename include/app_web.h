@@ -24,6 +24,10 @@ const char* getConfigWebStatus();
 // 当前界面短名（main 实现），截图文件为 app_<slug>_NNN.png
 const char* getCurrentAppShotSlug();
 
+// Config 全程无 header：禁止全局刷电池 / WiFi / BLE 图标
+bool webAppSuppressesHeader();
+
 void drawWebApp();
 void enterWebApp();
+void leaveWebApp();
 void handleWebApp(const String& key);

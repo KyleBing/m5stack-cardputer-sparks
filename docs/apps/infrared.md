@@ -48,9 +48,13 @@
 
 ### TV
 
-支持品牌：Samsung、Sony、LG、Panasonic、NEC。
+支持品牌：Samsung、Sony、LG、Panasonic、NEC、Xiaomi、Hisense。
 
 常见动作：Power、Vol±、Mute、Ch±、Input。选好品牌与动作后发送。
+
+> Xiaomi 使用小米电视专用 Xiaomi IR 协议（多数 Mi TV / Mi Box）；部分机型仅蓝牙遥控、无红外接收。Ch± 对应 Page Up/Down。
+>
+> Hisense 使用 NEC（customer `04FB`，官方 discrete / VIDAA 常用码）；部分老款 EN* 遥控为 `00BF` 址，无响应时可试通用 NEC 品牌。
 
 ### AC
 

@@ -378,6 +378,7 @@ void showMenu() {
     leaveAcAutoApp();
     // leaveCountdownApp 不再停后台计时；到期由 poll 弹窗
     leaveMijiaApp();
+    leaveWebApp();
     stopConfigWebServer();
     releaseConfigWifi();
     currentState = AppState::MENU;
@@ -2764,6 +2765,22 @@ static int sleepCountH = 0;
 static constexpr gpio_num_t SLEEP_WAKE_PIN = GPIO_NUM_0;
 static constexpr uint32_t SLEEP_PROMPT_MS = 5000;
 
+// Sleep 页右侧 ButtonGo 示意图（data/icon/btngo.png）
+static constexpr const char* SLEEP_BTNGO_ICON_PATH = "/icon/btngo.png";
+static constexpr int SLEEP_BTNGO_ICON_W = 138;
+static constexpr int SLEEP_BTNGO_ICON_H = 88;
+static constexpr int SLEEP_BTNGO_ICON_RIGHT_PAD = 10; // 距右缘至少 10px
+
+// 右对齐绘制 ButtonGo 图标（内容区垂直居中）
+static void drawSleepBtnGoIcon() {
+    const int screen_w = M5Cardputer.Display.width();
+    const int screen_h = M5Cardputer.Display.height();
+    const int x = screen_w - SLEEP_BTNGO_ICON_RIGHT_PAD - SLEEP_BTNGO_ICON_W;
+    const int content_h = screen_h - APP_CONTENT_Y;
+    const int y = APP_CONTENT_Y + (content_h - SLEEP_BTNGO_ICON_H) / 2;
+    drawLittleFsPng(SLEEP_BTNGO_ICON_PATH, x, y, 1.0f);
+}
+
 // 入睡前断开无线
 static void shutdownRadiosForSleep() {
     stopConfigWebServer();
@@ -2840,6 +2857,8 @@ static void drawSleepCountdownOnly(const int seconds_left) {
 static void drawLightSleepPrompt(const int seconds_left) {
     // Header：Sleep + Light（次要色）
     beginAppScreenAccent("Sleep ", "Light", APP_COLOR_LABEL);
+    // 先画右侧示意图，再画左侧文案（重叠处文字压在图标上）
+    drawSleepBtnGoIcon();
 
     int y = APP_CONTENT_INSET_Y;
     M5Cardputer.Display.setTextSize(2);
@@ -2875,6 +2894,7 @@ static void drawLightSleepPrompt(const int seconds_left) {
 static void drawDeepSleepPrompt(const int seconds_left) {
     // Header：Sleep + Deep（次要色）
     beginAppScreenAccent("Sleep ", "Deep", APP_COLOR_LABEL);
+    drawSleepBtnGoIcon();
 
     int y = APP_CONTENT_INSET_Y;
     M5Cardputer.Display.setTextSize(2);
@@ -2968,6 +2988,9 @@ void enterApp(const AppState state) {
     }
     if (currentState == AppState::MORSE && state != AppState::MORSE) {
         leaveMorseApp();
+    }
+    if (currentState == AppState::RTC && state != AppState::RTC) {
+        leaveRtcApp();
     }
     if (currentState == AppState::HID_KEYBOARD && state != AppState::HID_KEYBOARD) {
         leaveHidKeyboardApp();
@@ -3236,6 +3259,9 @@ void loop() {
             if (currentState == AppState::MORSE) {
                 leaveMorseApp();
             }
+            if (currentState == AppState::RTC) {
+                leaveRtcApp();
+            }
             showMenu();
             return;
         }
@@ -3263,7 +3289,8 @@ void loop() {
                    !(currentState == AppState::IR && irAppSuppressesHeader()) &&
                    !(currentState == AppState::AC_AUTO && acAutoAppSuppressesHeader()) &&
                    !(currentState == AppState::WIFI && wifiAppSuppressesHeader()) &&
-                   !(currentState == AppState::HID_KEYBOARD && hidKeyboardSuppressesHeader())) {
+                   !(currentState == AppState::HID_KEYBOARD && hidKeyboardSuppressesHeader()) &&
+                   !(currentState == AppState::WEB && webAppSuppressesHeader())) {
             updateAppHeaderStatus();
         }
     }

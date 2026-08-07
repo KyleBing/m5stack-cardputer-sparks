@@ -1035,7 +1035,7 @@ IrDefaultCategory parseIrDefaultCategory(const char* s) {
 }
 
 const char* irTvBrandConfigName(const uint8_t idx) {
-    static const char* names[] = {"samsung", "sony", "lg", "panasonic", "nec"};
+    static const char* names[] = {"samsung", "sony", "lg", "panasonic", "nec", "xiaomi", "hisense"};
     if (idx >= IR_TV_BRAND_COUNT) {
         return names[0];
     }
@@ -1043,7 +1043,7 @@ const char* irTvBrandConfigName(const uint8_t idx) {
 }
 
 const char* irTvBrandDisplayName(const uint8_t idx) {
-    static const char* names[] = {"Samsung", "Sony", "LG", "Panasonic", "NEC"};
+    static const char* names[] = {"Samsung", "Sony", "LG", "Panasonic", "NEC", "Xiaomi", "Hisense"};
     if (idx >= IR_TV_BRAND_COUNT) {
         return names[0];
     }

@@ -5,6 +5,7 @@
 #include "app_hid_keyboard.h"
 #include "app_mijia.h"
 #include "app_mijia_ui.h"
+#include "app_web.h"
 #include "M5Cardputer.h"
 #include <cstring>
 
@@ -288,8 +289,8 @@ void updateMenuHeaderStatus(const int page_count) {
 }
 
 void updateAppHeaderStatus() {
-    // Keyboard / 米家 Exiting 等期间禁止刷蓝牙等图标
-    if (hidKeyboardSuppressesHeader() || mijiaAppSuppressesHeader()) {
+    // Keyboard / 米家 Exiting / Config 等期间禁止刷蓝牙等图标
+    if (hidKeyboardSuppressesHeader() || mijiaAppSuppressesHeader() || webAppSuppressesHeader()) {
         return;
     }
     static int prev_clear_left = -1;

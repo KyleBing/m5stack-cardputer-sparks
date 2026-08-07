@@ -58,7 +58,7 @@ enum class HidKeyboardTransport : uint8_t {
 };
 
 // 与 app_ir 品牌表一致
-static constexpr int IR_TV_BRAND_COUNT = 5;
+static constexpr int IR_TV_BRAND_COUNT = 7;
 static constexpr int IR_AC_BRAND_COUNT = 6;
 
 // 空调自动化：模式 / 风速下标（与 irSendAc 一致）

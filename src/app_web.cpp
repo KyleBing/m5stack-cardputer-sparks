@@ -47,8 +47,10 @@ static WebStartupPhase g_startup_phase = WebStartupPhase::IDLE;
 static uint32_t g_connect_deadline_ms = 0;
 static bool g_wifi_begin_sent = false;
 static bool g_force_ap_mode = false;
+static bool g_ui_show_ap = false; // 连接中 / Ready 时 UI 走 AP 还是 LAN
 static bool g_web_screen_ready = false;
 static bool g_web_help_visible = false;
+static bool g_web_ui_active = false; // 在 Config 界面内：禁止刷系统 header
 
 static const char* DEFAULT_CONFIG = R"({
   "wifis": [
@@ -1237,6 +1239,8 @@ static void handleSystemPage() {
               "<option value='lg'>LG</option>"
               "<option value='panasonic'>Panasonic</option>"
               "<option value='nec'>NEC</option>"
+              "<option value='xiaomi'>Xiaomi</option>"
+              "<option value='hisense'>Hisense</option>"
               "</select></label>"
               "<label>默认空调品牌"
               "<select id='sys-ir-ac-brand'>"
@@ -2598,6 +2602,12 @@ static bool tryServeShotFile() {
     return true;
 }
 
+// 是否有可用的已保存 WiFi（决定默认走 LAN 还是 AP）
+static bool hasSavedWifiConfig() {
+    const AppConfig& cfg = getAppConfig();
+    return cfg.loaded && cfg.wifi_ssid[0] != '\0';
+}
+
 // 重置并进入连接流程
 static void beginWebStartup(const bool force_ap) {
     if (g_running) {
@@ -2613,6 +2623,8 @@ static void beginWebStartup(const bool force_ap) {
     forceShutdownStaWifi();
 
     g_force_ap_mode = force_ap;
+    // 先画未启用图标；就绪后再切 Active
+    g_ui_show_ap = force_ap || !hasSavedWifiConfig();
     g_startup_phase = WebStartupPhase::CONNECTING;
     g_wifi_begin_sent = false;
     g_connect_deadline_ms = 0;
@@ -2635,16 +2647,6 @@ static void startWifiConnectAttempt() {
         strncpy(g_web_status, "ap...", sizeof(g_web_status));
     }
     g_wifi_begin_sent = true;
-}
-
-// 连接中动画省略号
-static void loadingDots(char* buf, const size_t buf_size) {
-    const int n = static_cast<int>((millis() / 400) % 4);
-    size_t i = 0;
-    for (; i < static_cast<size_t>(n) && i + 1 < buf_size; i++) {
-        buf[i] = '.';
-    }
-    buf[i] = '\0';
 }
 
 // 从 LittleFS 提供 /favicon.svg
@@ -2843,25 +2845,30 @@ void updateWebApp() {
 
         if (!g_force_ap_mode && WiFi.status() == WL_CONNECTED) {
             if (startStaConfigWebServer()) {
+                g_ui_show_ap = false;
                 g_startup_phase = WebStartupPhase::READY;
+                g_web_screen_ready = false; // 切 Active 图标
                 drawWebApp();
             } else {
                 g_startup_phase = WebStartupPhase::FAILED;
                 strncpy(g_web_status, "sta fail", sizeof(g_web_status));
+                g_web_screen_ready = false;
                 drawWebApp();
             }
         } else if (g_force_ap_mode || static_cast<int32_t>(millis() - g_connect_deadline_ms) >= 0) {
+            // LAN 超时切 AP：先刷未启用 AP 图标，再启热点
+            if (!g_ui_show_ap) {
+                g_ui_show_ap = true;
+                drawWebApp();
+            }
             if (startApConfigWebServer()) {
+                g_ui_show_ap = true;
                 g_startup_phase = WebStartupPhase::READY;
+                g_web_screen_ready = false;
                 drawWebApp();
             } else {
                 g_startup_phase = WebStartupPhase::FAILED;
-                drawWebApp();
-            }
-        } else {
-            static uint32_t last_draw_ms = 0;
-            if (millis() - last_draw_ms >= 400) {
-                last_draw_ms = millis();
+                g_web_screen_ready = false;
                 drawWebApp();
             }
         }
@@ -2907,61 +2914,155 @@ static const char* stripHttpPrefix(const char* url) {
     return url;
 }
 
-// Help 分栏标题
-static int drawWebHelpColHeader(const int x, const int y, const int w, const char* title) {
-    M5Cardputer.Display.fillRect(x, y, w, 11, APP_COLOR_LABEL);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(BLACK, APP_COLOR_LABEL);
-    M5Cardputer.Display.setCursor(x + 2, y + 1);
-    M5Cardputer.Display.print(title);
-    return y + 13;
+// AP / LAN 原生图标 60×50，禁止缩放
+static constexpr int WEB_MODE_ICON_W = 60;
+static constexpr int WEB_MODE_ICON_H = 50;
+static constexpr int WEB_MODE_SIDE_PAD = 15; // AP 左栏 / 右图标边距
+static constexpr const char* WEB_ICON_AP = "/icon/ap.png";
+static constexpr const char* WEB_ICON_AP_ACTIVE = "/icon/ap_active.png";
+static constexpr const char* WEB_ICON_LAN = "/icon/lan.png";
+static constexpr const char* WEB_ICON_LAN_ACTIVE = "/icon/lan_active.png";
+
+// 模式名相对图标水平居中
+static void drawWebModeTitle(const int icon_x, const int title_y, const char* mode) {
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setTextColor(WHITE, BLACK);
+    const int tw = M5Cardputer.Display.textWidth(mode);
+    const int tx = icon_x + (WEB_MODE_ICON_W - tw) / 2;
+    M5Cardputer.Display.setCursor(tx, title_y);
+    M5Cardputer.Display.print(mode);
 }
 
-// Help 按键说明；徽章后恢复说明文字颜色
-static int drawWebHelpKey(const int x, const int y, const char key, const char* text) {
-    const int cx = x + drawKeyBadge(x, y, key, 1);
+// AP 左栏：Key 白 1x / Value cyan 2x；返回下一组 y
+static int drawWebModeField(const int x, int y, const char* label, const char* value) {
     M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(text);
-    return y + 11;
-}
-
-// Help 功能说明
-static int drawWebHelpText(const int x, const int y, const char* text) {
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setTextColor(WHITE, BLACK);
     M5Cardputer.Display.setCursor(x, y);
+    M5Cardputer.Display.print(label);
+    y += 9;
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
+    M5Cardputer.Display.setCursor(x, y);
+    M5Cardputer.Display.print(value);
+    return y + 16 + 6; // value 行高 + 组间距
+}
+
+// AP：左 k/v（距左 15、整屏纵向居中）；右图标+AP（原尺寸）
+static void drawWebApLayout(const bool active) {
+    const int screen_w = M5Cardputer.Display.width();
+    const int screen_h = M5Cardputer.Display.height();
+    const char* icon = active ? WEB_ICON_AP_ACTIVE : WEB_ICON_AP;
+
+    // 右：图标 + 标题（间距 5px）
+    constexpr int title_h = 16;
+    constexpr int icon_title_gap = 5;
+    const int right_block_h = WEB_MODE_ICON_H + icon_title_gap + title_h;
+    const int icon_x = screen_w - WEB_MODE_SIDE_PAD - WEB_MODE_ICON_W;
+    const int icon_y = (screen_h - right_block_h) / 2;
+    drawDevicePngNative(icon, icon_x, icon_y);
+    drawWebModeTitle(icon_x, icon_y + WEB_MODE_ICON_H + icon_title_gap, "AP");
+
+    // 左：ssid / pass / url，整屏纵向居中
+    constexpr int field_block_h = 3 * (9 + 16) + 2 * 6; // 三组 key1x+value2x+间距
+    int y = (screen_h - field_block_h) / 2;
+    const int x = WEB_MODE_SIDE_PAD;
+    y = drawWebModeField(x, y, "ssid", getConfigWebApSsid());
+    y = drawWebModeField(x, y, "pass", getConfigWebApPass());
+    drawWebModeField(x, y, "url", stripHttpPrefix(getConfigWebUrl()));
+}
+
+// LAN：图标 + LAN + IP 整屏水平/垂直居中；无 url label
+static void drawWebLanLayout(const bool active, const bool show_ip) {
+    const int screen_w = M5Cardputer.Display.width();
+    const int screen_h = M5Cardputer.Display.height();
+    const char* icon = active ? WEB_ICON_LAN_ACTIVE : WEB_ICON_LAN;
+    const char* ip = show_ip ? stripHttpPrefix(getConfigWebUrl()) : nullptr;
+
+    constexpr int title_h = 16;
+    constexpr int ip_h = 16;
+    constexpr int gap = 10; // 图标 / LAN / IP 间距
+    int block_h = WEB_MODE_ICON_H + gap + title_h;
+    if (ip != nullptr && ip[0] != '\0') {
+        block_h += gap + ip_h;
+    }
+
+    const int icon_x = (screen_w - WEB_MODE_ICON_W) / 2;
+    int y = (screen_h - block_h) / 2;
+    drawDevicePngNative(icon, icon_x, y);
+    y += WEB_MODE_ICON_H + gap;
+
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setTextColor(WHITE, BLACK);
+    const int lan_w = M5Cardputer.Display.textWidth("LAN");
+    M5Cardputer.Display.setCursor((screen_w - lan_w) / 2, y);
+    M5Cardputer.Display.print("LAN");
+    y += title_h;
+
+    if (ip != nullptr && ip[0] != '\0') {
+        y += gap;
+        M5Cardputer.Display.setTextSize(2);
+        M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
+        const int ip_w = M5Cardputer.Display.textWidth(ip);
+        M5Cardputer.Display.setCursor((screen_w - ip_w) / 2, y);
+        M5Cardputer.Display.print(ip);
+    }
+}
+
+// Help：分区小标题（无色块栏，对齐 Keyboard）
+static int webHelpSection(const int x, const int y, const char* title) {
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
+    M5Cardputer.Display.setCursor(x, y);
+    M5Cardputer.Display.print(title);
+    return y + 10;
+}
+
+// 徽章后打印说明，并恢复提示色
+static void webHelpPrintAfterBadge(int& x, const int y, const char* text) {
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(x, y + 1);
+    M5Cardputer.Display.print(text);
+    x = M5Cardputer.Display.getCursorX();
+}
+
+static int webHelpRowKey(const int x0, const int y, const char key, const char* text) {
+    int x = x0;
+    x += drawKeyBadge(x, y, key, 1);
+    webHelpPrintAfterBadge(x, y, text);
+    return y + 11;
+}
+
+static int webHelpRowText(const int x0, const int y, const char* text) {
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(x0, y + 1);
     M5Cardputer.Display.print(text);
     return y + 11;
 }
 
+// Help：无 header；单列流式，风格对齐 Keyboard
 static void drawWebHelpPage() {
-    beginAppScreen("Help");
-    constexpr int col_gap = 4;
-    const int screen_w = M5Cardputer.Display.width();
-    const int col_w = (screen_w - col_gap) / 2;
-    const int manual_x = col_w + col_gap;
-    const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
-    M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y,
-                                     M5Cardputer.Display.height() - col_y, DARKGREY);
+    M5Cardputer.Display.fillScreen(BLACK);
 
-    int y = drawWebHelpColHeader(0, col_y, col_w, "keymap");
-    y = drawWebHelpKey(2, y, 'a', "switch to AP");
-    y = drawWebHelpKey(2, y, 'l', "retry LAN");
+    constexpr int x0 = 4;
+    int y = 2;
 
-    y = drawWebHelpColHeader(manual_x, col_y, screen_w - manual_x, "manual");
-    y = drawWebHelpText(manual_x + 2, y, "browser config");
-    y = drawWebHelpText(manual_x + 2, y, "LAN uses saved WiFi");
-    y = drawWebHelpText(manual_x + 2, y, "AP on LAN timeout");
-    y = drawWebHelpText(manual_x + 2, y, "edit WiFi/devices");
-    y = drawWebHelpText(manual_x + 2, y, "set Cursor/system");
-    y = drawWebHelpText(manual_x + 2, y, "save to config.json");
-    y = drawWebHelpText(manual_x + 2, y, "Fn+s any screen");
-    y = drawWebHelpText(manual_x + 2, y, "then /shots DL");
+    y = webHelpSection(x0, y, "Keys");
+    y = webHelpRowKey(x0, y, 'a', " switch to AP");
+    y = webHelpRowKey(x0, y, 'l', " retry LAN");
+    y = webHelpRowKey(x0, y, 'h', " help / close");
+    y += 2;
+
+    y = webHelpSection(x0, y, "Manual");
+    y = webHelpRowText(x0, y, "browser config on LAN/AP");
+    y = webHelpRowText(x0, y, "LAN uses saved WiFi");
+    y = webHelpRowText(x0, y, "AP on LAN timeout / a");
+    y = webHelpRowText(x0, y, "edit WiFi / devices / Cursor");
+    y = webHelpRowText(x0, y, "save to config.json");
+    y = webHelpRowText(x0, y, "Fn+s any screen -> /shots");
 
     drawHelpHintRight("close");
-    updateAppHeaderStatus();
 }
 
 void drawWebApp() {
@@ -2970,117 +3071,19 @@ void drawWebApp() {
         return;
     }
 
-    // Ready 时 header 显示当前 Mode（AP / LAN）
-    const char* mode_accent = nullptr;
-    if (g_startup_phase == WebStartupPhase::READY && isConfigWebServerRunning()) {
-        mode_accent = isConfigWebStaMode() ? "LAN" : "AP";
-    }
-    if (!g_web_screen_ready) {
-        if (mode_accent != nullptr) {
-            beginAppScreenAccent("Config ", mode_accent, APP_COLOR_LABEL);
-        } else {
-            beginAppScreen("Config");
-        }
-        g_web_screen_ready = true;
+    // 模式页：无 header / 电池，整屏黑底后画 LAN/AP
+    M5Cardputer.Display.fillScreen(BLACK);
+    g_web_screen_ready = true;
+
+    const bool ready =
+        g_startup_phase == WebStartupPhase::READY && isConfigWebServerRunning();
+    const bool show_ap = ready ? !isConfigWebStaMode() : g_ui_show_ap;
+
+    if (show_ap) {
+        drawWebApLayout(ready);
     } else {
-        clearAppContentArea();
-        if (mode_accent != nullptr) {
-            drawAppScreenHeaderAccent("Config ", mode_accent, APP_COLOR_LABEL);
-        } else {
-            drawAppScreenHeader("Config");
-        }
+        drawWebLanLayout(ready, ready);
     }
-
-    int y = APP_CONTENT_INSET_Y;
-
-    const auto drawLine1x = [&](const char* label, const char* value) {
-        drawInfoLineAt(APP_CONTENT_X, y, label, value, 1);
-        y += INFO_LINE_H;
-    };
-
-    // label / value 均为 2x
-    const auto drawLine2x = [&](const char* label, const char* value) {
-        drawInfoLineAt(APP_CONTENT_X, y, label, value, 2);
-        y += INFO_LINE_H_2X;
-    };
-
-    const auto drawLineValue2x = [&](const char* label, const char* value) {
-        M5Cardputer.Display.setTextSize(2);
-        M5Cardputer.Display.setTextColor(INFO_LABEL_COLOR, BLACK);
-        M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
-        M5Cardputer.Display.print(label);
-        M5Cardputer.Display.print(": ");
-        const int value_x = M5Cardputer.Display.getCursorX();
-        M5Cardputer.Display.setTextColor(INFO_VALUE_COLOR, BLACK);
-        M5Cardputer.Display.setCursor(value_x, y);
-        M5Cardputer.Display.println(value);
-        y += infoLineHeight(2);
-    };
-
-    const int hint_y = M5Cardputer.Display.height() - 12;
-
-    const auto drawKeyHintAt = [&](const int hy, const char key, const char* text,
-                                   const int text_size = 1) {
-        int cx = APP_CONTENT_X + drawKeyBadge(APP_CONTENT_X, hy, key, text_size);
-        M5Cardputer.Display.setTextSize(text_size);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(cx, hy);
-        M5Cardputer.Display.print(text);
-    };
-
-    const auto drawTextHintAt = [&](const int hy, const char* text) {
-        drawInfoLineAt(APP_CONTENT_X, hy, "hint", text, 1);
-    };
-
-    // 连接中：状态信息 2x，底栏 tip 1x
-    if (g_startup_phase == WebStartupPhase::CONNECTING) {
-        char dots[5];
-        loadingDots(dots, sizeof(dots));
-        char status[20];
-        snprintf(status, sizeof(status), "%s%s", g_web_status, dots);
-        drawLine2x("status", status);
-
-        const AppConfig& cfg = getAppConfig();
-        if (!g_force_ap_mode && cfg.loaded && cfg.wifi_ssid[0] != '\0') {
-            drawLine2x("wifi", cfg.wifi_ssid);
-            drawLine2x("plan", "LAN then AP");
-        } else {
-            drawLine2x("plan", "AP hotspot");
-        }
-
-        drawKeyHintAt(hint_y, 'a', "skip to AP mode");
-        drawHelpHintRight("help");
-        return;
-    }
-
-    if (g_startup_phase == WebStartupPhase::FAILED) {
-        drawLine1x("status", "failed");
-        drawLine1x("state", g_web_status);
-        drawKeyHintAt(hint_y, 'a', "for AP");
-        drawHelpHintRight("help");
-        return;
-    }
-
-    if (!isConfigWebServerRunning()) {
-        drawLine1x("status", "offline");
-        drawTextHintAt(hint_y, "re-enter u");
-        drawHelpHintRight("help");
-        return;
-    }
-
-    if (isConfigWebStaMode()) {
-        // Mode 已在 header；内容区只显示 url / state
-        drawLineValue2x("url", stripHttpPrefix(getConfigWebUrl()));
-        drawLineValue2x("state", getConfigWebStatus());
-        drawKeyHintAt(hint_y, 'a', "switch to AP hotspot");
-    } else {
-        // AP：无底栏 tip；state 用 2x
-        drawLineValue2x("ssid", getConfigWebApSsid());
-        drawLineValue2x("pass", getConfigWebApPass());
-        drawLineValue2x("url", stripHttpPrefix(getConfigWebUrl()));
-        drawLineValue2x("state", getConfigWebStatus());
-    }
-    drawHelpHintRight("help");
 }
 
 void handleWebApp(const String& key) {
@@ -3097,23 +3100,37 @@ void handleWebApp(const String& key) {
     }
     if (key == "a") {
         beginWebStartup(true);
+        g_web_screen_ready = false;
         drawWebApp();
         return;
     }
     if (key == "l" && g_startup_phase == WebStartupPhase::READY && !isConfigWebStaMode()) {
         beginWebStartup(false);
+        g_web_screen_ready = false;
         drawWebApp();
     }
 }
 
 void enterWebApp() {
+    g_web_ui_active = true;
     g_web_screen_ready = false;
     g_web_help_visible = false;
     // 已在跑则只刷新界面，避免打断后台截图服务
     if (g_running && g_startup_phase == WebStartupPhase::READY) {
+        g_ui_show_ap = !isConfigWebStaMode();
         drawWebApp();
         return;
     }
     beginWebStartup(false);
     drawWebApp();
+}
+
+void leaveWebApp() {
+    g_web_ui_active = false;
+    g_web_help_visible = false;
+}
+
+// Config 界面内无系统 header
+bool webAppSuppressesHeader() {
+    return g_web_ui_active;
 }
