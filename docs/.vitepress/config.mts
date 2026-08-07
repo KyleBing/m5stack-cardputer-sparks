@@ -156,6 +156,7 @@ export default defineConfig({
               { text: 'Mijia 米家', link: '/apps/mijia' },
               { text: '米家设备 Token 获取', link: '/apps/mijia-token' },
               { text: 'Infrared 红外', link: '/apps/infrared' },
+              { text: 'AC Auto 空调自动化', link: '/apps/ac-auto' },
             ],
           },
           {
@@ -292,6 +293,7 @@ export default defineConfig({
               { text: 'Mijia', link: '/en/apps/mijia' },
               { text: 'Mijia Device Tokens', link: '/en/apps/mijia-token' },
               { text: 'Infrared', link: '/en/apps/infrared' },
+              { text: 'AC Auto', link: '/en/apps/ac-auto' },
             ],
           },
           {

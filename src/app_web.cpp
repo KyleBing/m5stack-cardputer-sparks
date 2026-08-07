@@ -1014,14 +1014,14 @@ static void handleAcAutoPage() {
     const String cfg = sanitizeJsonForHtml(loadConfigText());
 
     String body;
-    body.reserve(cfg.length() + 5120);
+    body.reserve(cfg.length() + 7168);
     appendTopBar(body, "空调自动化", WebNavTab::AcAuto);
     body += F(
         "<form id='save-form' method='POST' action='/save'>"
         "<input type='hidden' name='config' id='config-payload'>"
         "<h2>空调自动化 <span class='key'>ac_auto</span></h2>"
-        "<p class='hint'>选择 BLE 温湿度计作为触发源；温度高于 on_temp 连续 filter 次开空调，"
-        "低于 off_temp 连续 filter 次关空调。设备菜单按 <code>n</code> 进入展示页。</p>"
+        "<p class='hint'>用 BLE 温湿度计读数自动控制空调红外开关。先在下方选好传感器与阈值，"
+        "保存后设备主菜单按 <code>n</code> 进入 AC Auto，再按 <code>t</code> 启动 AUTO。</p>"
         "<div class='field-label'>温湿度计（sensor_id）</div>"
         "<div class='radio-group' id='ac-sensor'></div>"
         "<label>开空调温度（&gt;℃）"
@@ -1060,7 +1060,26 @@ static void handleAcAutoPage() {
         "</div>"
         "<div class='save-bar'>"
         "<button type='submit' class='primary'>保存到设备</button>"
-        "</div></form>");
+        "</div></form>"
+        // 设置项下方：运行机制说明
+        "<h3 style='margin:18px 0 8px'>运行机制</h3>"
+        "<ul class='hint' style='padding-left:1.2em;line-height:1.6;margin:0'>"
+        "<li><strong>触发源</strong>：只监听上方选中的 BLE 温湿度计（需在「设备」里已添加，"
+        "且带 <code>ble.key</code>）。</li>"
+        "<li><strong>AUTO 开关</strong>：进入 App 后按 <code>t</code> 启动 / 停止自动化；"
+        "未启动时仍会收温湿度、画曲线，但不会发红外。</li>"
+        "<li><strong>开空调</strong>：温度 <code>&gt; on_temp</code> 连续达到 "
+        "<code>filter</code> 次读数，且当前判定为关机 → 发红外开机"
+        "（用上方配置的 brand / mode / temp / fan）。</li>"
+        "<li><strong>关空调</strong>：温度 <code>&lt; off_temp</code> 连续达到 "
+        "<code>filter</code> 次读数，且当前判定为开机 → 发红外关机。</li>"
+        "<li><strong>滞回带</strong>：温度落在 <code>off_temp</code>～"
+        "<code>on_temp</code> 之间时，开/关连续计数清零，避免临界温度反复开关。</li>"
+        "<li><strong>BLE 节奏</strong>：进入 App 即开始听广播（与 AUTO 无关）；"
+        "一轮最长约 6 分钟，收到读数后休眠约 4 分钟再听，节省功耗。</li>"
+        "<li><strong>展示页</strong>：左侧温湿度，右侧 on/off 累计次数与电源图标；"
+        "曲线始终画温度，并标出 on/off 阈值线。按 <code>h</code> 可看设备内 Help。</li>"
+        "</ul>");
     appendCardEnd(body);
     appendCfgDataScript(body, cfg);
     body += F("<script>");

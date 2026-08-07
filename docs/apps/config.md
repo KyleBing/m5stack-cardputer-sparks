@@ -37,13 +37,14 @@
 2. 屏上会显示 IP 或热点 SSID；用手机 / 电脑浏览器访问该地址。
 3. Web 常见入口：
    - 设备与编组编辑
+   - `/ac-auto`：空调自动化（`ac_auto`）
    - `/wifi`：多 WiFi 档案（最多 5 条）与 Active
    - `/shots`：截图预览、单张下载 / 删除、清空 TF / Flash
    - `/about`：固件版本信息
    - RGB565 烘焙：`POST /bake-rgb565`（现场生成图标 bake 文件；说明见 [图片处理与烘焙](/dev/images)）
 4. 修改保存后写入 LittleFS；部分项（如反色、音量）会立即生效。
 
-配网完成后可按 `ESC` 回菜单，再进 [Mijia](./mijia) / [WiFi](./wifi) 使用。
+配网完成后可按 `ESC` 回菜单，再进 [Mijia](./mijia) / [WiFi](./wifi) / [AC Auto](./ac-auto) 使用。
 
 
 ## 米家设备管理
@@ -53,4 +54,17 @@
 <img alt="web-config-mijia-devices" src="https://github.com/user-attachments/assets/63a85026-83ec-458f-b945-0bfe19dd0c49" />
 
 <img alt="web-config-mijia-device-group" src="https://github.com/user-attachments/assets/4a143e74-a2f3-445f-8ee7-0cc6ec53f8c5" />
+
+## 空调自动化（`/ac-auto`）
+
+Web 导航 **空调自动化** 对应配置键 `ac_auto`：选 BLE 温湿度计、开/关温度阈值、过滤次数，以及开机时的红外品牌 / 模式 / 设定温度 / 风速。
+
+设置表单下方有**运行机制**说明，要点：
+
+1. 设备主菜单按 `n` 进入 [AC Auto](./ac-auto)，再按 `t` 启动 AUTO 后才会发红外。
+2. 温度 **>** `on_temp` 连续 `filter` 次 → 开空调；**<** `off_temp` 连续 `filter` 次 → 关空调。
+3. 落在两阈值之间时清空连续计数（滞回），避免临界温度反复开关。
+4. BLE 进入 App 即按「听约 6 分钟 / 歇约 4 分钟」节奏收数，与 AUTO 开/关无关。
+
+完整键位与界面说明见 [AC Auto 空调自动化](./ac-auto)。
 

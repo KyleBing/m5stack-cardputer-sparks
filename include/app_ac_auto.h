@@ -6,7 +6,7 @@ void enterAcAutoApp();
 void leaveAcAutoApp();
 void updateAcAutoApp();
 void handleAcAutoApp(const Keyboard_Class::KeysState& status);
-// 每帧轮询 BtnA：亮屏时切换息屏（与 Cursor 类似）
+// 每帧轮询 BtnA：亮屏手动熄屏 / 息屏唤醒
 void pollAcAutoBtnA();
-// 息屏时抑制主循环 header 刷新
+// 全程抑制系统 header（自绘顶栏）
 bool acAutoAppSuppressesHeader();

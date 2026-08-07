@@ -25,6 +25,7 @@ More detail: [Getting Started · Main Menu](/en/guide/getting-started#main-menu)
 | `m` | [Mijia](./mijia) | Local LAN Mijia control |
 | — | [Get Device Token](./mijia-token) | Export token / ble.key via cloud tools into `config.json` format |
 | `x` | [Infrared](./infrared) | TV / AC IR remote (GPIO44) |
+| `n` | [AC Auto](./ac-auto) | BLE HT sensor triggers IR AC on/off |
 
 ## Network & Config
 

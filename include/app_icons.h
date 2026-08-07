@@ -61,5 +61,15 @@ int getIconBatteryBodyHeight();
 int getIconBatteryDisplayWidth(bool charging);
 void drawIconBattery(int x, int y, int level, bool charging);
 
+// ===== 运行 / 停止（媒体控制风格） =====
+static constexpr int ICON_PLAY_W = 8;
+static constexpr int ICON_PLAY_H = 11;
+static constexpr int ICON_STOP_W = 9; // 比 play 视觉略大 1px，更易辨认
+static constexpr int ICON_STOP_H = 9;
+
+// x 为左缘，cy 为垂直中心
+void drawIconPlay(int x, int cy, uint16_t color = 0xFFFF);
+void drawIconStop(int x, int cy, uint16_t color = 0xFFFF);
+
 // ===== 分页圆点 =====
 void drawIconPageDots(int x, int cy, int page, int page_count);

@@ -2,7 +2,7 @@
 
 主菜单按键：`o`
 
-本机设置分为 screen、sound、clock、calendar、infrared。界面为左侧分类栏 + 右侧字段区；时区 / 品牌等枚举再进选择页。修改写入 `config.json`（音量有防抖落盘）。Header 标题为 **Options**。
+本机设置分为 screen、sound、clock、calendar、infrared、ac auto。界面为左侧分类栏 + 右侧字段区；时区 / 品牌等枚举再进选择页。修改写入 `config.json`（音量有防抖落盘）。Header 标题为 **Options**。
 
 ## 截图
 
@@ -60,5 +60,6 @@
 | `time.default` / `time.timezone` | Time 默认模式 / POSIX 时区 |
 | `calendar.week_start` | 日历每周起始日：`sunday` / `monday` |
 | `infrared.*` | 红外默认类别与品牌 |
+| `ac_auto.*` | [AC Auto](./ac-auto) 传感器、开/关阈值、过滤次数、开机红外参数 |
 
-也可用 [Config](./config) Web 修改同一套配置。
+也可用 [Config](./config) Web（含 `/ac-auto`）修改同一套配置。

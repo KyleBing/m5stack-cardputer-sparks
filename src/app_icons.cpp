@@ -281,6 +281,19 @@ void drawIconBattery(const int x, const int y, const int level, const bool charg
     }
 }
 
+// ===== 运行 / 停止 =====
+
+void drawIconPlay(const int x, const int cy, const uint16_t color) {
+    // 右向三角：播放
+    const int half = ICON_PLAY_H / 2;
+    M5Cardputer.Display.fillTriangle(x, cy - half, x, cy + half, x + ICON_PLAY_W - 1, cy, color);
+}
+
+void drawIconStop(const int x, const int cy, const uint16_t color) {
+    // 方块：停止
+    M5Cardputer.Display.fillRect(x, cy - ICON_STOP_H / 2, ICON_STOP_W, ICON_STOP_H, color);
+}
+
 // ===== 分页圆点 =====
 
 void drawIconPageDots(const int x, const int cy, const int page, const int page_count) {

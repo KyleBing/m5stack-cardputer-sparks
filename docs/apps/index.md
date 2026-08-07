@@ -25,6 +25,7 @@
 | `m` | [Mijia](./mijia) | 米家局域网内控制 |
 | — | [获取设备 Token](./mijia-token) | 用云端工具导出 token / ble.key，转成 `config.json` 格式 |
 | `x` | [Infrared](./infrared) | TV / AC 红外遥控（GPIO44） |
+| `n` | [AC Auto](./ac-auto) | BLE 温湿度触发红外开关空调 |
 
 ## 网络与配置
 

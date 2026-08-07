@@ -2,7 +2,7 @@
 
 Main menu key: `o`
 
-On-device settings are grouped into screen, sound, clock, calendar, and infrared. The UI is a left category sidebar plus a right field pane; enums such as timezone / brand open a picker. Changes write to `config.json` (volume is debounced to disk). The header title is **Options**.
+On-device settings are grouped into screen, sound, clock, calendar, infrared, and ac auto. The UI is a left category sidebar plus a right field pane; enums such as timezone / brand open a picker. Changes write to `config.json` (volume is debounced to disk). The header title is **Options**.
 
 ## Screenshots
 
@@ -60,5 +60,6 @@ Common items:
 | `time.default` / `time.timezone` | Time default mode / POSIX timezone |
 | `calendar.week_start` | Calendar week start: `sunday` / `monday` |
 | `infrared.*` | IR default category and brand |
+| `ac_auto.*` | [AC Auto](./ac-auto) sensor, on/off thresholds, filter, power-on IR params |
 
-You can also edit the same config via [Config](./config) Web.
+You can also edit the same config via [Config](./config) Web (including `/ac-auto`).
