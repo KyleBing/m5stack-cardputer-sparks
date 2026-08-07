@@ -16,10 +16,11 @@ Most screens share the keys below. Each App may also have its own shortcuts — 
 
 | Key | Action |
 |-----|--------|
-| `Fn` + `s` | Save the current screen as BMP |
+| `Fn` + `s` | Save the current screen as PNG |
 
-- Prefer TF card; otherwise Flash LittleFS: `/shot/app_<screen>_NNN.bmp`
+- Prefer TF card; otherwise Flash LittleFS: `/shot/app_<screen>_NNN.png`
 - When space is low, the oldest shots are deleted automatically
+- On success the screen flashes once (invert); beep is controlled by Options → Sound → `screenshot` (`sound.screenshot`)
 - Preview, download, or clear TF / Flash shots at `/shots` in [Config](/en/apps/config) Web
 
 ## Top Bar
@@ -28,4 +29,4 @@ The main menu and most Apps show WiFi / BLE status, battery, page dots, and simi
 
 ## Sound Feedback
 
-Some actions (e.g. Mijia on/off, Time key presses) can enable/disable beeps via [Options](/en/apps/options) or Config Web, and adjust speaker volume with `sound.volume` (0–100).
+Some actions (e.g. Mijia on/off, Time key presses, screenshots) can enable/disable beeps via [Options](/en/apps/options) or Config Web, and adjust speaker volume with `sound.volume` (0–100).

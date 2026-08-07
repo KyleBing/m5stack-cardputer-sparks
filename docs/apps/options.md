@@ -55,6 +55,7 @@
 | `screen.invert` | 屏幕反色（立即生效） |
 | `sound.time_key` | 时间页按键音 |
 | `sound.mijia_on_off` | 米家开关提示音 |
+| `sound.screenshot` | 截图提示音（`Fn+s`） |
 | `sound.volume` | 喇叭音量 0–100 |
 | `time.default` / `time.timezone` | Time 默认模式 / POSIX 时区 |
 | `calendar.week_start` | 日历每周起始日：`sunday` / `monday` |

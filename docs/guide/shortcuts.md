@@ -16,10 +16,11 @@
 
 | 按键 | 作用 |
 |------|------|
-| `Fn` + `s` | 将当前屏幕保存为 BMP |
+| `Fn` + `s` | 将当前屏幕保存为 PNG |
 
-- 优先写入 TF 卡；否则写入 Flash LittleFS：`/shot/app_<界面>_NNN.bmp`
+- 优先写入 TF 卡；否则写入 Flash LittleFS：`/shot/app_<界面>_NNN.png`
 - 空间不足时自动删除最旧截图腾地方
+- 成功后屏幕反色闪一下；提示音由 Options → Sound → `screenshot`（`sound.screenshot`）控制
 - 在 [Config](/apps/config) Web 的 `/shots` 可预览、下载、清空 TF / Flash 分区截图
 
 ## 顶栏
@@ -28,4 +29,4 @@
 
 ## 提示音
 
-部分操作（如米家开关、时间按键）可通过 [Options](/apps/options) 或 Config Web 开关提示音，并调节喇叭音量 `sound.volume`（0–100）。
+部分操作（如米家开关、时间按键、截图）可通过 [Options](/apps/options) 或 Config Web 开关提示音，并调节喇叭音量 `sound.volume`（0–100）。

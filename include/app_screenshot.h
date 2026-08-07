@@ -7,7 +7,7 @@
 // 截图目录（SD 优先，否则 LittleFS）
 static constexpr const char* SHOT_DIR = "/shot";
 
-// 把当前屏存为 /shot/app_<slug>_NNN.bmp（序号自动递增）
+// 把当前屏存为 /shot/app_<slug>_NNN.png（序号自动递增；流式 zlib，体积远小于 BMP）
 // 有 TF 卡时优先写 SD，否则写 LittleFS
 // 成功时 out_name 写入文件名（不含路径）；失败时 err 有原因
 bool saveScreenshotToFlash(const char* app_slug, char* out_name, size_t out_name_len, char* err,
@@ -61,5 +61,5 @@ void recoverScreenshotsOnBoot();
 // setup 正常跑完后调用，清除 boot_pending
 void markScreenshotBootOk();
 
-// 校验并打开截图文件路径（仅允许 /shot/app_*.bmp）
+// 校验并打开截图文件路径（允许 /shot/app_*.png 与旧版 .bmp）
 bool isSafeShotPath(const String& uri);

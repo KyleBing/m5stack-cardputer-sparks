@@ -167,3 +167,5 @@ void playTimeKeyTone(float freq_hz, uint32_t duration_ms);
 bool isTimeKeySoundEnabled();
 // 米家开/关提示音：受 settings/sound.mijia_on_off 控制
 bool isMijiaOnOffSoundEnabled();
+// 截图提示音：受 settings/sound.screenshot 控制
+bool isScreenshotSoundEnabled();

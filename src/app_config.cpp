@@ -155,6 +155,7 @@ bool loadAppConfig() {
     g_config.speaker_volume = 25; // 默认 25% ≈ setVolume(64)
     g_config.time_key_sound = true; // 默认开
     g_config.mijia_on_off_sound = true;
+    g_config.screenshot_sound = true;
     g_config.time_default_mode = TimeDefaultMode::Up;
     g_config.week_start = WeekStartDay::Sunday;
     g_config.infrared_default = IrDefaultCategory::Tv;
@@ -260,11 +261,13 @@ bool loadAppConfig() {
     // 默认开；缺字段时保持开启
     g_config.time_key_sound = true;
     g_config.mijia_on_off_sound = true;
+    g_config.screenshot_sound = true;
     g_config.speaker_volume = 25;
     JsonObject sound = doc["sound"];
     if (!sound.isNull()) {
         g_config.time_key_sound = sound["time_key"] | true;
         g_config.mijia_on_off_sound = sound["mijia_on_off"] | true;
+        g_config.screenshot_sound = sound["screenshot"] | true;
         int vol = sound["volume"] | 25;
         if (vol < 0) {
             vol = 0;
@@ -837,6 +840,35 @@ bool saveAppConfigMijiaOnOffSound(const bool enabled) {
 
     JsonObject sound = ensureSoundObject(doc);
     sound["mijia_on_off"] = enabled;
+
+    if (doc["devices"].isNull()) {
+        doc["devices"].to<JsonArray>();
+    }
+
+    File out = LittleFS.open(CONFIG_PATH, "w");
+    if (!out) {
+        return false;
+    }
+    serializeJsonPretty(doc, out);
+    out.close();
+    return loadAppConfig();
+}
+
+bool saveAppConfigScreenshotSound(const bool enabled) {
+    JsonDocument doc;
+    if (LittleFS.exists(CONFIG_PATH)) {
+        File in = LittleFS.open(CONFIG_PATH, "r");
+        if (in) {
+            const DeserializationError err = deserializeJson(doc, in);
+            in.close();
+            if (err) {
+                doc.clear();
+            }
+        }
+    }
+
+    JsonObject sound = ensureSoundObject(doc);
+    sound["screenshot"] = enabled;
 
     if (doc["devices"].isNull()) {
         doc["devices"].to<JsonArray>();

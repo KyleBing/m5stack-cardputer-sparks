@@ -615,6 +615,13 @@ bool isMijiaOnOffSoundEnabled() {
     return getAppConfig().mijia_on_off_sound;
 }
 
+bool isScreenshotSoundEnabled() {
+    if (!getAppConfig().loaded) {
+        return true;
+    }
+    return getAppConfig().screenshot_sound;
+}
+
 void playTimeKeyTone(const float freq_hz, const uint32_t duration_ms) {
     if (!isTimeKeySoundEnabled()) {
         return;

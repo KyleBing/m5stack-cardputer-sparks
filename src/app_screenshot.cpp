@@ -2,6 +2,7 @@
 #include "app_common.h"
 #include "app_web.h"
 #include "M5Cardputer.h"
+#include <lgfx/utility/lgfx_miniz.h>
 #include <FS.h>
 #include <LittleFS.h>
 #include <SD.h>
@@ -17,44 +18,324 @@ static constexpr int SHOT_SD_CS = 12;
 
 static constexpr const char* SHOT_LAST = "/shot/.last";
 static constexpr const char* SHOT_BOOT_PENDING = "/shot/.boot_pending";
-// 开机至少留这么多空闲；截图约 100KB，再留配置/日志余量
-static constexpr size_t SHOT_MIN_FREE_BOOT = 96 * 1024;
-static constexpr size_t SHOT_MIN_FREE_SAVE = 120 * 1024;
-static constexpr size_t SHOT_MIN_FREE_SD = 256 * 1024;
+// 压缩 PNG 通常远小于旧 BMP；store 回退约 ~100KB，Flash 需更大余量
+static constexpr size_t SHOT_MIN_FREE_BOOT = 48 * 1024;
+static constexpr size_t SHOT_MIN_FREE_SAVE = 64 * 1024;
+static constexpr size_t SHOT_MIN_FREE_SAVE_STORE = 128 * 1024;
+static constexpr size_t SHOT_MIN_FREE_SD = 128 * 1024;
+static constexpr size_t SHOT_IDAT_BUF = 2048;
 
 static bool g_shot_sd_ready = false;
 
-// 写 54 字节 BMP 头（24bit，bottom-up）
-static void writeBmpHeader(File& f, const int w, const int h, const uint32_t image_size) {
-    const uint32_t file_size = 54u + image_size;
-    uint8_t hdr[54] = {};
-    hdr[0] = 'B';
-    hdr[1] = 'M';
-    hdr[2] = static_cast<uint8_t>(file_size);
-    hdr[3] = static_cast<uint8_t>(file_size >> 8);
-    hdr[4] = static_cast<uint8_t>(file_size >> 16);
-    hdr[5] = static_cast<uint8_t>(file_size >> 24);
-    hdr[10] = 54;
-    hdr[14] = 40;
-    hdr[18] = static_cast<uint8_t>(w);
-    hdr[19] = static_cast<uint8_t>(w >> 8);
-    hdr[20] = static_cast<uint8_t>(w >> 16);
-    hdr[21] = static_cast<uint8_t>(w >> 24);
-    hdr[22] = static_cast<uint8_t>(h);
-    hdr[23] = static_cast<uint8_t>(h >> 8);
-    hdr[24] = static_cast<uint8_t>(h >> 16);
-    hdr[25] = static_cast<uint8_t>(h >> 24);
-    hdr[26] = 1;
-    hdr[28] = 24;
-    hdr[34] = static_cast<uint8_t>(image_size);
-    hdr[35] = static_cast<uint8_t>(image_size >> 8);
-    hdr[36] = static_cast<uint8_t>(image_size >> 16);
-    hdr[37] = static_cast<uint8_t>(image_size >> 24);
-    f.write(hdr, sizeof(hdr));
+// 流式 PNG 写出（逐行读屏 + tdefl，避免整帧进 RAM / 先 BMP 再转）
+struct ShotPngSink {
+    File* f = nullptr;
+    bool ok = true;
+};
+
+static bool shotPngWrite(ShotPngSink* sink, const void* data, const size_t len) {
+    if (sink == nullptr || !sink->ok || sink->f == nullptr) {
+        return false;
+    }
+    if (len == 0) {
+        return true;
+    }
+    if (sink->f->write(static_cast<const uint8_t*>(data), len) != len) {
+        sink->ok = false;
+        return false;
+    }
+    return true;
 }
 
-// 逐行读屏写 BMP
-static bool captureDisplayToBmpFile(File& f, char* err, const size_t err_len) {
+static bool shotPngWriteU32Be(ShotPngSink* sink, const uint32_t v) {
+    const uint8_t b[4] = {
+        static_cast<uint8_t>((v >> 24) & 0xFF),
+        static_cast<uint8_t>((v >> 16) & 0xFF),
+        static_cast<uint8_t>((v >> 8) & 0xFF),
+        static_cast<uint8_t>(v & 0xFF),
+    };
+    return shotPngWrite(sink, b, sizeof(b));
+}
+
+static bool shotPngWriteChunk(ShotPngSink* sink, const char type[4], const void* data,
+                              const size_t len) {
+    if (!shotPngWriteU32Be(sink, static_cast<uint32_t>(len))) {
+        return false;
+    }
+    if (!shotPngWrite(sink, type, 4)) {
+        return false;
+    }
+    if (len > 0 && data != nullptr) {
+        if (!shotPngWrite(sink, data, len)) {
+            return false;
+        }
+    }
+    lgfx_mz_uint32 crc = static_cast<lgfx_mz_uint32>(
+        lgfx_mz_crc32(MZ_CRC32_INIT, reinterpret_cast<const lgfx_mz_uint8*>(type), 4));
+    if (len > 0 && data != nullptr) {
+        crc = static_cast<lgfx_mz_uint32>(
+            lgfx_mz_crc32(crc, static_cast<const lgfx_mz_uint8*>(data), len));
+    }
+    return shotPngWriteU32Be(sink, static_cast<uint32_t>(crc));
+}
+
+struct ShotDeflateCtx {
+    ShotPngSink* sink = nullptr;
+    uint8_t buf[SHOT_IDAT_BUF] = {};
+    size_t len = 0;
+    bool ok = true;
+};
+
+static bool shotFlushIdat(ShotDeflateCtx* ctx) {
+    if (ctx == nullptr || !ctx->ok || ctx->sink == nullptr) {
+        return false;
+    }
+    if (ctx->len == 0) {
+        return true;
+    }
+    const bool ok = shotPngWriteChunk(ctx->sink, "IDAT", ctx->buf, ctx->len);
+    ctx->len = 0;
+    ctx->ok = ok;
+    return ok;
+}
+
+static lgfx_mz_bool shotDeflatePutter(const void* pBuf, const int len, void* pUser) {
+    auto* ctx = static_cast<ShotDeflateCtx*>(pUser);
+    if (ctx == nullptr || !ctx->ok || ctx->sink == nullptr) {
+        return MZ_FALSE;
+    }
+    if (pBuf == nullptr || len <= 0) {
+        return MZ_TRUE;
+    }
+    const auto* p = static_cast<const uint8_t*>(pBuf);
+    size_t remaining = static_cast<size_t>(len);
+    while (remaining > 0) {
+        const size_t space = sizeof(ctx->buf) - ctx->len;
+        if (space == 0) {
+            if (!shotFlushIdat(ctx)) {
+                return MZ_FALSE;
+            }
+            continue;
+        }
+        const size_t n = remaining < space ? remaining : space;
+        memcpy(ctx->buf + ctx->len, p, n);
+        ctx->len += n;
+        p += n;
+        remaining -= n;
+    }
+    return MZ_TRUE;
+}
+
+// zlib Adler-32
+static uint32_t shotAdler32(uint32_t adler, const uint8_t* data, size_t len) {
+    uint32_t s1 = adler & 0xffffu;
+    uint32_t s2 = (adler >> 16) & 0xffffu;
+    while (len > 0) {
+        size_t n = len > 5550u ? 5550u : len;
+        len -= n;
+        while (n--) {
+            s1 += *data++;
+            s2 += s1;
+        }
+        s1 %= 65521u;
+        s2 %= 65521u;
+    }
+    return (s2 << 16) | s1;
+}
+
+static bool shotPngWriteHeader(ShotPngSink* sink, const int w, const int h) {
+    static const uint8_t kPngSig[8] = {0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
+    if (!shotPngWrite(sink, kPngSig, sizeof(kPngSig))) {
+        return false;
+    }
+    uint8_t ihdr[13] = {};
+    ihdr[0] = static_cast<uint8_t>((w >> 24) & 0xFF);
+    ihdr[1] = static_cast<uint8_t>((w >> 16) & 0xFF);
+    ihdr[2] = static_cast<uint8_t>((w >> 8) & 0xFF);
+    ihdr[3] = static_cast<uint8_t>(w & 0xFF);
+    ihdr[4] = static_cast<uint8_t>((h >> 24) & 0xFF);
+    ihdr[5] = static_cast<uint8_t>((h >> 16) & 0xFF);
+    ihdr[6] = static_cast<uint8_t>((h >> 8) & 0xFF);
+    ihdr[7] = static_cast<uint8_t>(h & 0xFF);
+    ihdr[8] = 8; // bit depth
+    ihdr[9] = 2; // RGB
+    return shotPngWriteChunk(sink, "IHDR", ihdr, sizeof(ihdr));
+}
+
+// 写出一个 zlib stored block（包在 IDAT 里）
+static bool shotPngFlushStoreIdat(ShotPngSink* sink, bool* zhdr_done, const uint8_t* raw,
+                                  const size_t raw_len, const bool bfinal, uint8_t* idat) {
+    size_t o = 0;
+    if (!*zhdr_done) {
+        idat[o++] = 0x78;
+        idat[o++] = 0x01;
+        *zhdr_done = true;
+    }
+    idat[o++] = bfinal ? 0x01 : 0x00;
+    const uint16_t len16 = static_cast<uint16_t>(raw_len);
+    const uint16_t nlen = static_cast<uint16_t>(~len16);
+    idat[o++] = static_cast<uint8_t>(len16 & 0xFF);
+    idat[o++] = static_cast<uint8_t>((len16 >> 8) & 0xFF);
+    idat[o++] = static_cast<uint8_t>(nlen & 0xFF);
+    idat[o++] = static_cast<uint8_t>((nlen >> 8) & 0xFF);
+    if (raw_len > 0) {
+        memcpy(idat + o, raw, raw_len);
+        o += raw_len;
+    }
+    return shotPngWriteChunk(sink, "IDAT", idat, o);
+}
+
+// 低内存路径：不分配 tdefl_compressor（约 80KB），避免 WiFi/Web 下 OOM 写出空文件
+static bool captureDisplayToPngStore(File& f, const int w, const int h, uint8_t* row, char* err,
+                                     const size_t err_len) {
+    auto& d = M5Cardputer.Display;
+    const int bpl = w * 3;
+    const size_t row_bytes = static_cast<size_t>(bpl) + 1u;
+    const size_t cap = SHOT_IDAT_BUF;
+
+    uint8_t* raw = static_cast<uint8_t*>(malloc(cap));
+    uint8_t* idat = static_cast<uint8_t*>(malloc(cap + 16));
+    if (raw == nullptr || idat == nullptr) {
+        free(raw);
+        free(idat);
+        snprintf(err, err_len, "oom store heap=%u", ESP.getFreeHeap());
+        return false;
+    }
+
+    ShotPngSink sink;
+    sink.f = &f;
+    sink.ok = true;
+    bool ok = shotPngWriteHeader(&sink, w, h);
+
+    uint32_t adler = 1;
+    size_t raw_len = 0;
+    bool zhdr_done = false;
+
+    for (int y = 0; ok && y < h; y++) {
+        if (raw_len + row_bytes > cap) {
+            ok = shotPngFlushStoreIdat(&sink, &zhdr_done, raw, raw_len, false, idat);
+            raw_len = 0;
+        }
+        if (!ok) {
+            break;
+        }
+        raw[raw_len] = 0; // filter None
+        d.readRectRGB(0, y, w, 1, row);
+        memcpy(raw + raw_len + 1, row, static_cast<size_t>(bpl));
+        adler = shotAdler32(adler, raw + raw_len, row_bytes);
+        raw_len += row_bytes;
+        if ((y & 7) == 0) {
+            yield();
+        }
+    }
+
+    if (ok) {
+        ok = shotPngFlushStoreIdat(&sink, &zhdr_done, raw, raw_len, true, idat);
+    }
+    if (ok) {
+        const uint8_t ab[4] = {
+            static_cast<uint8_t>((adler >> 24) & 0xFF),
+            static_cast<uint8_t>((adler >> 16) & 0xFF),
+            static_cast<uint8_t>((adler >> 8) & 0xFF),
+            static_cast<uint8_t>(adler & 0xFF),
+        };
+        ok = shotPngWriteChunk(&sink, "IDAT", ab, sizeof(ab));
+    }
+    if (ok) {
+        ok = shotPngWriteChunk(&sink, "IEND", nullptr, 0);
+    }
+
+    free(raw);
+    free(idat);
+    if (!ok) {
+        snprintf(err, err_len, sink.ok ? "png store fail" : "png write fail");
+        return false;
+    }
+    return true;
+}
+
+// tdefl 压缩路径（堆上分配 compressor + IDAT 缓冲，避免大结构体进栈）
+static bool captureDisplayToPngDeflate(File& f, const int w, const int h, uint8_t* row, char* err,
+                                       const size_t err_len) {
+    auto& d = M5Cardputer.Display;
+    const int bpl = w * 3;
+
+    auto* comp = static_cast<tdefl_compressor*>(malloc(sizeof(tdefl_compressor)));
+    auto* dctx = static_cast<ShotDeflateCtx*>(malloc(sizeof(ShotDeflateCtx)));
+    if (comp == nullptr || dctx == nullptr) {
+        free(comp);
+        free(dctx);
+        snprintf(err, err_len, "oom deflate heap=%u", ESP.getFreeHeap());
+        return false;
+    }
+
+    ShotPngSink sink;
+    sink.f = &f;
+    sink.ok = true;
+    bool ok = shotPngWriteHeader(&sink, w, h);
+
+    dctx->sink = &sink;
+    dctx->len = 0;
+    dctx->ok = true;
+
+    if (ok) {
+        // level 1：更快；UI 截图体积仍远小于 BMP
+        static const lgfx_mz_uint kProbes[11] = {0, 1, 6, 32, 16, 32, 128, 256, 512, 768, 1500};
+        const int flags = static_cast<int>(kProbes[1]) | TDEFL_WRITE_ZLIB_HEADER;
+        if (tdefl_init(comp, shotDeflatePutter, dctx, flags) != TDEFL_STATUS_OKAY) {
+            ok = false;
+        }
+    }
+
+    if (ok) {
+        const uint8_t filter = 0;
+        for (int y = 0; y < h; y++) {
+            if (tdefl_compress_buffer(comp, &filter, 1, TDEFL_NO_FLUSH) < 0) {
+                ok = false;
+                break;
+            }
+            d.readRectRGB(0, y, w, 1, row);
+            if (tdefl_compress_buffer(comp, row, static_cast<size_t>(bpl), TDEFL_NO_FLUSH) < 0) {
+                ok = false;
+                break;
+            }
+            if (!dctx->ok || !sink.ok) {
+                ok = false;
+                break;
+            }
+            if ((y & 7) == 0) {
+                yield();
+            }
+        }
+    }
+    if (ok) {
+        if (tdefl_compress_buffer(comp, nullptr, 0, TDEFL_FINISH) != TDEFL_STATUS_DONE) {
+            ok = false;
+        }
+    }
+    if (ok) {
+        ok = shotFlushIdat(dctx);
+    }
+    if (ok) {
+        ok = shotPngWriteChunk(&sink, "IEND", nullptr, 0);
+    }
+
+    free(comp);
+    free(dctx);
+    if (!ok) {
+        snprintf(err, err_len, sink.ok ? "png encode fail" : "png write fail");
+        return false;
+    }
+    return true;
+}
+
+// 逐行读屏流式写 PNG（RGB888，filter=None）
+static bool shotLowHeapForDeflate() {
+    const size_t need = sizeof(tdefl_compressor) + sizeof(ShotDeflateCtx) + 4096u;
+    return ESP.getMaxAllocHeap() < need;
+}
+
+static bool captureDisplayToPngFile(File& f, char* err, const size_t err_len) {
     auto& d = M5Cardputer.Display;
     if (!d.isReadable()) {
         snprintf(err, err_len, "panel not readable");
@@ -68,39 +349,26 @@ static bool captureDisplayToBmpFile(File& f, char* err, const size_t err_len) {
         return false;
     }
 
-    const int row_stride = ((w * 3 + 3) / 4) * 4;
-    const uint32_t image_size = static_cast<uint32_t>(row_stride) * static_cast<uint32_t>(h);
-    writeBmpHeader(f, w, h, image_size);
-
-    uint8_t* rgb = static_cast<uint8_t*>(malloc(static_cast<size_t>(w) * 3u));
-    uint8_t* bgr = static_cast<uint8_t*>(malloc(static_cast<size_t>(row_stride)));
-    if (rgb == nullptr || bgr == nullptr) {
-        free(rgb);
-        free(bgr);
-        snprintf(err, err_len, "oom heap=%u", ESP.getFreeHeap());
+    const int bpl = w * 3;
+    uint8_t* row = static_cast<uint8_t*>(malloc(static_cast<size_t>(bpl)));
+    if (row == nullptr) {
+        snprintf(err, err_len, "oom row heap=%u", ESP.getFreeHeap());
         return false;
     }
-    memset(bgr, 0, static_cast<size_t>(row_stride));
 
-    for (int y = h - 1; y >= 0; y--) {
-        d.readRectRGB(0, y, w, 1, rgb);
-        for (int x = 0; x < w; x++) {
-            const int i = x * 3;
-            bgr[i + 0] = rgb[i + 2];
-            bgr[i + 1] = rgb[i + 1];
-            bgr[i + 2] = rgb[i + 0];
-        }
-        if (f.write(bgr, static_cast<size_t>(row_stride)) != static_cast<size_t>(row_stride)) {
-            free(rgb);
-            free(bgr);
-            snprintf(err, err_len, "row write fail");
-            return false;
-        }
+    d.waitDMA();
+
+    // 堆够走 tdefl；不够走 store（勿在同一文件上失败后再追加）
+    bool ok;
+    if (shotLowHeapForDeflate()) {
+        Serial.printf("[shot] low heap maxalloc=%u, png store\n", ESP.getMaxAllocHeap());
+        ok = captureDisplayToPngStore(f, w, h, row, err, err_len);
+    } else {
+        ok = captureDisplayToPngDeflate(f, w, h, row, err, err_len);
     }
 
-    free(rgb);
-    free(bgr);
-    return true;
+    free(row);
+    return ok;
 }
 
 // slug 仅保留 a-z0-9_
@@ -165,8 +433,33 @@ static const char* shotBaseName(const char* name) {
     return slash != nullptr ? slash + 1 : name;
 }
 
-static bool isShotBmpName(const char* base) {
-    return base != nullptr && strncmp(base, "app_", 4) == 0 && strstr(base, ".bmp") != nullptr;
+static bool endsWithIgnoreCase(const char* s, const char* suffix) {
+    if (s == nullptr || suffix == nullptr) {
+        return false;
+    }
+    const size_t n = strlen(s);
+    const size_t m = strlen(suffix);
+    if (n < m) {
+        return false;
+    }
+    for (size_t i = 0; i < m; i++) {
+        const char a = s[n - m + i];
+        const char b = suffix[i];
+        const char al = (a >= 'A' && a <= 'Z') ? static_cast<char>(a - 'A' + 'a') : a;
+        const char bl = (b >= 'A' && b <= 'Z') ? static_cast<char>(b - 'A' + 'a') : b;
+        if (al != bl) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// 新截图为 .png；仍识别旧版 .bmp 便于列表/清理
+static bool isShotFileName(const char* base) {
+    if (base == nullptr || strncmp(base, "app_", 4) != 0) {
+        return false;
+    }
+    return endsWithIgnoreCase(base, ".png") || endsWithIgnoreCase(base, ".bmp");
 }
 
 static size_t fsFreeBytes(fs::FS& fs, const bool is_sd) {
@@ -180,7 +473,7 @@ static size_t fsFreeBytes(fs::FS& fs, const bool is_sd) {
     return total > used ? total - used : 0;
 }
 
-// 扫描同前缀最大序号（app_<slug>_NNN.bmp）
+// 扫描同前缀最大序号（app_<slug>_NNN.png / .bmp）
 static int findNextShotIndexOn(fs::FS& fs, const char* slug) {
     char prefix[40];
     snprintf(prefix, sizeof(prefix), "app_%s_", slug);
@@ -194,7 +487,7 @@ static int findNextShotIndexOn(fs::FS& fs, const char* slug) {
     File f = dir.openNextFile();
     while (f) {
         const char* base = shotBaseName(f.name());
-        if (strncmp(base, prefix, prefix_len) == 0) {
+        if (isShotFileName(base) && strncmp(base, prefix, prefix_len) == 0) {
             int n = 0;
             if (sscanf(base + prefix_len, "%d", &n) == 1 && n > max_n) {
                 max_n = n;
@@ -237,7 +530,7 @@ static bool readLastShotNameOn(fs::FS& fs, char* out, const size_t out_len) {
             break;
         }
     }
-    return out[0] != '\0' && isShotBmpName(out);
+    return out[0] != '\0' && isShotFileName(out);
 }
 
 // 找时间最新的一张（无 .last 时兜底）
@@ -259,7 +552,7 @@ static bool findNewestShotNameOn(fs::FS& fs, char* out, const size_t out_len) {
     File f = dir.openNextFile();
     while (f) {
         const char* base = shotBaseName(f.name());
-        if (isShotBmpName(base)) {
+        if (isShotFileName(base)) {
             const time_t t = f.getLastWrite();
             if (!any || t >= best_t) {
                 best_t = t;
@@ -322,7 +615,7 @@ static int countOn(fs::FS& fs) {
     int n = 0;
     File f = dir.openNextFile();
     while (f) {
-        if (isShotBmpName(shotBaseName(f.name()))) {
+        if (isShotFileName(shotBaseName(f.name()))) {
             n++;
         }
         f = dir.openNextFile();
@@ -342,7 +635,7 @@ static size_t usedBytesOn(fs::FS& fs) {
     size_t sum = 0;
     File f = dir.openNextFile();
     while (f) {
-        if (isShotBmpName(shotBaseName(f.name()))) {
+        if (isShotFileName(shotBaseName(f.name()))) {
             sum += static_cast<size_t>(f.size());
         }
         f = dir.openNextFile();
@@ -365,7 +658,7 @@ static int clearAllOn(fs::FS& fs) {
         File f = dir.openNextFile();
         while (f) {
             const char* base = shotBaseName(f.name());
-            if (isShotBmpName(base)) {
+            if (isShotFileName(base)) {
                 strncpy(to_del, base, sizeof(to_del) - 1);
                 to_del[sizeof(to_del) - 1] = '\0';
                 f.close(); // 打开着 remove 会失败
@@ -402,7 +695,7 @@ static void enumOn(fs::FS& fs, const char* storage, ShotEnumCallback cb, void* u
     File f = dir.openNextFile();
     while (f) {
         const char* base = shotBaseName(f.name());
-        if (isShotBmpName(base)) {
+        if (isShotFileName(base)) {
             cb(storage, base, static_cast<size_t>(f.size()), user);
         }
         f = dir.openNextFile();
@@ -455,7 +748,9 @@ static bool saveToFs(fs::FS& fs, const bool is_sd, const char* app_slug, char* o
         return false;
     }
 
-    const size_t min_free = is_sd ? SHOT_MIN_FREE_SD : SHOT_MIN_FREE_SAVE;
+    const size_t min_free =
+        is_sd ? SHOT_MIN_FREE_SD
+              : (shotLowHeapForDeflate() ? SHOT_MIN_FREE_SAVE_STORE : SHOT_MIN_FREE_SAVE);
     for (int i = 0; i < 4 && fsFreeBytes(fs, is_sd) < min_free; i++) {
         if (!deleteLastOn(fs, is_sd)) {
             break;
@@ -477,7 +772,7 @@ static bool saveToFs(fs::FS& fs, const bool is_sd, const char* app_slug, char* o
     }
 
     char filename[48];
-    snprintf(filename, sizeof(filename), "app_%s_%03d.bmp", slug, idx);
+    snprintf(filename, sizeof(filename), "app_%s_%03d.png", slug, idx);
     char path[64];
     snprintf(path, sizeof(path), "%s/%s", SHOT_DIR, filename);
 
@@ -486,12 +781,20 @@ static bool saveToFs(fs::FS& fs, const bool is_sd, const char* app_slug, char* o
         snprintf(err, err_len, "open fail (%s full?)", is_sd ? "TF" : "fs");
         return false;
     }
-    if (!captureDisplayToBmpFile(out, err, err_len)) {
+    if (!captureDisplayToPngFile(out, err, err_len)) {
         out.close();
         fs.remove(path);
         return false;
     }
+    out.flush();
+    const size_t sz = out.size();
     out.close();
+    // 防止编码“成功”却写出空/残缺文件
+    if (sz < 64) {
+        fs.remove(path);
+        snprintf(err, err_len, "empty shot %uB", static_cast<unsigned>(sz));
+        return false;
+    }
     writeLastShotNameOn(fs, filename);
 
     if (out_name != nullptr && out_name_len > 0) {
@@ -527,6 +830,15 @@ bool saveScreenshotToFlash(const char* app_slug, char* out_name, const size_t ou
     return saveToFs(LittleFS, false, app_slug, out_name, out_name_len, err, err_len);
 }
 
+// 截图成功后反色闪一下，不重绘界面
+static void flashScreenshotFeedback() {
+    auto& d = M5Cardputer.Display;
+    const bool inv = d.getInvert();
+    d.invertDisplay(!inv);
+    delay(50);
+    d.invertDisplay(inv);
+}
+
 bool tryHandleScreenshotHotkey() {
     if (!M5Cardputer.Keyboard.isPressed()) {
         return false;
@@ -551,10 +863,16 @@ bool tryHandleScreenshotHotkey() {
     char name[48];
     char err[96];
     if (saveScreenshotToFlash(slug, name, sizeof(name), err, sizeof(err))) {
-        playUiTone(1200.0f, 40);
+        // 先闪屏再响，避免音效期间用户误以为还没拍完
+        flashScreenshotFeedback();
+        if (isScreenshotSoundEnabled()) {
+            playUiTone(1200.0f, 40);
+        }
         Serial.printf("[shot] Fn+s ok %s\n", name);
     } else {
-        playUiTone(300.0f, 80);
+        if (isScreenshotSoundEnabled()) {
+            playUiTone(300.0f, 80);
+        }
         Serial.printf("[shot] Fn+s fail: %s\n", err);
     }
     return true;
@@ -697,8 +1015,11 @@ int clearAllScreenshots() {
 }
 
 bool isSafeShotPath(const String& uri) {
-    // 允许 /shot/app_xxx_001.bmp
-    if (!uri.startsWith("/shot/app_") || !uri.endsWith(".bmp")) {
+    // 允许 /shot/app_xxx_001.png（及旧版 .bmp）
+    if (!uri.startsWith("/shot/app_")) {
+        return false;
+    }
+    if (!uri.endsWith(".png") && !uri.endsWith(".bmp")) {
         return false;
     }
     if (uri.indexOf("..") >= 0 || uri.length() > 64) {

@@ -6,12 +6,14 @@
 #include "app_header.h"
 #include "app_screenshot.h"
 #include "app_version.h"
+#include <lgfx/utility/lgfx_miniz.h>
 #include <FS.h>
 #include <LittleFS.h>
 #include <SD.h>
 #include <WebServer.h>
 #include <WiFi.h>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <sys/stat.h>
@@ -107,6 +109,7 @@ static const char* DEFAULT_CONFIG = R"({
   "sound": {
     "time_key": true,
     "mijia_on_off": true,
+    "screenshot": true,
     "volume": 25
   },
   "time": {
@@ -262,6 +265,12 @@ static void sendHtmlPage(const String& body, const uint8_t css_flags = HTML_CSS_
         "pre{background:var(--pre-bg);color:var(--fg);padding:12px;overflow:auto;font-size:12px;"
         "border:1px solid var(--pre-bd);border-radius:4px}"
         "textarea.json-editor{height:min(70vh,520px);font-family:ui-monospace,monospace}"
+        // 单选组（空调自动化等）
+        ".field-label{font-size:12px;color:var(--hint);margin:0 0 2px}"
+        ".radio-group{display:flex;flex-wrap:wrap;gap:6px 12px;margin:4px 0 10px}"
+        ".radio-row{display:inline-flex;align-items:center;gap:6px;margin:0;font-size:13px;"
+        "color:var(--fg);cursor:pointer}"
+        ".radio-row input{width:auto;margin:0;accent-color:#1a73e8}"
     ));
     if (css_flags & HTML_CSS_DEVICES) {
         g_server.sendContent_P(PSTR(
@@ -387,8 +396,10 @@ static void sendHtmlPage(const String& body, const uint8_t css_flags = HTML_CSS_
             ".shot-card img{width:100%;height:100%;object-fit:contain;display:block;"
             "image-rendering:pixelated}"
             ".shot-card .meta{margin-top:6px;font-size:12px;line-height:1.35}"
-            ".shot-card .meta a{color:var(--link);word-break:break-all}"
+            ".shot-card .meta a.name{color:var(--link);word-break:break-all}"
             ".shot-card .size{color:var(--hint)}"
+            ".shot-card .acts{margin-top:6px}"
+            ".shot-card .acts a.btn{margin:0;padding:4px 10px;font-size:12px}"
         ));
     }
     if (css_flags & HTML_CSS_FILES) {
@@ -514,7 +525,7 @@ static void appendCfgDataScript(String& body, const String& cfg) {
 static const char* JS_CFG_DEFAULT =
     "{wifis:[],wifi_active:'',devices:[],device_groups:[],cursor:{token:''},"
     "screen:{brightness:30,invert:false},"
-    "sound:{time_key:true,mijia_on_off:true,volume:25},"
+    "sound:{time_key:true,mijia_on_off:true,screenshot:true,volume:25},"
     "time:{default:'up',timezone:'CST-8'},calendar:{week_start:'sunday'},"
     "infrared:{default:'tv',tv_brand:'samsung',ac_brand:'midea'},"
     "ac_auto:{sensor_id:'',on_temp:29,off_temp:26,filter:3,ac_brand:'midea',"
@@ -551,6 +562,7 @@ static void appendJsLoadCfg(String& body) {
               "if(!cfg.sound)cfg.sound={};"
               "if(cfg.sound.time_key==null)cfg.sound.time_key=true;"
               "if(cfg.sound.mijia_on_off==null)cfg.sound.mijia_on_off=true;"
+              "if(cfg.sound.screenshot==null)cfg.sound.screenshot=true;"
               "let svol=cfg.sound.volume;if(svol==null||isNaN(+svol))svol=25;"
               "svol=+svol;if(svol<0)svol=0;if(svol>100)svol=100;cfg.sound.volume=svol;"
               "if(!cfg.time)cfg.time={};"
@@ -1000,7 +1012,7 @@ static void handleAcAutoPage() {
     const String cfg = sanitizeJsonForHtml(loadConfigText());
 
     String body;
-    body.reserve(cfg.length() + 4096);
+    body.reserve(cfg.length() + 5120);
     appendTopBar(body, "空调自动化", WebNavTab::AcAuto);
     body += F(
         "<form id='save-form' method='POST' action='/save'>"
@@ -1008,42 +1020,42 @@ static void handleAcAutoPage() {
         "<h2>空调自动化 <span class='key'>ac_auto</span></h2>"
         "<p class='hint'>选择 BLE 温湿度计作为触发源；温度高于 on_temp 连续 filter 次开空调，"
         "低于 off_temp 连续 filter 次关空调。设备菜单按 <code>n</code> 进入展示页。</p>"
-        "<label>温湿度计（sensor_id）"
-        "<select id='ac-sensor'></select></label>"
+        "<div class='field-label'>温湿度计（sensor_id）</div>"
+        "<div class='radio-group' id='ac-sensor'></div>"
         "<label>开空调温度（&gt;℃）"
         "<input id='ac-on-temp' type='number' min='16' max='40' step='1'></label>"
         "<label>关空调温度（&lt;℃）"
         "<input id='ac-off-temp' type='number' min='10' max='35' step='1'></label>"
         "<label>过滤次数"
         "<input id='ac-filter' type='number' min='1' max='10' step='1'></label>"
-        "<label>空调品牌"
-        "<select id='ac-brand'>"
-        "<option value='midea'>Midea</option>"
-        "<option value='gree'>Gree</option>"
-        "<option value='haier'>Haier</option>"
-        "<option value='aux'>AUX</option>"
-        "<option value='hisense'>Hisense</option>"
-        "<option value='xiaomi'>Xiaomi</option>"
-        "</select></label>"
-        "<label>模式"
-        "<select id='ac-mode'>"
-        "<option value='cool'>Cool</option>"
-        "<option value='heat'>Heat</option>"
-        "<option value='dry'>Dry</option>"
-        "<option value='fan'>Fan</option>"
-        "<option value='auto'>Auto</option>"
-        "</select></label>"
+        "<div class='field-label'>空调品牌</div>"
+        "<div class='radio-group' id='ac-brand'>"
+        "<label class='radio-row'><input type='radio' name='ac-brand' value='midea'>Midea</label>"
+        "<label class='radio-row'><input type='radio' name='ac-brand' value='gree'>Gree</label>"
+        "<label class='radio-row'><input type='radio' name='ac-brand' value='haier'>Haier</label>"
+        "<label class='radio-row'><input type='radio' name='ac-brand' value='aux'>AUX</label>"
+        "<label class='radio-row'><input type='radio' name='ac-brand' value='hisense'>Hisense</label>"
+        "<label class='radio-row'><input type='radio' name='ac-brand' value='xiaomi'>Xiaomi</label>"
+        "</div>"
+        "<div class='field-label'>模式</div>"
+        "<div class='radio-group' id='ac-mode'>"
+        "<label class='radio-row'><input type='radio' name='ac-mode' value='cool'>Cool</label>"
+        "<label class='radio-row'><input type='radio' name='ac-mode' value='heat'>Heat</label>"
+        "<label class='radio-row'><input type='radio' name='ac-mode' value='dry'>Dry</label>"
+        "<label class='radio-row'><input type='radio' name='ac-mode' value='fan'>Fan</label>"
+        "<label class='radio-row'><input type='radio' name='ac-mode' value='auto'>Auto</label>"
+        "</div>"
         "<label>设定温度（℃）"
         "<input id='ac-temp' type='number' min='16' max='30' step='1'></label>"
-        "<label>风力"
-        "<select id='ac-fan'>"
-        "<option value='auto'>Auto</option>"
-        "<option value='min'>Min</option>"
-        "<option value='low'>Low</option>"
-        "<option value='med'>Med</option>"
-        "<option value='high'>High</option>"
-        "<option value='max'>Max</option>"
-        "</select></label>"
+        "<div class='field-label'>风力</div>"
+        "<div class='radio-group' id='ac-fan'>"
+        "<label class='radio-row'><input type='radio' name='ac-fan' value='auto'>Auto</label>"
+        "<label class='radio-row'><input type='radio' name='ac-fan' value='min'>Min</label>"
+        "<label class='radio-row'><input type='radio' name='ac-fan' value='low'>Low</label>"
+        "<label class='radio-row'><input type='radio' name='ac-fan' value='med'>Med</label>"
+        "<label class='radio-row'><input type='radio' name='ac-fan' value='high'>High</label>"
+        "<label class='radio-row'><input type='radio' name='ac-fan' value='max'>Max</label>"
+        "</div>"
         "<div class='save-bar'>"
         "<button type='submit' class='primary'>保存到设备</button>"
         "</div></form>");
@@ -1054,16 +1066,28 @@ static void handleAcAutoPage() {
     body += F(
         "function isHt(d){const m=(d&&d.model)||'';"
         "return m.indexOf('sensor_ht')>=0||m.indexOf('.ht.')>=0;}"
+        "function radioVal(name){const el=document.querySelector('input[name=\"'+name+'\"]:checked');"
+        "return el?el.value:'';}"
+        "function setRadio(name,val){"
+        "const v=val==null?'':String(val);"
+        "let hit=false;"
+        "document.querySelectorAll('input[name=\"'+name+'\"]').forEach(el=>{"
+        "const on=el.value===v;el.checked=on;if(on)hit=true;});"
+        "if(!hit){const first=document.querySelector('input[name=\"'+name+'\"]');"
+        "if(first)first.checked=true;}}"
         "function fillSensors(){"
-        "const sel=document.getElementById('ac-sensor');sel.innerHTML='';"
-        "const opt0=document.createElement('option');opt0.value='';opt0.textContent='(未选择)';"
-        "sel.appendChild(opt0);"
+        "const box=document.getElementById('ac-sensor');box.innerHTML='';"
+        "const mk=(val,text)=>{"
+        "const lab=document.createElement('label');lab.className='radio-row';"
+        "const inp=document.createElement('input');inp.type='radio';inp.name='ac-sensor';"
+        "inp.value=val;lab.appendChild(inp);lab.appendChild(document.createTextNode(text));"
+        "box.appendChild(lab);};"
+        "mk('','(未选择)');"
         "(cfg.devices||[]).forEach(d=>{"
         "if(!isHt(d)||!d.id)return;"
-        "const o=document.createElement('option');o.value=d.id;"
-        "o.textContent=(d.name_zh||d.name||d.id)+' ('+d.id+')';sel.appendChild(o);});}"
+        "mk(d.id,(d.name_zh||d.name||d.id)+' ('+d.id+')');});}"
         "function collect(){if(!cfg.ac_auto)cfg.ac_auto={};"
-        "cfg.ac_auto.sensor_id=document.getElementById('ac-sensor').value||'';"
+        "cfg.ac_auto.sensor_id=radioVal('ac-sensor')||'';"
         "let on=+document.getElementById('ac-on-temp').value;if(isNaN(on))on=29;"
         "let off=+document.getElementById('ac-off-temp').value;if(isNaN(off))off=26;"
         "let f=+document.getElementById('ac-filter').value;if(isNaN(f))f=3;"
@@ -1072,19 +1096,19 @@ static void handleAcAutoPage() {
         "cfg.ac_auto.off_temp=Math.max(10,Math.min(35,Math.round(off)));"
         "cfg.ac_auto.filter=Math.max(1,Math.min(10,Math.round(f)));"
         "cfg.ac_auto.ac_temp=Math.max(16,Math.min(30,Math.round(t)));"
-        "cfg.ac_auto.ac_brand=document.getElementById('ac-brand').value||'midea';"
-        "cfg.ac_auto.ac_mode=document.getElementById('ac-mode').value||'cool';"
-        "cfg.ac_auto.ac_fan=document.getElementById('ac-fan').value||'auto';}"
+        "cfg.ac_auto.ac_brand=radioVal('ac-brand')||'midea';"
+        "cfg.ac_auto.ac_mode=radioVal('ac-mode')||'cool';"
+        "cfg.ac_auto.ac_fan=radioVal('ac-fan')||'auto';}"
         "function init(){loadCfg();fillSensors();"
         "const a=cfg.ac_auto||{};"
-        "document.getElementById('ac-sensor').value=a.sensor_id||'';"
+        "setRadio('ac-sensor',a.sensor_id||'');"
         "document.getElementById('ac-on-temp').value=String(a.on_temp??29);"
         "document.getElementById('ac-off-temp').value=String(a.off_temp??26);"
         "document.getElementById('ac-filter').value=String(a.filter??3);"
-        "document.getElementById('ac-brand').value=a.ac_brand||'midea';"
-        "document.getElementById('ac-mode').value=a.ac_mode||'cool';"
+        "setRadio('ac-brand',a.ac_brand||'midea');"
+        "setRadio('ac-mode',a.ac_mode||'cool');"
         "document.getElementById('ac-temp').value=String(a.ac_temp??26);"
-        "document.getElementById('ac-fan').value=a.ac_fan||'auto';"
+        "setRadio('ac-fan',a.ac_fan||'auto');"
         "document.getElementById('save-form').onsubmit=()=>{collect();"
         "document.getElementById('config-payload').value=JSON.stringify(cfg,null,2);};}"
         "init();");
@@ -1147,6 +1171,9 @@ static void handleSystemPage() {
               "<label class='check-row'>"
               "<input id='sys-sound-mijia' type='checkbox'>"
               "<span>米家开/关提示音</span></label>"
+              "<label class='check-row'>"
+              "<input id='sys-sound-screenshot' type='checkbox'>"
+              "<span>截图提示音（Fn+s）</span></label>"
               "</section>"
               // Time 应用
               "<section class='sys-sec' data-pane='time'>"
@@ -1228,6 +1255,7 @@ static void handleSystemPage() {
         "if(!cfg.sound)cfg.sound={};"
         "cfg.sound.time_key=document.getElementById('sys-sound-time-key').checked;"
         "cfg.sound.mijia_on_off=document.getElementById('sys-sound-mijia').checked;"
+        "cfg.sound.screenshot=document.getElementById('sys-sound-screenshot').checked;"
         "let v=+document.getElementById('sys-sound-volume').value;if(isNaN(v))v=25;"
         "if(v<0)v=0;if(v>100)v=100;cfg.sound.volume=v;"
         "if(!cfg.time)cfg.time={};"
@@ -1267,6 +1295,7 @@ static void handleSystemPage() {
         "document.getElementById('sys-screen-invert').checked=!!cfg.screen.invert;"
         "document.getElementById('sys-sound-time-key').checked=!!cfg.sound.time_key;"
         "document.getElementById('sys-sound-mijia').checked=!!cfg.sound.mijia_on_off;"
+        "document.getElementById('sys-sound-screenshot').checked=!!cfg.sound.screenshot;"
         "document.getElementById('sys-sound-volume').value=String(cfg.sound.volume);"
         "document.getElementById('sys-sound-volume-val').textContent=String(cfg.sound.volume);"
         "document.getElementById('sys-time-default').value=cfg.time.default||'up';"
@@ -1451,17 +1480,19 @@ static void appendShotCard(const char* storage, const char* basename, const size
     *body += F("' alt='");
     *body += basename;
     *body += F("' loading='lazy'></a>"
-               "<div class='meta'><a href='/shot/");
+               "<div class='meta'><a class='name' href='/shot/");
     *body += basename;
-    *body += F("?dl=1' download='");
-    *body += basename;
-    *body += F("'>");
+    *body += F("' target='_blank' rel='noopener'>");
     *body += basename;
     *body += F("</a><div class='size'>");
     *body += storage;
     *body += F(" · ");
     *body += formatBytesHuman(size);
-    *body += F("</div></div></div>");
+    *body += F("</div><div class='acts'><a class='btn' href='/shot/");
+    *body += basename;
+    *body += F("?dl=1' download='");
+    *body += basename;
+    *body += F("'>下载</a></div></div></div>");
 }
 
 // 截图列表页：TF / Flash 分区；Fn+s 优先 TF，否则 Flash
@@ -1489,11 +1520,20 @@ static void handleShotsList() {
     appendTopBar(body, "截图", WebNavTab::Shots);
     body += F("<p class='hint'>任意界面按 <code>Fn+s</code> 截图："
               "有 TF 卡优先存卡，否则存 Flash；"
-              "文件名 <code>app_&lt;界面&gt;_001.bmp</code> 序号递增。"
-              "本页仅在 Config 联网时可预览/下载。</p>"
+              "文件名 <code>app_&lt;界面&gt;_001.png</code> 序号递增（PNG 压缩，远小于旧 BMP）。"
+              "本页可预览、单张下载，或流式打包成 ZIP（不二次压缩，较省内存）。</p>"
               "<p class='hint'>新截图将存到：<strong>");
     body += sd_ok ? F("TF 卡") : F("Flash（LittleFS）");
     body += F("</strong></p>");
+
+    // 两边都有图时提供全部打包
+    if (tf_count > 0 && flash_count > 0) {
+        body += F("<div class='toolbar' style='margin-bottom:12px'>"
+                  "<a class='btn primary' href='/shots/zip?src=all'>全部打包下载</a>"
+                  "<span class='count'>共 ");
+        body += String(tf_count + flash_count);
+        body += F(" 张</span></div>");
+    }
 
     // —— TF 卡截图 ——
     if (sd_ok) {
@@ -1515,6 +1555,7 @@ static void handleShotsList() {
 
         if (tf_count > 0) {
             body += F("<div class='toolbar'>"
+                      "<a class='btn primary' href='/shots/zip?src=tf'>打包下载 TF</a>"
                       "<form method='POST' action='/shots/clear-tf' style='margin:0'>"
                       "<button type='submit' class='danger' "
                       "onclick=\"return confirm('删除 TF 卡上的全部截图？')\">"
@@ -1550,6 +1591,7 @@ static void handleShotsList() {
 
     if (flash_count > 0) {
         body += F("<div class='toolbar'>"
+                  "<a class='btn primary' href='/shots/zip?src=flash'>打包下载 Flash</a>"
                   "<form method='POST' action='/shots/clear-flash' style='margin:0'>"
                   "<button type='submit' class='danger' "
                   "onclick=\"return confirm('删除 Flash 上的全部截图？')\">"
@@ -1569,6 +1611,263 @@ static void handleShotsList() {
 
     appendCardEnd(body);
     sendHtmlPage(body, HTML_CSS_SHOTS);
+}
+
+// —— 流式 ZIP（STORE，不二次压缩；边读边发，避免整包进 RAM）——
+static constexpr int SHOT_ZIP_MAX = 80;
+static constexpr size_t SHOT_ZIP_CHUNK = 1024;
+static bool g_shot_zip_busy = false;
+
+struct ShotZipEntry {
+    char storage[8];   // "TF" / "Flash"
+    char basename[40];
+    char zip_name[48]; // ZIP 内路径；全部打包时带 TF/ Flash/ 前缀防重名
+    uint32_t size = 0;
+    uint32_t crc = 0;
+    uint32_t offset = 0;
+};
+
+// 静态缓冲：handler 栈不大，条目表不放栈上
+static ShotZipEntry g_shot_zip_entries[SHOT_ZIP_MAX];
+
+struct ShotZipCollect {
+    ShotZipEntry* entries = nullptr;
+    int max = 0;
+    int count = 0;
+    bool overflow = false;
+    bool prefix_storage = false;
+};
+
+static void shotZipCollectCb(const char* storage, const char* basename, const size_t size, void* user) {
+    ShotZipCollect* c = static_cast<ShotZipCollect*>(user);
+    if (c == nullptr || c->entries == nullptr || basename == nullptr || storage == nullptr) {
+        return;
+    }
+    if (c->count >= c->max) {
+        c->overflow = true;
+        return;
+    }
+    ShotZipEntry& e = c->entries[c->count];
+    strncpy(e.storage, storage, sizeof(e.storage) - 1);
+    e.storage[sizeof(e.storage) - 1] = '\0';
+    strncpy(e.basename, basename, sizeof(e.basename) - 1);
+    e.basename[sizeof(e.basename) - 1] = '\0';
+    if (c->prefix_storage) {
+        snprintf(e.zip_name, sizeof(e.zip_name), "%s/%s", storage, basename);
+    } else {
+        strncpy(e.zip_name, basename, sizeof(e.zip_name) - 1);
+        e.zip_name[sizeof(e.zip_name) - 1] = '\0';
+    }
+    e.size = static_cast<uint32_t>(size);
+    e.crc = 0;
+    e.offset = 0;
+    c->count++;
+}
+
+static bool shotZipOpenEntry(const ShotZipEntry& e, File& out) {
+    char path[64];
+    snprintf(path, sizeof(path), "%s/%s", SHOT_DIR, e.basename);
+    if (strcmp(e.storage, "TF") == 0) {
+        if (!isScreenshotSdReady()) {
+            return false;
+        }
+        out = SD.open(path, "r");
+        return static_cast<bool>(out);
+    }
+    if (!LittleFS.begin(false)) {
+        return false;
+    }
+    out = LittleFS.open(path, "r");
+    return static_cast<bool>(out);
+}
+
+static void zipWriteU16(uint8_t* p, const uint16_t v) {
+    p[0] = static_cast<uint8_t>(v & 0xFF);
+    p[1] = static_cast<uint8_t>((v >> 8) & 0xFF);
+}
+
+static void zipWriteU32(uint8_t* p, const uint32_t v) {
+    p[0] = static_cast<uint8_t>(v & 0xFF);
+    p[1] = static_cast<uint8_t>((v >> 8) & 0xFF);
+    p[2] = static_cast<uint8_t>((v >> 16) & 0xFF);
+    p[3] = static_cast<uint8_t>((v >> 24) & 0xFF);
+}
+
+static void zipSendRaw(const void* data, const size_t len) {
+    if (len == 0 || data == nullptr) {
+        return;
+    }
+    g_server.sendContent(static_cast<const char*>(data), len);
+}
+
+// 截图 ZIP：?src=tf|flash|all
+static void handleShotsZip() {
+    if (g_shot_zip_busy) {
+        g_server.send(503, "text/plain", "zip busy");
+        return;
+    }
+
+    String src = g_server.hasArg("src") ? g_server.arg("src") : String("all");
+    src.toLowerCase();
+    const bool want_tf = (src == "tf" || src == "all");
+    const bool want_flash = (src == "flash" || src == "all");
+    if (!want_tf && !want_flash) {
+        g_server.send(400, "text/plain", "bad src");
+        return;
+    }
+
+    ShotZipCollect collect;
+    collect.entries = g_shot_zip_entries;
+    collect.max = SHOT_ZIP_MAX;
+    collect.count = 0;
+    collect.overflow = false;
+    collect.prefix_storage = (want_tf && want_flash);
+
+    if (want_tf) {
+        enumTfScreenshots(shotZipCollectCb, &collect);
+    }
+    if (want_flash) {
+        enumFlashScreenshots(shotZipCollectCb, &collect);
+    }
+
+    if (collect.count <= 0) {
+        g_server.send(404, "text/plain", "no shots");
+        return;
+    }
+    if (collect.overflow) {
+        g_server.send(413, "text/plain", "too many shots (max 80)");
+        return;
+    }
+
+    const char* zip_filename = "cardputer-shots.zip";
+    if (src == "tf") {
+        zip_filename = "cardputer-shots-tf.zip";
+    } else if (src == "flash") {
+        zip_filename = "cardputer-shots-flash.zip";
+    }
+
+    char disposition[96];
+    snprintf(disposition, sizeof(disposition), "attachment; filename=\"%s\"", zip_filename);
+
+    g_shot_zip_busy = true;
+    // chunked：实读长度可能与枚举略有差异，避免 Content-Length 对不上
+    g_server.sendHeader("Content-Disposition", disposition);
+    g_server.sendHeader("Cache-Control", "no-store");
+    g_server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+    g_server.send(200, "application/zip", "");
+
+    uint32_t offset = 0;
+    uint8_t hdr[46];
+    uint8_t chunk[SHOT_ZIP_CHUNK];
+    ShotZipEntry* entries = g_shot_zip_entries;
+
+    for (int i = 0; i < collect.count; i++) {
+        ShotZipEntry& e = entries[i];
+        const uint16_t name_len = static_cast<uint16_t>(strlen(e.zip_name));
+        e.offset = offset;
+
+        // Local file header：bit3=1，CRC/尺寸放 data descriptor，便于流式
+        memset(hdr, 0, sizeof(hdr));
+        hdr[0] = 'P';
+        hdr[1] = 'K';
+        hdr[2] = 0x03;
+        hdr[3] = 0x04;
+        zipWriteU16(hdr + 4, 20);   // version needed
+        zipWriteU16(hdr + 6, 0x08); // general purpose bit 3
+        zipWriteU16(hdr + 8, 0);    // store
+        zipWriteU16(hdr + 10, 0);   // time
+        zipWriteU16(hdr + 12, 0);   // date
+        zipWriteU32(hdr + 14, 0);   // crc
+        zipWriteU32(hdr + 18, 0);   // comp size
+        zipWriteU32(hdr + 22, 0);   // uncomp size
+        zipWriteU16(hdr + 26, name_len);
+        zipWriteU16(hdr + 28, 0); // extra
+        zipSendRaw(hdr, 30);
+        zipSendRaw(e.zip_name, name_len);
+        offset += 30u + name_len;
+
+        File file;
+        uint32_t crc = MZ_CRC32_INIT;
+        uint32_t written = 0;
+        if (shotZipOpenEntry(e, file)) {
+            while (file.available()) {
+                const int n = file.read(chunk, sizeof(chunk));
+                if (n <= 0) {
+                    break;
+                }
+                crc = static_cast<uint32_t>(
+                    lgfx_mz_crc32(crc, chunk, static_cast<lgfx_mz_uint>(n)));
+                zipSendRaw(chunk, static_cast<size_t>(n));
+                written += static_cast<uint32_t>(n);
+                offset += static_cast<uint32_t>(n);
+                yield(); // 长传避免看门狗
+            }
+            file.close();
+        }
+        // 以实发长度写 descriptor，保证 ZIP 自洽
+        e.size = written;
+        e.crc = crc;
+
+        // Data descriptor（带 PK\x07\x08 签名）
+        hdr[0] = 'P';
+        hdr[1] = 'K';
+        hdr[2] = 0x07;
+        hdr[3] = 0x08;
+        zipWriteU32(hdr + 4, e.crc);
+        zipWriteU32(hdr + 8, e.size);
+        zipWriteU32(hdr + 12, e.size);
+        zipSendRaw(hdr, 16);
+        offset += 16;
+    }
+
+    const uint32_t cd_offset = offset;
+    uint32_t cd_size = 0;
+    for (int i = 0; i < collect.count; i++) {
+        const ShotZipEntry& e = entries[i];
+        const uint16_t name_len = static_cast<uint16_t>(strlen(e.zip_name));
+        memset(hdr, 0, sizeof(hdr));
+        hdr[0] = 'P';
+        hdr[1] = 'K';
+        hdr[2] = 0x01;
+        hdr[3] = 0x02;
+        zipWriteU16(hdr + 4, 20); // version made by
+        zipWriteU16(hdr + 6, 20); // version needed
+        zipWriteU16(hdr + 8, 0x08);
+        zipWriteU16(hdr + 10, 0);
+        zipWriteU16(hdr + 12, 0);
+        zipWriteU16(hdr + 14, 0);
+        zipWriteU32(hdr + 16, e.crc);
+        zipWriteU32(hdr + 20, e.size);
+        zipWriteU32(hdr + 24, e.size);
+        zipWriteU16(hdr + 28, name_len);
+        zipWriteU16(hdr + 30, 0); // extra
+        zipWriteU16(hdr + 32, 0); // comment
+        zipWriteU16(hdr + 34, 0); // disk
+        zipWriteU16(hdr + 36, 0); // int attr
+        zipWriteU32(hdr + 38, 0); // ext attr
+        zipWriteU32(hdr + 42, e.offset);
+        zipSendRaw(hdr, 46);
+        zipSendRaw(e.zip_name, name_len);
+        cd_size += 46u + name_len;
+        offset += 46u + name_len;
+        yield();
+    }
+
+    // End of central directory
+    memset(hdr, 0, 22);
+    hdr[0] = 'P';
+    hdr[1] = 'K';
+    hdr[2] = 0x05;
+    hdr[3] = 0x06;
+    zipWriteU16(hdr + 8, static_cast<uint16_t>(collect.count));
+    zipWriteU16(hdr + 10, static_cast<uint16_t>(collect.count));
+    zipWriteU32(hdr + 12, cd_size);
+    zipWriteU32(hdr + 16, cd_offset);
+    zipWriteU16(hdr + 20, 0);
+    zipSendRaw(hdr, 22);
+
+    g_server.sendContent(""); // 结束 chunked
+    g_shot_zip_busy = false;
 }
 
 // 清空结果页
@@ -2199,7 +2498,7 @@ static bool tryServeSdFile() {
     return true;
 }
 
-// 提供 /shot/app_*.bmp：默认内联预览；?dl=1 强制下载（SD 优先）
+// 提供 /shot/app_*.png（及旧 .bmp）：默认内联预览；?dl=1 强制下载（SD 优先）
 static bool tryServeShotFile() {
     const String uri = g_server.uri();
     File file;
@@ -2207,6 +2506,7 @@ static bool tryServeShotFile() {
         return false;
     }
     const char* base = uri.c_str() + strlen("/shot/");
+    const char* mime = uri.endsWith(".png") ? "image/png" : "image/bmp";
     char disposition[96];
     // 预览用 inline；带 ?dl=1 时 attachment 下载
     if (g_server.hasArg("dl")) {
@@ -2215,7 +2515,7 @@ static bool tryServeShotFile() {
         snprintf(disposition, sizeof(disposition), "inline; filename=\"%s\"", base);
     }
     g_server.sendHeader("Content-Disposition", disposition);
-    g_server.streamFile(file, "image/bmp");
+    g_server.streamFile(file, mime);
     file.close();
     return true;
 }
@@ -2374,6 +2674,7 @@ static void registerWebRoutes() {
     g_server.on("/example", HTTP_GET, handleExample);
     g_server.on("/about", HTTP_GET, handleAboutPage);
     g_server.on("/shots", HTTP_GET, handleShotsList);
+    g_server.on("/shots/zip", HTTP_GET, handleShotsZip);
     g_server.on("/shots/clear-tf", HTTP_POST, handleShotsClearTf);
     g_server.on("/shots/clear-flash", HTTP_POST, handleShotsClearFlash);
     g_server.on("/files", HTTP_GET, handleFilesList);

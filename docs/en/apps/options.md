@@ -55,6 +55,7 @@ Common items:
 | `screen.invert` | Screen invert (applies immediately) |
 | `sound.time_key` | Time page key sound |
 | `sound.mijia_on_off` | Mijia on/off beep |
+| `sound.screenshot` | Screenshot beep (`Fn+s`) |
 | `sound.volume` | Speaker volume 0–100 |
 | `time.default` / `time.timezone` | Time default mode / POSIX timezone |
 | `calendar.week_start` | Calendar week start: `sunday` / `monday` |

@@ -3,6 +3,7 @@
 #include "app_colors.h"
 #include "app_common.h"
 #include "app_config.h"
+#include "app_connectivity.h"
 #include "app_header.h"
 #include "app_ir.h"
 #include "mijia_ble.h"
@@ -31,6 +32,7 @@ enum class AcAutoPage : uint8_t { Display = 0, Config = 1 };
 static AcAutoPage g_page = AcAutoPage::Display;
 static bool g_help_visible = false;
 static bool g_display_blanked = false;
+static bool g_boot_loading = false; // 进入时 BLE 初始化中：全屏 Loading、禁 header
 static uint8_t g_saved_brightness = 30;
 
 static bool g_auto_active = false;
@@ -122,7 +124,17 @@ static void wakeAcAutoDisplay(const bool redraw) {
 }
 
 bool acAutoAppSuppressesHeader() {
-    return g_display_blanked || g_help_visible;
+    // Loading / 息屏 / Help：不刷顶栏（Loading、息屏为全屏无 header）
+    return g_boot_loading || g_display_blanked || g_help_visible;
+}
+
+// 无 header 的全屏提示（对齐 IR / Mijia leave）
+static void drawAcAutoBusyTip(const char* msg) {
+    M5Cardputer.Display.fillScreen(BLACK);
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.drawCenterString(msg, M5Cardputer.Display.width() / 2,
+                                         M5Cardputer.Display.height() / 2 - 8);
 }
 
 static int listHtSensors(int* out_indices, const int max_n) {
@@ -736,6 +748,7 @@ void enterAcAutoApp() {
     g_page = AcAutoPage::Display;
     g_help_visible = false;
     g_display_blanked = false;
+    g_boot_loading = false;
     g_auto_active = false;
     g_countdown_active = false;
     g_countdown_ms = 0;
@@ -770,13 +783,24 @@ void enterAcAutoApp() {
     g_last_hist_ms = millis();
 
     reloadWatchDevice();
+
+    // 需要拉起 BLE 且协议栈尚未就绪时，先全屏 Loading（无 header），避免空顶栏干等
+    const bool need_ble_boot = g_watch_valid && !isBleStackReady();
+    if (need_ble_boot) {
+        g_boot_loading = true;
+        drawAcAutoBusyTip("Loading...");
+    }
+
     ensureBleWatch();
+
+    g_boot_loading = false;
     drawAcAutoApp();
 }
 
 void leaveAcAutoApp() {
     flushConfigIfDirty();
     stopBleWatch();
+    g_boot_loading = false;
     if (g_display_blanked) {
         wakeAcAutoDisplay(false);
     }

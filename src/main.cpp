@@ -168,7 +168,7 @@ const char* getMenuItemNameFull(const AppState state) {
     return "?";
 }
 
-// 截图文件名短名：app_<slug>_NNN.bmp
+// 截图文件名短名：app_<slug>_NNN.png
 const char* getCurrentAppShotSlug() {
     switch (currentState) {
         case AppState::MENU:
@@ -1025,7 +1025,7 @@ static int settingsPanelRowCount(const SettingsModule mod) {
         case SettingsModule::Screen:
             return 2; // brightness / invert
         case SettingsModule::Sound:
-            return 3; // volume / time key / mijia on/off
+            return 4; // volume / time key / mijia on/off / screenshot
         case SettingsModule::Time:
             return 2; // default / timezone
         case SettingsModule::Calendar:
@@ -1570,6 +1570,9 @@ static void drawSettingsDetailLayer(const int content_x, const int content_y, co
             const bool mijia_on = isMijiaOnOffSoundEnabled();
             draw_row(2, "mijia on/off", mijia_on ? "ON" : "OFF",
                      mijia_on ? APP_COLOR_OK : APP_COLOR_HINT);
+            const bool shot_on = isScreenshotSoundEnabled();
+            draw_row(3, "screenshot", shot_on ? "ON" : "OFF",
+                     shot_on ? APP_COLOR_OK : APP_COLOR_HINT);
             break;
         }
         case SettingsModule::Time: {
@@ -1785,6 +1788,9 @@ static void applySettingsValueDelta(const int val_delta) {
             } else if (g_settings_row == 2) {
                 flushSpeakerVolumeSave();
                 saveAppConfigMijiaOnOffSound(!isMijiaOnOffSoundEnabled());
+            } else if (g_settings_row == 3) {
+                flushSpeakerVolumeSave();
+                saveAppConfigScreenshotSound(!isScreenshotSoundEnabled());
             }
             break;
         case SettingsModule::Time:

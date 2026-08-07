@@ -99,6 +99,7 @@ struct AppConfig {
     uint8_t speaker_volume;  // 喇叭音量 0~100；setVolume 时再转 0~255
     bool time_key_sound;     // Time 内按键声（countdown 到点闹钟不受影响）
     bool mijia_on_off_sound; // 米家开/关提示音
+    bool screenshot_sound;   // Fn+s 截图成功/失败提示音
     TimeDefaultMode time_default_mode; // 按 T 进入 Time 时的默认模块
     WeekStartDay week_start;           // 日历每周起始日
     IrDefaultCategory infrared_default; // 进入红外时默认 TV / AC
@@ -151,6 +152,9 @@ bool saveAppConfigTimeKeySound(bool enabled);
 
 // 更新米家开/关提示音开关并写回
 bool saveAppConfigMijiaOnOffSound(bool enabled);
+
+// 更新截图提示音开关并写回（sound.screenshot）
+bool saveAppConfigScreenshotSound(bool enabled);
 
 // 更新时区（POSIX TZ）并写回 time.timezone
 bool saveAppConfigTimezone(const char* timezone);

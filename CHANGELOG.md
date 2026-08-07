@@ -10,11 +10,18 @@
 
 ### 改进
 
+- **截图改存 PNG**：`Fn+s` 直接流式编码 PNG（M5GFX miniz），体积远小于旧 BMP；Config `/shots` 预览兼容旧 `.bmp`
+- **截图反馈**：成功后屏幕反色闪一下；提示音可由 Options / Config Web 的 `sound.screenshot` 开关
+- **空调自动化 Web**：品牌 / 模式 / 风力 / 传感器选择改为 radio
 - **空调自动化**：进入后不再自动倒计时息屏；按 `S` 启动 5s 倒计时后息屏进入 AUTO；亮屏后再按 `S` / BtnA / 空闲 15s 可再灭屏
 - **空调自动化 BLE**：息屏最长连听 6 分钟以覆盖约 5 分钟一发的温湿度广播；收到读数后短突发攒 filter，再 nap 4 分钟省电；亮屏仍短扫
 - **空调自动化 UI**：倒计时 / 温湿度 / 曲线局部刷新，避免整屏闪；Config 标题与 `cfg` 副标题空一格；Config tip 改用横向并排上下箭头徽章
 - **图标**：新增横向并排上下箭头 `drawIconArrowUpDownFlat` / `drawArrowUpDownFlatBadge`（适合 tip 高度）
 - **进入提示**：进 AC Auto 释放 BLE 时显示 `Entering.`（退出仍为 `Exiting.`）
+
+### 新增
+
+- **`sound.screenshot`**：截图成功/失败提示音开关（默认开）；Options → Sound 与 Config Web 系统设置可调
 
 ### 修复
 
