@@ -4,6 +4,15 @@
 
 康威生命游戏：60 × 30 的环形网格（上下左右相接），按 B3/S23 规则自行演化。细胞按存活代数着色，刚出生接近白色，越久越暗，因此运动方向和拖尾一目了然。
 
+## 截图
+
+<div class="shot-row">
+
+![life-01](/shots/app_games_life_01.png)
+![life-02](/shots/app_games_life_02.png)
+
+</div>
+
 ## 快捷键
 
 | 按键 | 作用 |

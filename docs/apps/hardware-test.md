@@ -4,6 +4,17 @@
 
 硬件显示、传感器与外设测试的二层入口。选择页每页最多 8 项，用 `[` `]` 或方向键翻页；数字键按当前页从 `1` 重新编号。子应用中按 `ESC` / `GO` 返回 Hardware Test 顶层，在顶层再次按下返回主菜单。
 
+## 截图
+
+**选择页**
+
+<div class="shot-row">
+
+![hardware-001](/shots/app_hardware_001.png)
+![hardware-002](/shots/app_hardware_002.png)
+
+</div>
+
 ## 第 1 页
 
 | 按键 | 子应用 | 说明 |

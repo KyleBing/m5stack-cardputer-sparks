@@ -6,15 +6,23 @@ Read-only system info across 6 pages: Memory / Storage / Chip / Fw / Net / Run.
 
 ## Screenshots
 
-**Memory / Chip / Firmware / Network / Runtime**
+**Memory / Storage**
 
 <div class="shot-row">
 
-![info-memory](/shots/app_info_001.png)
-![info-chip](/shots/app_info_002.png)
-![info-fw](/shots/app_info_003.png)
-![info-net](/shots/app_info_004.png)
-![info-run](/shots/app_info_005.png)
+![info-memory](/shots/app_info_memory.png)
+![info-storage](/shots/app_info_storage.png)
+
+</div>
+
+**Chip / Firmware / Network / Runtime**
+
+<div class="shot-row">
+
+![info-chip](/shots/app_info_chip.png)
+![info-fw](/shots/app_info_firmware.png)
+![info-net](/shots/app_info_network.png)
+![info-run](/shots/app_info_runtime.png)
 
 </div>
 

@@ -4,6 +4,16 @@
 
 全屏利萨茹（Lissajous）曲线玩具：`a:b` 频率比缓慢形变，相位持续旋转。`-` / `=` 调速，`c` 换配色，`Space` / `GO` 相位脉冲。
 
+## 截图
+
+<div class="shot-row">
+
+![lissa-01](/shots/app_games_lissa_01.png)
+![lissa-02](/shots/app_games_lissa_02.png)
+![lissa-03](/shots/app_games_lissa_03.png)
+
+</div>
+
 ## 快捷键
 
 | 按键 | 作用 |

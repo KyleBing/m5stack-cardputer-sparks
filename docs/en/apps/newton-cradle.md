@@ -4,6 +4,14 @@ Open with main menu `g`, then Games `5`.
 
 A five-ball Newton's cradle simulation. The steel balls swing under gravity, transfer momentum through constrained impulse collisions, and lose energy gradually through light air damping and near-elastic impacts.
 
+## Screenshots
+
+<div class="shot-row">
+
+![newton](/shots/app_games_newton.png)
+
+</div>
+
 ## Shortcuts
 
 | Key | Action |

@@ -12,9 +12,9 @@
 
 <div class="shot-row">
 
-![menu-001](/shots/app_menu_page1.png)
-
-![menu-002](/shots/app_menu_page2.png)
+![menu-001](/shots/app_menu_001.png)
+![menu-002](/shots/app_menu_002.png)
+![menu-003](/shots/app_menu_003.png)
 
 </div>
 

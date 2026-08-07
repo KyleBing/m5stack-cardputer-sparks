@@ -6,18 +6,11 @@ Fetches Cursor usage via `cursor.token` in config: summary, recent records, day 
 
 ## Screenshots
 
-**Summary**
+**Summary / Latest**
 
 <div class="shot-row">
 
 ![cursor-summary](/shots/app_cursor_summary.png)
-
-</div>
-
-**Latest**
-
-<div class="shot-row">
-
 ![cursor-last](/shots/app_cursor_last.png)
 
 </div>
@@ -26,8 +19,8 @@ Fetches Cursor usage via `cursor.token` in config: summary, recent records, day 
 
 <div class="shot-row">
 
-![cursor-24h](/shots/app_cursor_24h.png)
 ![cursor-7d](/shots/app_cursor_7d.png)
+![cursor-24d](/shots/app_cursor_24d.png)
 ![cursor-30d](/shots/app_cursor_30d.png)
 
 </div>

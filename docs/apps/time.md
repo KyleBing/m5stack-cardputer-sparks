@@ -10,10 +10,20 @@
 
 <div class="shot-row">
 
-![time-uptime](/shots/app_time_up_pure.png)
-![time-clock](/shots/app_time_ntp_pure.png)
-![time-countdown](/shots/app_time_cd_pure.png)
-![time-stopwatch](/shots/app_time_sw_pure.png)
+![time-uptime](/shots/app_time_up.png)
+![time-clock](/shots/app_time_ntp.png)
+![time-countdown](/shots/app_time_cd.png)
+![time-stopwatch](/shots/app_time_sw.png)
+
+</div>
+
+**大号时钟 / Help / 倒计时结束**
+
+<div class="shot-row">
+
+![time-big](/shots/app_time_big.png)
+![time-help](/shots/app_time_help.png)
+![time-up](/shots/app_time_001.png)
 
 </div>
 

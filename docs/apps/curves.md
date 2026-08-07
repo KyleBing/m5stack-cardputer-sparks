@@ -4,6 +4,15 @@
 
 九种常见曲线的实时采样连线。可调幅度 `a`、频率 `b`、相位 `p`，并开关相位动画。
 
+## 截图
+
+<div class="shot-row">
+
+![curves-sin](/shots/app_games_curves_sin.png)
+![curves-lissa](/shots/app_games_curves_lissa.png)
+
+</div>
+
 ## 快捷键
 
 | 按键 | 作用 |

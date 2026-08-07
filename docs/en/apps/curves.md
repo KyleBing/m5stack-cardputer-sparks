@@ -4,6 +4,15 @@ Open with main menu `g`, then Games `7`.
 
 Nine common curves sampled and polyline-drawn in real time. Adjust amplitude `a`, frequency `b`, and phase `p`, and toggle phase animation.
 
+## Screenshots
+
+<div class="shot-row">
+
+![curves-sin](/shots/app_games_curves_sin.png)
+![curves-lissa](/shots/app_games_curves_lissa.png)
+
+</div>
+
 ## Shortcuts
 
 | Key | Action |

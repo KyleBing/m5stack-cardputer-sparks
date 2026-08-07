@@ -4,6 +4,14 @@
 
 耦合双摆混沌演示。末端质量更轻、第二段更长，轨迹更易发散；末端路径以渐变色残影绘制。
 
+## 截图
+
+<div class="shot-row">
+
+![chaos](/shots/app_games_chaos.png)
+
+</div>
+
 ## 快捷键
 
 | 按键 | 作用 |

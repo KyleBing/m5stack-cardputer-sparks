@@ -4,6 +4,15 @@
 
 彩色扇区抽奖轮。长按空格蓄力旋转，或摇晃以中等力度开转；停下后顶部指针指向中奖格，金色结果牌显示 `#N`。
 
+## 截图
+
+<div class="shot-row">
+
+![wheel-spinning](/shots/app_games_wheel_spinning.png)
+![wheel-result](/shots/app_games_wheel_result.png)
+
+</div>
+
 ## 快捷键
 
 | 按键 | 作用 |

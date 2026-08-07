@@ -4,6 +4,15 @@
 
 暖白实体骰子的桌面物理模拟。摇晃设备或长按空格蓄力投掷；IMU 晃动强度与空格蓄力时间会直接控制运动幅度，停稳后快速缓动到面朝上姿态。
 
+## 截图
+
+<div class="shot-row">
+
+![dice-rolling](/shots/app_games_dice_rolling.png)
+![dice-result](/shots/app_games_dice_result.png)
+
+</div>
+
 ## 快捷键
 
 | 按键 | 作用 |

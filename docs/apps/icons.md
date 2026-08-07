@@ -8,8 +8,8 @@
 
 <div class="shot-row">
 
-![icons](/shots/app_icons.png)
-![icons-ir-fan](/shots/app_icons_001.png)
+![icons-01](/shots/app_hardware_icon_01.png)
+![icons-02](/shots/app_hardware_icon_02.png)
 
 </div>
 

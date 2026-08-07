@@ -4,6 +4,17 @@
 
 高帧率霓虹动画演示。全屏 8-bit 调色板 Sprite：像素索引场只在切换形态或移动核心时生成，正常动画帧只轮转 256 色调色板并整块推送到屏幕。另含软渲染旋转立方体（`CUBE`）。
 
+## 截图
+
+<div class="shot-row">
+
+![neonfx-01](/shots/app_games_neonfx_01.png)
+![neonfx-02](/shots/app_games_neonfx_02.png)
+![neonfx-03](/shots/app_games_neonfx_03.png)
+![neonfx-04](/shots/app_games_neonfx_04.png)
+
+</div>
+
 ## 快捷键
 
 | 按键 | 作用 |

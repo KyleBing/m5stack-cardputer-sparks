@@ -4,6 +4,15 @@ Open with main menu `g`, then Games `3`.
 
 A colorful segment wheel. Hold Space to charge a spin, or shake for medium power; when it stops, the fixed top pointer marks the winner and a gold banner shows `#N`.
 
+## Screenshots
+
+<div class="shot-row">
+
+![wheel-spinning](/shots/app_games_wheel_spinning.png)
+![wheel-result](/shots/app_games_wheel_result.png)
+
+</div>
+
 ## Shortcuts
 
 | Key | Action |

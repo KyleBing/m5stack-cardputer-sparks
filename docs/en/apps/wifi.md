@@ -6,27 +6,27 @@ Opens the saved-profile list first (**3** evenly spaced rows per page). Scan lis
 
 ## Screenshots
 
-**Connected**
-
-<div class="shot-row">
-
-![wifi-connected](/shots/app_wifi_001.png)
-
-</div>
-
 **Saved profiles**
 
 <div class="shot-row">
 
-![wifi-saved](/shots/app_wifi_002.png)
+![wifi-saved](/shots/app_wifi_saved.png)
 
 </div>
 
-**Help**
+**Scanner**
 
 <div class="shot-row">
 
-![wifi-help](/shots/app_wifi_003.png)
+![wifi-scanner](/shots/app_wifi_scanner.png)
+
+</div>
+
+**Password input**
+
+<div class="shot-row">
+
+![wifi-password](/shots/app_wifi_input_password.png)
 
 </div>
 

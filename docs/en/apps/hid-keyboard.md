@@ -8,31 +8,23 @@ No header on the main input screen. Left pill column shows Fn / Aa / Opt / Ctrl 
 
 ## Screenshots
 
-**USB / BLE**
+**Main / USB / Mouse**
 
 <div class="shot-row">
 
-![hid-usb](/shots/app_hidkeyboard_005.png)
-![hid-ble](/shots/app_hidkeyboard_003.png)
-![hid-ble-paired](/shots/app_hidkeyboard_002.png)
+![hid-main](/shots/app_hidkeyboard_main.png)
+![hid-usb](/shots/app_hidkeyboard_usb_mode.png)
+![hid-mouse](/shots/app_hidkeyboard_mouse_mode.png)
 
 </div>
 
-**Hosts list**
+**Hosts / Special keys**
 
 <div class="shot-row">
 
-![hid-hosts-empty](/shots/app_hidkeyboard_001.png)
-![hid-hosts](/shots/app_hidkeyboard_004.png)
-![hid-hosts-rename](/shots/app_hidkeyboard.png)
-
-</div>
-
-**Help**
-
-<div class="shot-row">
-
-![hid-help](/shots/app_hidkb_001.png)
+![hid-hosts](/shots/app_hidkeyboard_pair_list.png)
+![hid-001](/shots/app_hidkeyboard_001.png)
+![hid-special](/shots/app_hidkeyboard_specailkey.png)
 
 </div>
 

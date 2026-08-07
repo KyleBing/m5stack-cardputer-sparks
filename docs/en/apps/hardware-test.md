@@ -4,6 +4,17 @@ Main menu key: `h`
 
 A second-level entry for display, sensor, and peripheral tests. The shelf holds up to 8 entries per page — flip with `[` `]` or the arrow keys; number keys restart from `1` on each page. `ESC` / `GO` returns a child tool to the Hardware Test shelf; press it again on the shelf to return to the main menu.
 
+## Screenshots
+
+**Picker**
+
+<div class="shot-row">
+
+![hardware-001](/shots/app_hardware_001.png)
+![hardware-002](/shots/app_hardware_002.png)
+
+</div>
+
 ## Page 1
 
 | Key | Tool | Description |

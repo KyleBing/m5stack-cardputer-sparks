@@ -4,6 +4,14 @@ Entry: main menu `g` → Games page 2, `1`
 
 Classic Snake on a 40 × 20 grid. The body fades from bright head to dark tail so the direction of travel is obvious, and every fifth normal fruit spawns a timed golden one. Wall mode and wrap mode keep separate high scores.
 
+## Screenshots
+
+<div class="shot-row">
+
+![snake](/shots/app_games_snake.png)
+
+</div>
+
 ## Shortcuts
 
 | Key | Action |

@@ -4,6 +4,14 @@
 
 多层贝塞尔「丝波」动画：多条相位错开的曲线叠成柔和波动。`-` / `=` 调速，`c` 换配色，`Space` / `GO` 幅度脉冲。
 
+## 截图
+
+<div class="shot-row">
+
+![wave](/shots/app_games_wave.png)
+
+</div>
+
 ## 快捷键
 
 | 按键 | 作用 |

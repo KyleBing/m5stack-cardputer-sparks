@@ -4,6 +4,14 @@
 
 全屏 Matrix 风格代码雨：多层下落字符列，无标题叠字。`-` / `=` 调节下落速度；`Space` / `GO` 触发短暂爆发加速。
 
+## 截图
+
+<div class="shot-row">
+
+![metrixs](/shots/app_games_metrixs.png)
+
+</div>
+
 ## 快捷键
 
 | 按键 | 作用 |

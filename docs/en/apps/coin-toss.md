@@ -4,6 +4,15 @@ Open with main menu `g`, then Games `1`.
 
 A coin-flip physics toy. Press Space or shake the device to toss; the coin flips in the air, bounces on landing, eases to heads or tails, then a gold banner shows `HEADS` / `TAILS`.
 
+## Screenshots
+
+<div class="shot-row">
+
+![coin-01](/shots/app_games_coin_01.png)
+![coin-result](/shots/app_games_coin_result.png)
+
+</div>
+
 ## Shortcuts
 
 | Key | Action |

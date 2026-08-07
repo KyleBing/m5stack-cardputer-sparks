@@ -4,6 +4,15 @@ Entry: main menu `g` → Games page 2 `5`
 
 Particles assemble into clock digits. They track time normally; `Space` / `GO` or `r` triggers a reshuffle morph. `m` toggles `HH:MM` vs `HH:MM:SS`.
 
+## Screenshots
+
+<div class="shot-row">
+
+![pclock-01](/shots/app_games_pclock_01.png)
+![pclock-02](/shots/app_games_pclock_02.png)
+
+</div>
+
 ## Shortcuts
 
 | Key | Action |

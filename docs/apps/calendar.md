@@ -6,7 +6,11 @@ Header 直接显示年月（2x，不显示应用名）；主界面无底栏 tip�
 
 ## 截图
 
-（实拍后放入 `docs/public/shots/app_calendar_*.png`）
+<div class="shot-row">
+
+![calendar](/shots/app_calendar.png)
+
+</div>
 
 ## 快捷键
 

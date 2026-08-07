@@ -4,6 +4,15 @@ Entry: main menu `g` → Games page 2, `2`
 
 Conway's Game of Life on a 60 × 30 toroidal grid (edges wrap around), running the standard B3/S23 rules. Cells are coloured by age — near white when just born, dimmer the longer they survive — so movement and trails read at a glance.
 
+## Screenshots
+
+<div class="shot-row">
+
+![life-01](/shots/app_games_life_01.png)
+![life-02](/shots/app_games_life_02.png)
+
+</div>
+
 ## Shortcuts
 
 | Key | Action |

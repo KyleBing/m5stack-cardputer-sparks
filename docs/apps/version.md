@@ -3,14 +3,14 @@
 主菜单按键：`v`
 
 显示固件版本、作者
+
 ## 截图
 
 <div class="shot-row">
 
-![version-main](/shots/app_version.png)
+![version-main](/shots/app_version_v1.10.png)
 
 </div>
-
 
 当前文档对应：
 

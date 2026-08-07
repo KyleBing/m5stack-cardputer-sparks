@@ -10,61 +10,66 @@
 app_{app}_{子功能}.png
 ```
 
-示例：`app_mijia_list.png`、`app_cursor_24h.png`、`app_ir_ac.png`。
+示例：`app_mijia_quick_panel.png`、`app_games_snake.png`、`app_ir_ac_mi.png`。
 
 ## 清单（已入文档）
 
 ### 主菜单
-- app_menu_page1.png
-- app_menu_page2.png
+- app_menu_001.png / app_menu_002.png / app_menu_003.png
+- app_menu_01.png（备用）
 
-### Mijia
-- app_mijia_001.png（详情 / 传感器）
-- app_mijia_list.png
-- app_mijia_grid.png
-- app_mijia_group.png
-- app_mijia_fan_on.png
-- app_mijia_light_on.png / app_mijia_light_off.png
-- app_mijia_lamp_on.png
-- app_mijia_fryer_on.png / app_mijia_fryer_off.png
+### Mijia / AC Auto
+- app_mijia_001.png（详情）
+- app_mijia_th_work.png / app_mijia_quick_panel.png
+- app_acauto_001.png / app_acauto_002.png
 
-### Config / WiFi / BLE
-- app_config_001.png（LAN）
-- app_config_002.png（AP）
-- app_config_003.png（Help）
-- app_wifi_001.png（已连接）
-- app_wifi_002.png（已保存）
-- app_wifi_003.png（Help）
-- app_ble_scan.png
-- app_ble_list.png
-
-### Time / Options / Info / Version
-- app_time_up.png / app_time_up_pure.png（现默认全屏，文档主用 `_pure`）
-- app_time_ntp.png / app_time_ntp_pure.png
-- app_time_cd.png / app_time_cd_pure.png
-- app_time_sw.png / app_time_sw_pure.png
-- app_options_screen.png / app_options_sound.png / app_options_clock.png / app_options_ir.png
-- app_info_001.png … app_info_005.png（Memory / Chip / Fw / Net / Run）
-- app_version.png
-
-### Cursor / HID / Morse / IR
-- app_cursor_summary.png
-- app_cursor_last.png
-- app_cursor_24h.png / app_cursor_7d.png / app_cursor_30d.png
-- app_hidkeyboard_001.png … app_hidkeyboard_005.png
-- app_hidkb_001.png（Help）
-- app_morse_001.png
-- app_ir_tv.png / app_ir_001.png / app_ir_ac.png
-
-### Battery / 硬件调试
+### Config / WiFi / Battery / Cursor
+- app_config_001.png（LAN）/ app_config_002.png（AP）/ app_config_003.png（Help）
+- app_wifi_saved.png / app_wifi_scanner.png / app_wifi_input_password.png
 - app_battery.png
-- app_imu.png
-- app_led_001.png
-- app_mic_001.png / app_mic_002.png
-- app_display_001.png … app_display_011.png
-- app_icons.png / app_icons_001.png
-- app_font_001.png … app_font_009.png
-- app_ini2c_001.png / app_exi2c_001.png
+- app_cursor_summary.png / app_cursor_last.png
+- app_cursor_7d.png / app_cursor_24d.png / app_cursor_30d.png
 
-### Sleep
-- app_sleep_light.png / app_sleep_deep.png
+### Time / Options / Info / Version / Calendar / Sleep / Morse / Mic
+- app_time_up.png / app_time_ntp.png / app_time_cd.png / app_time_sw.png
+- app_time_big.png / app_time_help.png / app_time_001.png（倒计时结束）
+- app_options_screen.png / app_options_sound.png
+- app_info_memory.png / app_info_storage.png
+- app_info_chip.png / app_info_firmware.png / app_info_network.png / app_info_runtime.png
+- app_version_v1.10.png
+- app_calendar.png
+- app_sleep_001.png（Light）/ app_sleep_002.png（Deep）
+- app_morse_001.png
+- app_mic_001.png / app_mic_002.png
+
+### HID / IR
+- app_hidkeyboard_main.png / app_hidkeyboard_usb_mode.png / app_hidkeyboard_mouse_mode.png
+- app_hidkeyboard_pair_list.png / app_hidkeyboard_001.png / app_hidkeyboard_specailkey.png
+- app_ir_tv_sony.png / app_ir_tv_lg.png
+- app_ir_ac_mi.png / app_ir_ac_gree.png / app_ir_ac_help.png
+
+### Mini Games
+- app_games_menu_001.png / app_games_menu_002.png
+- app_games_coin_01.png / app_games_coin_result.png
+- app_games_chaos.png
+- app_games_wheel_spinning.png / app_games_wheel_result.png
+- app_games_dice_rolling.png / app_games_dice_result.png
+- app_games_newton.png
+- app_games_neonfx_01.png … app_games_neonfx_04.png
+- app_games_curves_sin.png / app_games_curves_lissa.png
+- app_games_minesweeper.png / app_games_minesweeper_02.png
+- app_games_snake.png
+- app_games_life_01.png / app_games_life_02.png
+- app_games_metrixs.png / app_games_wave.png
+- app_games_pclock_01.png / app_games_pclock_02.png
+- app_games_lissa_01.png / app_games_lissa_02.png / app_games_lissa_03.png
+
+### Hardware Test / 硬件调试
+- app_hardware_001.png / app_hardware_002.png（选择页）
+- app_hardware.png（IMU BMI270）
+- app_hardware_font_01.png … app_hardware_font_04.png
+- app_hardware_icon_01.png / app_hardware_icon_02.png
+- app_hardware_led.png
+- app_hardware_ble_scan.png / app_hardware_ble_list.png / app_hardware_ble_list_1.png
+- app_hardware_ini2.png / app_hardware_exi2.png
+- app_display_001.png … app_display_011.png

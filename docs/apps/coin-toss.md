@@ -4,6 +4,15 @@
 
 抛硬币物理动画。按空格或摇晃设备抛起；空中翻转并带落地弹跳，停稳后缓动到正面 / 反面，金色结果牌显示 `HEADS` / `TAILS`。
 
+## 截图
+
+<div class="shot-row">
+
+![coin-01](/shots/app_games_coin_01.png)
+![coin-result](/shots/app_games_coin_result.png)
+
+</div>
+
 ## 快捷键
 
 | 按键 | 作用 |

@@ -8,7 +8,7 @@ Shows firmware version and author.
 
 <div class="shot-row">
 
-![version-main](/shots/app_version.png)
+![version-main](/shots/app_version_v1.10.png)
 
 </div>
 

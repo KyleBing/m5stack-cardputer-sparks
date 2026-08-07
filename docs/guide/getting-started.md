@@ -12,8 +12,9 @@ Sparks 是跑在 [M5Stack Cardputer](https://docs.m5stack.com/en/core/Cardputer)
 
 <div class="shot-row">
 
-![menu-page1](/shots/app_menu_page1.png)
-![menu-page2](/shots/app_menu_page2.png)
+![menu-001](/shots/app_menu_001.png)
+![menu-002](/shots/app_menu_002.png)
+![menu-003](/shots/app_menu_003.png)
 
 </div>
 

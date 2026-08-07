@@ -6,7 +6,7 @@ Local miIO (LAN) and BLE Mijia device control: detail, list, grid, groups, and d
 
 ## Screenshots
 
-**Detail (temp/humidity sensor)**
+**Detail**
 
 <div class="shot-row">
 
@@ -14,27 +14,12 @@ Local miIO (LAN) and BLE Mijia device control: detail, list, grid, groups, and d
 
 </div>
 
-**List / Grid / Group**
+**HT working / Quick panel**
 
 <div class="shot-row">
 
-![mijia-list](/shots/app_mijia_list.png)
-![mijia-grid](/shots/app_mijia_grid.png)
-![mijia-group](/shots/app_mijia_group.png)
-
-</div>
-
-
-**Device detail examples**
-
-<div class="shot-row">
-
-![mijia-light-on](/shots/app_mijia_light_on.png)
-![mijia-light-off](/shots/app_mijia_light_off.png)
-![mijia-fan-on](/shots/app_mijia_fan_on.png)
-![mijia-lamp-on](/shots/app_mijia_lamp_on.png)
-![mijia-fryer-on](/shots/app_mijia_fryer_on.png)
-![mijia-fryer-off](/shots/app_mijia_fryer_off.png)
+![mijia-th-work](/shots/app_mijia_th_work.png)
+![mijia-quick](/shots/app_mijia_quick_panel.png)
 
 </div>
 

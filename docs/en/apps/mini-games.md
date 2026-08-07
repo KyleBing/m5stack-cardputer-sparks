@@ -4,6 +4,17 @@ Main menu key: `g`
 
 A collection of fourteen full-screen interactive toys and games. The shelf holds 8 entries per page — flip pages with `[` `]` or the arrow keys, and the number keys are renumbered from `1` on each page. `ESC` / `GO` returns a child game to the shelf; press it again on the shelf to return to the main menu.
 
+## Screenshots
+
+**Picker**
+
+<div class="shot-row">
+
+![games-menu-001](/shots/app_games_menu_001.png)
+![games-menu-002](/shots/app_games_menu_002.png)
+
+</div>
+
 ## Page 1
 
 | Key | Game | Controls |

@@ -10,8 +10,8 @@
 
 <div class="shot-row">
 
-![infrared-tv](/shots/app_ir_tv.png)
-![infrared-tv-alt](/shots/app_ir_001.png)
+![infrared-tv-sony](/shots/app_ir_tv_sony.png)
+![infrared-tv-lg](/shots/app_ir_tv_lg.png)
 
 </div>
 
@@ -19,7 +19,9 @@
 
 <div class="shot-row">
 
-![infrared-ac](/shots/app_ir_ac.png)
+![infrared-ac-mi](/shots/app_ir_ac_mi.png)
+![infrared-ac-gree](/shots/app_ir_ac_gree.png)
+![infrared-ac-help](/shots/app_ir_ac_help.png)
 
 </div>
 

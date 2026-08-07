@@ -4,6 +4,15 @@ Main menu key: `n`
 
 Uses a Mijia BLE temperature/humidity sensor to auto-send IR power-on / power-off for an air conditioner. Settings live in the `ac_auto` object in `config.json`, editable in on-device [Options](./options) or [Config](./config) Web (`/ac-auto`).
 
+## Screenshots
+
+<div class="shot-row">
+
+![acauto-001](/shots/app_acauto_001.png)
+![acauto-002](/shots/app_acauto_002.png)
+
+</div>
+
 ## Prerequisites
 
 1. Add the HT sensor in Config Web → Devices (`model` contains `sensor_ht` / `.ht.`) with a valid `ble.key`.
@@ -18,6 +27,7 @@ Uses a Mijia BLE temperature/humidity sensor to auto-send IR power-on / power-of
 | `c` | Display ↔ on-device config |
 | `s` / **BtnA** | Blank screen; any key or BtnA wakes |
 | `r` | Reset on / off streak counters |
+| `p` | Toggle assumed AC on / off (icon only, **no IR**) |
 | `h` | Help (3 pages: keys / params / how it runs) |
 | `,` `.` `[` `]` | Flip Help pages |
 | Config `;` `.` | Move row |
@@ -28,6 +38,8 @@ Back to menu: `ESC` / `GO`.
 ## How it runs
 
 On enter, the app listens to BLE on a duty cycle (whether AUTO is on or not) and updates temperature / humidity plus a ~12-hour chart whenever a reading arrives.
+
+The app does **not** sense the real AC power state; on enter it assumes **off**. If the AC is already on, press `p` to mark the power icon ON so a later cold reading can send IR off.
 
 IR is sent only after you press `t` and **AUTO** is active:
 

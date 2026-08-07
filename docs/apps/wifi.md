@@ -6,27 +6,27 @@
 
 ## 截图
 
-**已连接**
-
-<div class="shot-row">
-
-![wifi-connected](/shots/app_wifi_001.png)
-
-</div>
-
 **已保存档案**
 
 <div class="shot-row">
 
-![wifi-saved](/shots/app_wifi_002.png)
+![wifi-saved](/shots/app_wifi_saved.png)
 
 </div>
 
-**Help**
+**扫网**
 
 <div class="shot-row">
 
-![wifi-help](/shots/app_wifi_003.png)
+![wifi-scanner](/shots/app_wifi_scanner.png)
+
+</div>
+
+**输入密码**
+
+<div class="shot-row">
+
+![wifi-password](/shots/app_wifi_input_password.png)
 
 </div>
 

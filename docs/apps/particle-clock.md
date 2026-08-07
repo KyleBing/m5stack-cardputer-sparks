@@ -4,6 +4,15 @@
 
 粒子聚合成时钟字形：平时随时间走字，`Space` / `GO` 或 `r` 触发重排变形。`m` 在 `HH:MM` 与 `HH:MM:SS` 之间切换。
 
+## 截图
+
+<div class="shot-row">
+
+![pclock-01](/shots/app_games_pclock_01.png)
+![pclock-02](/shots/app_games_pclock_02.png)
+
+</div>
+
 ## 快捷键
 
 | 按键 | 作用 |

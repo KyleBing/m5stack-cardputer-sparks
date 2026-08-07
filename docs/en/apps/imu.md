@@ -8,7 +8,7 @@ BMI270 accelerometer / attitude visualization (XY / Z traces).
 
 <div class="shot-row">
 
-![imu](/shots/app_imu.png)
+![imu](/shots/app_hardware.png)
 
 </div>
 

@@ -4,6 +4,14 @@ Open with main menu `g`, then Games `2`.
 
 A coupled double-pendulum chaos demo. A lighter tip mass and longer second arm make the path diverge more easily; the tip trail is drawn as a fading color ribbon.
 
+## Screenshots
+
+<div class="shot-row">
+
+![chaos](/shots/app_games_chaos.png)
+
+</div>
+
 ## Shortcuts
 
 | Key | Action |

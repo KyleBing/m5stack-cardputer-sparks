@@ -4,6 +4,15 @@
 
 完整规则的扫雷，三个难度各自记录最快通关时间与连胜。首次挖开的格子及其 8 个邻格保证无雷，所以开局一定能展开一片空地，不存在第一下就踩雷的运气局。
 
+## 截图
+
+<div class="shot-row">
+
+![minesweeper](/shots/app_games_minesweeper.png)
+![minesweeper-02](/shots/app_games_minesweeper_02.png)
+
+</div>
+
 ## 快捷键
 
 | 按键 | 作用 |

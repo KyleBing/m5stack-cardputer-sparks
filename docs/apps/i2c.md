@@ -13,8 +13,8 @@
 
 <div class="shot-row">
 
-![i2c-in](/shots/app_ini2c_001.png)
-![i2c-ex](/shots/app_exi2c_001.png)
+![i2c-in](/shots/app_hardware_ini2.png)
+![i2c-ex](/shots/app_hardware_exi2.png)
 
 </div>
 

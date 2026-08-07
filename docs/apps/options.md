@@ -6,14 +6,12 @@
 
 ## 截图
 
-**screen / sound / clock / infrared**
+**screen / sound**
 
 <div class="shot-row">
 
 ![options-screen](/shots/app_options_screen.png)
 ![options-sound](/shots/app_options_sound.png)
-![options-clock](/shots/app_options_clock.png)
-![options-ir](/shots/app_options_ir.png)
 
 </div>
 

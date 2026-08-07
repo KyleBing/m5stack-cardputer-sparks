@@ -22,6 +22,7 @@ static constexpr uint32_t AC_AUTO_BLE_NAP_S = 240;           // 收到读数后�
 static constexpr uint32_t AC_AUTO_BLE_BURST_S = 45;          // 首包后再听一会攒 filter
 static constexpr uint32_t AC_AUTO_HIST_INTERVAL_MS = 60000;  // 每分钟记一点
 static constexpr uint32_t AC_AUTO_TOP_REFRESH_MS = 5000;     // 顶栏电量定期刷新
+static constexpr uint32_t AC_AUTO_STATS_DEBOUNCE_MS = 180;   // 合并温湿度分发包，避免连闪
 static constexpr int AC_AUTO_HIST_LEN = 12 * 60;             // 12 小时
 static constexpr int AC_AUTO_HINT_H = 12;                    // 仅 Config / Help 底栏
 static constexpr int AC_AUTO_TOP_H = 18;                     // 运行/空调状态 2x ≈16px
@@ -65,7 +66,8 @@ static uint32_t g_last_top_ms = 0;  // 顶栏电量上次刷新
 static AcAutoConfig g_cfg = {};
 static bool g_cfg_dirty = false;
 
-static bool g_has_reading = false;
+static bool g_has_reading = false;   // 是否收到过温度（自动化/历史以温度为准）
+static bool g_has_humidity = false;  // 湿度常与温度分开发，单独记
 static float g_temp_c = 0.f;
 static float g_hum = 0.f;
 
@@ -74,6 +76,19 @@ static uint8_t g_off_streak = 0;
 static uint16_t g_on_times = 0;
 static uint16_t g_off_times = 0;
 static bool g_ac_power = false;
+
+// 已绘统计快照：突发窗口重复 adv / 温湿度分发包时未变则不刷
+static bool g_ui_has_reading = false;
+static bool g_ui_has_humidity = false;
+static float g_ui_temp_c = 0.f;
+static float g_ui_hum = 0.f;
+static uint16_t g_ui_on_times = 0;
+static uint16_t g_ui_off_times = 0;
+static bool g_ui_ac_power = false;
+static bool g_ui_auto_active = false;
+static bool g_stats_defer = false;           // 统计区待刷（防抖中）
+static uint32_t g_stats_defer_until_ms = 0;  // 防抖到期时刻
+static bool g_top_defer = false;             // 顶栏待刷（与统计合并同帧）
 
 // 开关机图标 RAM 缓存（与 IR 同：进时预载，离时释放，避免每次从 Flash 解图闪烁）
 static uint16_t* s_power_icon_px = nullptr;
@@ -103,7 +118,15 @@ static const char* sensorLabel();
 static void reloadWatchDevice();
 static void drawDisplayTopBar();
 static void drawDisplayStats();
+static void drawDisplayStatsData(bool force_power); // 仅数值/图标；force_power=全页首绘
 static void drawDisplayChartArea();
+static void captureStatsUi();
+static bool statsUiChanged();
+static void scheduleStatsRefresh();
+static void scheduleTopRefresh();
+static void flushDeferredDisplayRefresh();
+static void refreshDisplayTopBar();
+static void refreshDisplayStatsData();
 static void refreshDisplayTopAndStats();
 static void refreshDisplayChart();
 static int displayTopY();
@@ -385,6 +408,19 @@ static void drawHelpPage() {
             }
             y += 11;
         }
+        {
+            // 仅对齐内部假定开关，不发红外
+            const char* p[] = {"assume ", "AC", " on", "/", "off", " (no IR)"};
+            const uint16_t c[] = {APP_COLOR_HINT, APP_COLOR_LABEL, APP_COLOR_OK, APP_COLOR_HINT,
+                                  APP_COLOR_HINT, APP_COLOR_HINT};
+            int cx = APP_CONTENT_X;
+            cx += drawKeyBadge(cx, y, 'p', 1);
+            M5Cardputer.Display.setTextSize(1);
+            for (int i = 0; i < 6; i++) {
+                helpPrint(cx, y, p[i], c[i]);
+            }
+            y += 11;
+        }
         drawHelpKeyLine(y, 'h', "help / close");
         {
             const char* p[] = {"BtnA", ": blank / wake"};
@@ -461,10 +497,12 @@ static void drawHelpPage() {
             drawHelpRichLine(y, p, c, 7);
         }
         {
-            const char* p[] = {"<", "off", " ", "filter", " => ", "IR", " OFF"};
+            // 关机前提：内部假定状态为 ON（可用 p 对齐）
+            const char* p[] = {"<", "off", " ", "filter", " + ", "ON", " => ", "IR", " OFF"};
             const uint16_t c[] = {APP_COLOR_HINT, APP_COLOR_OK, APP_COLOR_HINT, APP_COLOR_LABEL,
-                                  APP_COLOR_HINT, APP_COLOR_WARN, APP_COLOR_HINT};
-            drawHelpRichLine(y, p, c, 7);
+                                  APP_COLOR_HINT, APP_COLOR_OK, APP_COLOR_HINT, APP_COLOR_WARN,
+                                  APP_COLOR_HINT};
+            drawHelpRichLine(y, p, c, 9);
         }
         {
             const char* p[] = {"BLE", " ", "listen", "<=6m ", "nap", " 4m"};
@@ -875,6 +913,31 @@ static void printHtValueUnit(const char* value, const char* unit, const bool has
     }
 }
 
+static void captureStatsUi() {
+    g_ui_has_reading = g_has_reading;
+    g_ui_has_humidity = g_has_humidity;
+    g_ui_temp_c = g_temp_c;
+    g_ui_hum = g_hum;
+    g_ui_on_times = g_on_times;
+    g_ui_off_times = g_off_times;
+    g_ui_ac_power = g_ac_power;
+    g_ui_auto_active = g_auto_active;
+}
+
+static bool statsUiChanged() {
+    if (g_ui_has_reading != g_has_reading || g_ui_has_humidity != g_has_humidity) {
+        return true;
+    }
+    if (g_has_reading && g_ui_temp_c != g_temp_c) {
+        return true;
+    }
+    if (g_has_humidity && g_ui_hum != g_hum) {
+        return true;
+    }
+    return g_ui_on_times != g_on_times || g_ui_off_times != g_off_times ||
+           g_ui_ac_power != g_ac_power || g_ui_auto_active != g_auto_active;
+}
+
 // 左列温湿度 + 中列 on/off 次数；最右 AC 开关机图标（IR 原尺寸）
 static void drawDisplayStats() {
     const int y0 = displayStatsY();
@@ -882,15 +945,43 @@ static void drawDisplayStats() {
     const int mid_x = screen_w / 2;
     // size1 标签相对 size2 数值垂直居中
     const int label_dy = (16 - 8) / 2;
-    char num[12];
 
     // 左：Temp / Hum — 标签 1x；数值列与顶栏状态名对齐
-    const int ht_val_x = displayHtValueX();
-
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.setCursor(APP_CONTENT_X, y0 + label_dy);
     M5Cardputer.Display.print("Temp");
+    M5Cardputer.Display.setCursor(APP_CONTENT_X, y0 + AC_AUTO_LINE_H + label_dy);
+    M5Cardputer.Display.print("Hum");
+
+    // 中：on / off 标签
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(mid_x, y0 + label_dy);
+    M5Cardputer.Display.print("on");
+    M5Cardputer.Display.setCursor(mid_x, y0 + AC_AUTO_LINE_H + label_dy);
+    M5Cardputer.Display.print("off");
+
+    drawDisplayStatsData(true);
+}
+
+// 只重绘可变数值区（先清固定宽度槽，避免整带 fillRect 闪）
+static void drawDisplayStatsData(const bool force_power) {
+    const int y0 = displayStatsY();
+    const int screen_w = M5Cardputer.Display.width();
+    const int mid_x = screen_w / 2;
+    const int ht_val_x = displayHtValueX();
+    const bool redraw_power = force_power || (g_ui_ac_power != g_ac_power);
+    char num[12];
+
+    M5Cardputer.Display.setTextSize(1);
+    const int cnt_label_w = M5Cardputer.Display.textWidth("off");
+    const int cnt_val_x = mid_x + cnt_label_w + 4;
+
+    M5Cardputer.Display.setTextSize(2);
+    // 温度槽：最长 "99.9C"
+    const int temp_slot_w = M5Cardputer.Display.textWidth("99.9C");
+    M5Cardputer.Display.fillRect(ht_val_x, y0, temp_slot_w, 16, BLACK);
     M5Cardputer.Display.setCursor(ht_val_x, y0);
     if (g_has_reading) {
         snprintf(num, sizeof(num), "%.1f", static_cast<double>(g_temp_c));
@@ -899,50 +990,42 @@ static void drawDisplayStats() {
         printHtValueUnit("--.-", "C", false, AC_AUTO_COLOR_TEMP);
     }
 
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, y0 + AC_AUTO_LINE_H + label_dy);
-    M5Cardputer.Display.print("Hum");
+    // 湿度槽：最长 "100%"
+    const int hum_slot_w = M5Cardputer.Display.textWidth("100%");
+    M5Cardputer.Display.fillRect(ht_val_x, y0 + AC_AUTO_LINE_H, hum_slot_w, 16, BLACK);
     M5Cardputer.Display.setCursor(ht_val_x, y0 + AC_AUTO_LINE_H);
-    if (g_has_reading) {
+    if (g_has_humidity) {
         snprintf(num, sizeof(num), "%.0f", static_cast<double>(g_hum));
         printHtValueUnit(num, "%", true, AC_AUTO_COLOR_HUM);
     } else {
         printHtValueUnit("--", "%", false, AC_AUTO_COLOR_HUM);
     }
 
-    // 中：on / off — 次数按更宽标签「off」对齐
-    M5Cardputer.Display.setTextSize(1);
-    const int cnt_label_w = M5Cardputer.Display.textWidth("off");
-    const int cnt_val_x = mid_x + cnt_label_w + 4;
-
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(mid_x, y0 + label_dy);
-    M5Cardputer.Display.print("on");
+    // on/off 次数槽：预留 5 位
+    const int cnt_slot_w = M5Cardputer.Display.textWidth("99999");
+    M5Cardputer.Display.fillRect(cnt_val_x, y0, cnt_slot_w, 16, BLACK);
+    M5Cardputer.Display.fillRect(cnt_val_x, y0 + AC_AUTO_LINE_H, cnt_slot_w, 16, BLACK);
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     snprintf(num, sizeof(num), "%u", static_cast<unsigned>(g_on_times));
     M5Cardputer.Display.setCursor(cnt_val_x, y0);
     M5Cardputer.Display.print(num);
-
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(mid_x, y0 + AC_AUTO_LINE_H + label_dy);
-    M5Cardputer.Display.print("off");
-    M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     snprintf(num, sizeof(num), "%u", static_cast<unsigned>(g_off_times));
     M5Cardputer.Display.setCursor(cnt_val_x, y0 + AC_AUTO_LINE_H);
     M5Cardputer.Display.print(num);
 
-    // 最右：空调开关机图标（原尺寸 30px，垂直居中于温湿度区）
-    const int power_x = screen_w - APP_CONTENT_X - AC_AUTO_POWER_ICON_PX;
-    const int power_y = y0 + (AC_AUTO_STATS_H - AC_AUTO_POWER_ICON_PX) / 2;
-    if (!drawPowerIconAt(power_x, power_y, g_ac_power)) {
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(g_ac_power ? APP_COLOR_OK : APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(power_x, y0 + (AC_AUTO_STATS_H - 8) / 2);
-        M5Cardputer.Display.print(g_ac_power ? "ON" : "OFF");
+    // 电源图标仅在开关态变化时重绘，避免温湿度更新时右侧跟着闪
+    if (redraw_power) {
+        const int power_x = screen_w - APP_CONTENT_X - AC_AUTO_POWER_ICON_PX;
+        const int power_y = y0 + (AC_AUTO_STATS_H - AC_AUTO_POWER_ICON_PX) / 2;
+        M5Cardputer.Display.fillRect(power_x, power_y, AC_AUTO_POWER_ICON_PX, AC_AUTO_POWER_ICON_PX,
+                                     BLACK);
+        if (!drawPowerIconAt(power_x, power_y, g_ac_power)) {
+            M5Cardputer.Display.setTextSize(1);
+            M5Cardputer.Display.setTextColor(g_ac_power ? APP_COLOR_OK : APP_COLOR_HINT, BLACK);
+            M5Cardputer.Display.setCursor(power_x, y0 + (AC_AUTO_STATS_H - 8) / 2);
+            M5Cardputer.Display.print(g_ac_power ? "ON" : "OFF");
+        }
     }
 }
 
@@ -954,14 +1037,85 @@ static void drawDisplayChartArea() {
     }
 }
 
+static void scheduleStatsRefresh() {
+    // 已在防抖中不延长，避免突发窗口连续 adv 把刷新一直往后推
+    if (!g_stats_defer) {
+        g_stats_defer = true;
+        g_stats_defer_until_ms = millis() + AC_AUTO_STATS_DEBOUNCE_MS;
+    }
+}
+
+static void scheduleTopRefresh() {
+    g_top_defer = true;
+}
+
+static void refreshDisplayTopBar() {
+    if (g_display_blanked || g_page != AcAutoPage::Display || g_help_visible) {
+        return;
+    }
+    // 只清顶栏条，不动统计区
+    M5Cardputer.Display.fillRect(0, displayTopY(), M5Cardputer.Display.width(), AC_AUTO_TOP_H,
+                                 BLACK);
+    drawDisplayTopBar();
+    g_ui_auto_active = g_auto_active;
+    g_last_top_ms = millis();
+}
+
+static void refreshDisplayStatsData() {
+    if (g_display_blanked || g_page != AcAutoPage::Display || g_help_visible) {
+        return;
+    }
+    drawDisplayStatsData(false);
+    captureStatsUi();
+}
+
 static void refreshDisplayTopAndStats() {
     if (g_display_blanked || g_page != AcAutoPage::Display || g_help_visible) {
         return;
     }
-    M5Cardputer.Display.fillRect(0, 0, M5Cardputer.Display.width(),
-                                 displayStatsY() + AC_AUTO_STATS_H, BLACK);
+    refreshDisplayTopBar();
+    refreshDisplayStatsData();
+}
+
+// 合并本轮待刷：温湿度防抖到期后再画，顶栏可同帧一起刷
+static void flushDeferredDisplayRefresh() {
+    if (g_display_blanked || g_page != AcAutoPage::Display || g_help_visible) {
+        g_stats_defer = false;
+        g_top_defer = false;
+        return;
+    }
+    const uint32_t now = millis();
+    const bool stats_due =
+        g_stats_defer && static_cast<int32_t>(now - g_stats_defer_until_ms) >= 0;
+    if (!stats_due && !g_top_defer) {
+        return;
+    }
+    // 统计仍在防抖：顶栏若急需可先刷；否则等统计一起刷减少闪
+    if (g_top_defer && !stats_due && g_stats_defer) {
+        refreshDisplayTopBar();
+        g_top_defer = false;
+        return;
+    }
+    if (g_top_defer) {
+        refreshDisplayTopBar();
+        g_top_defer = false;
+    }
+    if (stats_due) {
+        if (statsUiChanged()) {
+            refreshDisplayStatsData();
+        }
+        g_stats_defer = false;
+    }
+}
+
+static void drawDisplayPage() {
+    M5Cardputer.Display.fillScreen(BLACK);
     drawDisplayTopBar();
     drawDisplayStats();
+    drawDisplayChartArea();
+    captureStatsUi();
+    g_stats_defer = false;
+    g_top_defer = false;
     g_last_top_ms = millis();
 }
 
@@ -976,14 +1130,6 @@ static void refreshDisplayChart() {
     M5Cardputer.Display.fillRect(APP_CONTENT_X, displayChartY(),
                                  M5Cardputer.Display.width() - APP_CONTENT_X * 2, chart_h, BLACK);
     drawDisplayChartArea();
-}
-
-static void drawDisplayPage() {
-    M5Cardputer.Display.fillScreen(BLACK);
-    drawDisplayTopBar();
-    drawDisplayStats();
-    drawDisplayChartArea();
-    g_last_top_ms = millis();
 }
 
 static void drawConfigPage() {
@@ -1201,6 +1347,8 @@ void enterAcAutoApp() {
     }
 
     g_has_reading = false;
+    g_has_humidity = false;
+    g_hum = 0.f;
     g_on_streak = 0;
     g_off_streak = 0;
     g_on_times = 0;
@@ -1260,31 +1408,38 @@ void pollAcAutoBtnA() {
 void updateAcAutoApp() {
     const uint32_t now = millis();
 
-    // BLE 读数：只局部刷统计区，避免整屏闪
+    // BLE 读数：数值变更才排队局部刷（防抖合并温湿度分发包）
     if (g_watch_valid) {
         MijiaBleReading reading = {};
         // 仅在本帧结束了一轮扫描时排程；已 idle 时 poll 也会返回 done，不能反复刷新 nap 终点
         const bool was_running = mijiaBleScanIsRunning();
         const bool done = mijiaBleScanPoll(reading, nullptr);
-        if (reading.ok && reading.has_temp) {
-            const bool first_reading = !g_has_reading;
-            g_temp_c = reading.temperature;
+        // 米家温湿度常分开发（0x1004 温度 / 0x1006 湿度），需分别合并，不能只认带温度的包
+        if (reading.ok && (reading.has_temp || reading.has_humidity)) {
             if (reading.has_humidity) {
                 g_hum = reading.humidity;
+                g_has_humidity = true;
             }
-            g_has_reading = true;
-            g_ble_got_reading = true;
-            applyAutomation(g_temp_c);
-            refreshDisplayTopAndStats();
-            // 首包立刻记一点（与 AUTO 无关），之后每分钟追加
-            if (first_reading) {
-                pushHistorySample();
-                g_last_hist_ms = millis();
-                refreshDisplayChart();
+            if (reading.has_temp) {
+                const bool first_reading = !g_has_reading;
+                g_temp_c = reading.temperature;
+                g_has_reading = true;
+                g_ble_got_reading = true;
+                applyAutomation(g_temp_c);
+                // 首包立刻记一点（与 AUTO 无关），之后每分钟追加
+                if (first_reading) {
+                    pushHistorySample();
+                    g_last_hist_ms = millis();
+                    refreshDisplayChart();
+                }
+                // 首包开启短突发窗口，方便攒 filter，并等可能稍后到的湿度包
+                if (g_ble_burst_until_ms == 0) {
+                    g_ble_burst_until_ms = millis() + AC_AUTO_BLE_BURST_S * 1000;
+                }
             }
-            // 首包开启短突发窗口，方便频繁广播攒 filter
-            if (g_ble_burst_until_ms == 0) {
-                g_ble_burst_until_ms = millis() + AC_AUTO_BLE_BURST_S * 1000;
+            // 未变（突发窗口重复 adv）不排队，避免顶栏+统计连闪
+            if (statsUiChanged()) {
+                scheduleStatsRefresh();
             }
         }
         // 突发窗口结束：停扫进入 nap（5 分钟一发的传感器本轮通常只有 1 包）
@@ -1299,15 +1454,17 @@ void updateAcAutoApp() {
         ensureBleWatch();
     }
 
-    // BLE 监听状态变化或电量到期：局部刷顶栏 + 统计
+    // BLE 监听状态 / 电量：只刷顶栏，不连带清统计区
     if (!g_display_blanked && g_page == AcAutoPage::Display && !g_help_visible) {
         const int ble_st = bleListenUiState();
         const bool ble_changed = ble_st != g_ble_ui_shown;
         const bool top_due = (now - g_last_top_ms) >= AC_AUTO_TOP_REFRESH_MS;
         if (ble_changed || top_due) {
-            refreshDisplayTopAndStats();
+            scheduleTopRefresh();
         }
     }
+
+    flushDeferredDisplayRefresh();
 
     // 每分钟记历史：只刷 chart
     if (g_has_reading && (now - g_last_hist_ms) >= AC_AUTO_HIST_INTERVAL_MS) {
@@ -1381,7 +1538,10 @@ void handleAcAutoApp(const Keyboard_Class::KeysState& status) {
                 g_on_streak = 0;
                 g_off_streak = 0;
             }
-            refreshDisplayTopAndStats();
+            // 按键反馈立即刷顶栏，不走防抖
+            g_stats_defer = false;
+            g_top_defer = false;
+            refreshDisplayTopBar();
             return;
         }
         // S：手动熄屏入口
@@ -1394,7 +1554,19 @@ void handleAcAutoApp(const Keyboard_Class::KeysState& status) {
             g_off_times = 0;
             g_on_streak = 0;
             g_off_streak = 0;
-            refreshDisplayTopAndStats();
+            g_stats_defer = false;
+            g_top_defer = false;
+            refreshDisplayStatsData();
+            return;
+        }
+        // P：仅对齐内部假定开关态，不发红外
+        if ((c == 'p' || c == 'P') && g_page == AcAutoPage::Display) {
+            g_ac_power = !g_ac_power;
+            g_on_streak = 0;
+            g_off_streak = 0;
+            g_stats_defer = false;
+            g_top_defer = false;
+            refreshDisplayStatsData();
             return;
         }
     }

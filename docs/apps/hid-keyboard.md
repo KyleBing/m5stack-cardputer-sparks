@@ -8,31 +8,23 @@
 
 ## 截图
 
-**USB / BLE**
+**主界面 / USB / 鼠标**
 
 <div class="shot-row">
 
-![hid-usb](/shots/app_hidkeyboard_005.png)
-![hid-ble](/shots/app_hidkeyboard_003.png)
-![hid-ble-paired](/shots/app_hidkeyboard_002.png)
+![hid-main](/shots/app_hidkeyboard_main.png)
+![hid-usb](/shots/app_hidkeyboard_usb_mode.png)
+![hid-mouse](/shots/app_hidkeyboard_mouse_mode.png)
 
 </div>
 
-**Hosts 主机列表**
+**主机列表 / 特殊键**
 
 <div class="shot-row">
 
-![hid-hosts-empty](/shots/app_hidkeyboard_001.png)
-![hid-hosts](/shots/app_hidkeyboard_004.png)
-![hid-hosts-rename](/shots/app_hidkeyboard.png)
-
-</div>
-
-**Help**
-
-<div class="shot-row">
-
-![hid-help](/shots/app_hidkb_001.png)
+![hid-hosts](/shots/app_hidkeyboard_pair_list.png)
+![hid-001](/shots/app_hidkeyboard_001.png)
+![hid-special](/shots/app_hidkeyboard_specailkey.png)
 
 </div>
 

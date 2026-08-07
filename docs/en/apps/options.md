@@ -6,14 +6,12 @@ On-device settings are grouped into screen, sound, clock, calendar, infrared, an
 
 ## Screenshots
 
-**screen / sound / clock / infrared**
+**screen / sound**
 
 <div class="shot-row">
 
 ![options-screen](/shots/app_options_screen.png)
 ![options-sound](/shots/app_options_sound.png)
-![options-clock](/shots/app_options_clock.png)
-![options-ir](/shots/app_options_ir.png)
 
 </div>
 

@@ -6,7 +6,7 @@
 
 ## 截图
 
-**详情页（温湿度传感器）**
+**详情页**
 
 <div class="shot-row">
 
@@ -14,27 +14,12 @@
 
 </div>
 
-**列表 / 宫格 / 编组**
+**温湿度工作态 / 快捷面板**
 
 <div class="shot-row">
 
-![mijia-list](/shots/app_mijia_list.png)
-![mijia-grid](/shots/app_mijia_grid.png)
-![mijia-group](/shots/app_mijia_group.png)
-
-</div>
-
-
-**设备详情示例**
-
-<div class="shot-row">
-
-![mijia-light-on](/shots/app_mijia_light_on.png)
-![mijia-light-off](/shots/app_mijia_light_off.png)
-![mijia-fan-on](/shots/app_mijia_fan_on.png)
-![mijia-lamp-on](/shots/app_mijia_lamp_on.png)
-![mijia-fryer-on](/shots/app_mijia_fryer_on.png)
-![mijia-fryer-off](/shots/app_mijia_fryer_off.png)
+![mijia-th-work](/shots/app_mijia_th_work.png)
+![mijia-quick](/shots/app_mijia_quick_panel.png)
 
 </div>
 

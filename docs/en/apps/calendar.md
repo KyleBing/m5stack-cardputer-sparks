@@ -6,7 +6,11 @@ Header shows year/month (2x, not the app name). No tip bar on the main view; sho
 
 ## Screenshots
 
-(Add device shots to `docs/public/shots/app_calendar_*.png` after capture.)
+<div class="shot-row">
+
+![calendar](/shots/app_calendar.png)
+
+</div>
 
 ## Shortcuts
 

@@ -8,8 +8,8 @@
 
 <div class="shot-row">
 
-![sleep-light](/shots/app_sleep_light.png)
-![sleep-deep](/shots/app_sleep_deep.png)
+![sleep-light](/shots/app_sleep_001.png)
+![sleep-deep](/shots/app_sleep_002.png)
 
 </div>
 

@@ -10,7 +10,7 @@ Scan nearby Bluetooth Low Energy devices and list name, address, and type catego
 
 <div class="shot-row">
 
-![ble-scan](/shots/app_ble_scan.png)
+![ble-scan](/shots/app_hardware_ble_scan.png)
 
 </div>
 
@@ -18,7 +18,8 @@ Scan nearby Bluetooth Low Energy devices and list name, address, and type catego
 
 <div class="shot-row">
 
-![ble-list](/shots/app_ble_list.png)
+![ble-list](/shots/app_hardware_ble_list.png)
+![ble-list-1](/shots/app_hardware_ble_list_1.png)
 
 </div>
 

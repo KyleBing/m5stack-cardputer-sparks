@@ -4,6 +4,15 @@ Open with main menu `g`, then Games `4`.
 
 Warm ivory dice with tabletop physics. Shake the device or hold Space to charge a toss; IMU shake strength and Space hold time directly control motion amplitude, then each die quickly eases into its face-up pose.
 
+## Screenshots
+
+<div class="shot-row">
+
+![dice-rolling](/shots/app_games_dice_rolling.png)
+![dice-result](/shots/app_games_dice_result.png)
+
+</div>
+
 ## Shortcuts
 
 | Key | Action |

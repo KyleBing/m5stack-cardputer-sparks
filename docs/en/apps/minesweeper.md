@@ -4,6 +4,15 @@ Entry: main menu `g` → Games `8`
 
 A full-rules Minesweeper with per-difficulty records for fastest clear and win streak. The first cell you dig and its eight neighbours are guaranteed mine-free, so every game opens with a cleared area and you can never lose on the first click.
 
+## Screenshots
+
+<div class="shot-row">
+
+![minesweeper](/shots/app_games_minesweeper.png)
+![minesweeper-02](/shots/app_games_minesweeper_02.png)
+
+</div>
+
 ## Shortcuts
 
 | Key | Action |

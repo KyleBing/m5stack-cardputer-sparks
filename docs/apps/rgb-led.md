@@ -8,7 +8,7 @@
 
 <div class="shot-row">
 
-![rgb-led](/shots/app_led_001.png)
+![rgb-led](/shots/app_hardware_led.png)
 
 </div>
 
