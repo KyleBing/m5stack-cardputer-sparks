@@ -23,16 +23,17 @@
 | 按键 | 作用 |
 |------|------|
 | `[` `]` | 上一页 / 下一页 |
+| `c`（仅 Storage） | 清除全部截图（再按 `y` 确认 / `n` 取消） |
 | 方向键等翻页键 | 翻页 |
 
-底栏显示 `N/6` 页码。
+底栏显示 `N/6` 页码；Storage 页另有 `c clear`。
 
 ## 使用说明
 
 | 页 | 内容 |
 |----|------|
 | Memory | Heap / PSRAM / Sketch / LittleFS 用量与进度条 |
-| Storage | 本地 Flash（LittleFS）与 TF 卡已用 / 剩余；无 TF 时显示 n/a |
+| Storage | 本地 Flash（LittleFS）与 TF 卡已用 / 剩余；截图张数；`c` 清除截图；无 TF 时显示 n/a |
 | Chip | 芯片型号、特性 |
 | Fw | 固件版本、编译时间等 |
 | Net | WiFi / IP / RSSI 等 |

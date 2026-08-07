@@ -18,11 +18,10 @@ static constexpr int SHOT_SD_CS = 12;
 
 static constexpr const char* SHOT_LAST = "/shot/.last";
 static constexpr const char* SHOT_BOOT_PENDING = "/shot/.boot_pending";
-// 压缩 PNG 通常远小于旧 BMP；store 回退约 ~100KB，Flash 需更大余量
+// PNG（tdefl / RLE）通常数 KB～十几 KB；留足写盘余量即可
 static constexpr size_t SHOT_MIN_FREE_BOOT = 48 * 1024;
-static constexpr size_t SHOT_MIN_FREE_SAVE = 64 * 1024;
-static constexpr size_t SHOT_MIN_FREE_SAVE_STORE = 128 * 1024;
-static constexpr size_t SHOT_MIN_FREE_SD = 128 * 1024;
+static constexpr size_t SHOT_MIN_FREE_SAVE = 48 * 1024;
+static constexpr size_t SHOT_MIN_FREE_SD = 64 * 1024;
 static constexpr size_t SHOT_IDAT_BUF = 2048;
 
 static bool g_shot_sd_ready = false;
@@ -162,99 +161,223 @@ static bool shotPngWriteHeader(ShotPngSink* sink, const int w, const int h) {
     return shotPngWriteChunk(sink, "IHDR", ihdr, sizeof(ihdr));
 }
 
-// 写出一个 zlib stored block（包在 IDAT 里）
-static bool shotPngFlushStoreIdat(ShotPngSink* sink, bool* zhdr_done, const uint8_t* raw,
-                                  const size_t raw_len, const bool bfinal, uint8_t* idat) {
-    size_t o = 0;
-    if (!*zhdr_done) {
-        idat[o++] = 0x78;
-        idat[o++] = 0x01;
-        *zhdr_done = true;
+// —— 低内存 RLE zlib（fixed Huffman）：不分配 tdefl（~160KB），UI 截图仍远小于 BMP ——
+struct ShotRleZlib {
+    ShotPngSink* sink = nullptr;
+    uint8_t idat[SHOT_IDAT_BUF] = {};
+    size_t idat_len = 0;
+    uint32_t bitbuf = 0;
+    int bitcount = 0;
+    uint32_t adler = 1;
+    bool ok = true;
+};
+
+static bool shotRleFlushIdat(ShotRleZlib* z) {
+    if (z == nullptr || !z->ok || z->sink == nullptr) {
+        return false;
     }
-    idat[o++] = bfinal ? 0x01 : 0x00;
-    const uint16_t len16 = static_cast<uint16_t>(raw_len);
-    const uint16_t nlen = static_cast<uint16_t>(~len16);
-    idat[o++] = static_cast<uint8_t>(len16 & 0xFF);
-    idat[o++] = static_cast<uint8_t>((len16 >> 8) & 0xFF);
-    idat[o++] = static_cast<uint8_t>(nlen & 0xFF);
-    idat[o++] = static_cast<uint8_t>((nlen >> 8) & 0xFF);
-    if (raw_len > 0) {
-        memcpy(idat + o, raw, raw_len);
-        o += raw_len;
+    if (z->idat_len == 0) {
+        return true;
     }
-    return shotPngWriteChunk(sink, "IDAT", idat, o);
+    const bool ok = shotPngWriteChunk(z->sink, "IDAT", z->idat, z->idat_len);
+    z->idat_len = 0;
+    z->ok = ok;
+    return ok;
 }
 
-// 低内存路径：不分配 tdefl_compressor（约 80KB），避免 WiFi/Web 下 OOM 写出空文件
-static bool captureDisplayToPngStore(File& f, const int w, const int h, uint8_t* row, char* err,
-                                     const size_t err_len) {
+static bool shotRleEmitByte(ShotRleZlib* z, const uint8_t b) {
+    if (z->idat_len >= sizeof(z->idat)) {
+        if (!shotRleFlushIdat(z)) {
+            return false;
+        }
+    }
+    z->idat[z->idat_len++] = b;
+    return true;
+}
+
+// Deflate 比特流：LSB first；Huffman 码需先按位反转再送入
+static uint32_t shotBitRev(uint32_t code, int nbits) {
+    uint32_t r = 0;
+    for (int i = 0; i < nbits; i++) {
+        r = (r << 1) | (code & 1u);
+        code >>= 1;
+    }
+    return r;
+}
+
+static bool shotRlePutBits(ShotRleZlib* z, uint32_t bits, int nbits) {
+    z->bitbuf |= (bits << z->bitcount);
+    z->bitcount += nbits;
+    while (z->bitcount >= 8) {
+        if (!shotRleEmitByte(z, static_cast<uint8_t>(z->bitbuf & 0xFFu))) {
+            return false;
+        }
+        z->bitbuf >>= 8;
+        z->bitcount -= 8;
+    }
+    return z->ok;
+}
+
+static bool shotRlePutHuff(ShotRleZlib* z, uint32_t code, int nbits) {
+    return shotRlePutBits(z, shotBitRev(code, nbits), nbits);
+}
+
+// Fixed Huffman：literal/length 符号（RFC 1951）
+static bool shotRlePutLit(ShotRleZlib* z, const int sym) {
+    if (sym < 0 || sym > 287) {
+        return false;
+    }
+    if (sym <= 143) {
+        return shotRlePutHuff(z, static_cast<uint32_t>(0x30 + sym), 8);
+    }
+    if (sym <= 255) {
+        return shotRlePutHuff(z, static_cast<uint32_t>(0x190 + (sym - 144)), 9);
+    }
+    if (sym <= 279) {
+        return shotRlePutHuff(z, static_cast<uint32_t>(sym - 256), 7);
+    }
+    return shotRlePutHuff(z, static_cast<uint32_t>(0xC0 + (sym - 280)), 8);
+}
+
+// length 3..258 → length code + extra bits
+static bool shotRlePutLength(ShotRleZlib* z, int len) {
+    static const uint16_t kBase[29] = {3,  4,  5,  6,  7,  8,  9,  10, 11, 13, 15, 17, 19, 23, 27,
+                                       31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258};
+    static const uint8_t kExtra[29] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2,
+                                       2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0};
+    if (len < 3) {
+        len = 3;
+    }
+    if (len > 258) {
+        len = 258;
+    }
+    int code = 28;
+    for (int i = 0; i < 28; i++) {
+        if (len < kBase[i + 1]) {
+            code = i;
+            break;
+        }
+    }
+    if (!shotRlePutLit(z, 257 + code)) {
+        return false;
+    }
+    if (kExtra[code] > 0) {
+        // length/distance 额外比特按 LSB first，不反转
+        if (!shotRlePutBits(z, static_cast<uint32_t>(len - kBase[code]), kExtra[code])) {
+            return false;
+        }
+    }
+    // distance=1 → dist code 0（fixed Huffman 5 bit）
+    return shotRlePutHuff(z, 0, 5);
+}
+
+// 把一段字节用「字面量 + dist=1 的 RLE」写入当前 fixed block
+static bool shotRleCompressBuf(ShotRleZlib* z, const uint8_t* data, const size_t len) {
+    size_t i = 0;
+    while (i < len) {
+        size_t run = 1;
+        while (i + run < len && data[i + run] == data[i] && run < 258u) {
+            run++;
+        }
+        if (!shotRlePutLit(z, data[i])) {
+            return false;
+        }
+        size_t left = run - 1;
+        while (left >= 3u) {
+            const size_t m = left > 258u ? 258u : left;
+            if (!shotRlePutLength(z, static_cast<int>(m))) {
+                return false;
+            }
+            left -= m;
+        }
+        while (left > 0u) {
+            if (!shotRlePutLit(z, data[i])) {
+                return false;
+            }
+            left--;
+        }
+        i += run;
+    }
+    return z->ok;
+}
+
+// 低内存路径：Up 过滤 + RLE zlib，堆占用约数 KB（勿用未压缩 store，体积≈BMP）
+static bool captureDisplayToPngRle(File& f, const int w, const int h, uint8_t* row, char* err,
+                                   const size_t err_len) {
     auto& d = M5Cardputer.Display;
     const int bpl = w * 3;
     const size_t row_bytes = static_cast<size_t>(bpl) + 1u;
-    const size_t cap = SHOT_IDAT_BUF;
 
-    uint8_t* raw = static_cast<uint8_t*>(malloc(cap));
-    uint8_t* idat = static_cast<uint8_t*>(malloc(cap + 16));
-    if (raw == nullptr || idat == nullptr) {
-        free(raw);
-        free(idat);
-        snprintf(err, err_len, "oom store heap=%u", ESP.getFreeHeap());
+    uint8_t* prev = static_cast<uint8_t*>(malloc(static_cast<size_t>(bpl)));
+    uint8_t* filtered = static_cast<uint8_t*>(malloc(row_bytes));
+    if (prev == nullptr || filtered == nullptr) {
+        free(prev);
+        free(filtered);
+        snprintf(err, err_len, "oom rle heap=%u", ESP.getFreeHeap());
         return false;
     }
+    memset(prev, 0, static_cast<size_t>(bpl));
 
     ShotPngSink sink;
     sink.f = &f;
     sink.ok = true;
     bool ok = shotPngWriteHeader(&sink, w, h);
 
-    uint32_t adler = 1;
-    size_t raw_len = 0;
-    bool zhdr_done = false;
+    ShotRleZlib z;
+    z.sink = &sink;
+    z.ok = true;
+
+    if (ok) {
+        // zlib 头 + fixed Huffman block（BFINAL=1，失败会删文件）
+        ok = shotRleEmitByte(&z, 0x78) && shotRleEmitByte(&z, 0x01);
+        ok = ok && shotRlePutBits(&z, 0x3u, 3); // BFINAL=1, BTYPE=01
+    }
 
     for (int y = 0; ok && y < h; y++) {
-        if (raw_len + row_bytes > cap) {
-            ok = shotPngFlushStoreIdat(&sink, &zhdr_done, raw, raw_len, false, idat);
-            raw_len = 0;
-        }
-        if (!ok) {
-            break;
-        }
-        raw[raw_len] = 0; // filter None
         d.readRectRGB(0, y, w, 1, row);
-        memcpy(raw + raw_len + 1, row, static_cast<size_t>(bpl));
-        adler = shotAdler32(adler, raw + raw_len, row_bytes);
-        raw_len += row_bytes;
+        filtered[0] = 2; // Up
+        for (int i = 0; i < bpl; i++) {
+            filtered[i + 1] = static_cast<uint8_t>(row[i] - prev[i]);
+        }
+        memcpy(prev, row, static_cast<size_t>(bpl));
+        z.adler = shotAdler32(z.adler, filtered, row_bytes);
+        ok = shotRleCompressBuf(&z, filtered, row_bytes);
         if ((y & 7) == 0) {
             yield();
         }
     }
 
     if (ok) {
-        ok = shotPngFlushStoreIdat(&sink, &zhdr_done, raw, raw_len, true, idat);
+        ok = shotRlePutLit(&z, 256); // EOB
+    }
+    if (ok && z.bitcount > 0) {
+        // 字节对齐
+        ok = shotRlePutBits(&z, 0, 8 - z.bitcount);
     }
     if (ok) {
-        const uint8_t ab[4] = {
-            static_cast<uint8_t>((adler >> 24) & 0xFF),
-            static_cast<uint8_t>((adler >> 16) & 0xFF),
-            static_cast<uint8_t>((adler >> 8) & 0xFF),
-            static_cast<uint8_t>(adler & 0xFF),
-        };
-        ok = shotPngWriteChunk(&sink, "IDAT", ab, sizeof(ab));
+        const uint32_t a = z.adler;
+        ok = shotRleEmitByte(&z, static_cast<uint8_t>((a >> 24) & 0xFF)) &&
+             shotRleEmitByte(&z, static_cast<uint8_t>((a >> 16) & 0xFF)) &&
+             shotRleEmitByte(&z, static_cast<uint8_t>((a >> 8) & 0xFF)) &&
+             shotRleEmitByte(&z, static_cast<uint8_t>(a & 0xFF));
+    }
+    if (ok) {
+        ok = shotRleFlushIdat(&z);
     }
     if (ok) {
         ok = shotPngWriteChunk(&sink, "IEND", nullptr, 0);
     }
 
-    free(raw);
-    free(idat);
+    free(prev);
+    free(filtered);
     if (!ok) {
-        snprintf(err, err_len, sink.ok ? "png store fail" : "png write fail");
+        snprintf(err, err_len, sink.ok ? "png rle fail" : "png write fail");
         return false;
     }
     return true;
 }
 
-// tdefl 压缩路径（堆上分配 compressor + IDAT 缓冲，避免大结构体进栈）
+// tdefl 压缩路径（堆上分配 compressor + IDAT 缓冲；Up 过滤利于 UI）
 static bool captureDisplayToPngDeflate(File& f, const int w, const int h, uint8_t* row, char* err,
                                        const size_t err_len) {
     auto& d = M5Cardputer.Display;
@@ -262,12 +385,17 @@ static bool captureDisplayToPngDeflate(File& f, const int w, const int h, uint8_
 
     auto* comp = static_cast<tdefl_compressor*>(malloc(sizeof(tdefl_compressor)));
     auto* dctx = static_cast<ShotDeflateCtx*>(malloc(sizeof(ShotDeflateCtx)));
-    if (comp == nullptr || dctx == nullptr) {
+    uint8_t* prev = static_cast<uint8_t*>(malloc(static_cast<size_t>(bpl)));
+    uint8_t* filtered = static_cast<uint8_t*>(malloc(static_cast<size_t>(bpl)));
+    if (comp == nullptr || dctx == nullptr || prev == nullptr || filtered == nullptr) {
         free(comp);
         free(dctx);
+        free(prev);
+        free(filtered);
         snprintf(err, err_len, "oom deflate heap=%u", ESP.getFreeHeap());
         return false;
     }
+    memset(prev, 0, static_cast<size_t>(bpl));
 
     ShotPngSink sink;
     sink.f = &f;
@@ -279,23 +407,27 @@ static bool captureDisplayToPngDeflate(File& f, const int w, const int h, uint8_
     dctx->ok = true;
 
     if (ok) {
-        // level 1：更快；UI 截图体积仍远小于 BMP
+        // level 6：UI 截图体积更小；仍远快于写 BMP
         static const lgfx_mz_uint kProbes[11] = {0, 1, 6, 32, 16, 32, 128, 256, 512, 768, 1500};
-        const int flags = static_cast<int>(kProbes[1]) | TDEFL_WRITE_ZLIB_HEADER;
+        const int flags = static_cast<int>(kProbes[2]) | TDEFL_WRITE_ZLIB_HEADER;
         if (tdefl_init(comp, shotDeflatePutter, dctx, flags) != TDEFL_STATUS_OKAY) {
             ok = false;
         }
     }
 
     if (ok) {
-        const uint8_t filter = 0;
+        const uint8_t filter = 2; // Up
         for (int y = 0; y < h; y++) {
+            d.readRectRGB(0, y, w, 1, row);
+            for (int i = 0; i < bpl; i++) {
+                filtered[i] = static_cast<uint8_t>(row[i] - prev[i]);
+            }
+            memcpy(prev, row, static_cast<size_t>(bpl));
             if (tdefl_compress_buffer(comp, &filter, 1, TDEFL_NO_FLUSH) < 0) {
                 ok = false;
                 break;
             }
-            d.readRectRGB(0, y, w, 1, row);
-            if (tdefl_compress_buffer(comp, row, static_cast<size_t>(bpl), TDEFL_NO_FLUSH) < 0) {
+            if (tdefl_compress_buffer(comp, filtered, static_cast<size_t>(bpl), TDEFL_NO_FLUSH) < 0) {
                 ok = false;
                 break;
             }
@@ -322,6 +454,8 @@ static bool captureDisplayToPngDeflate(File& f, const int w, const int h, uint8_
 
     free(comp);
     free(dctx);
+    free(prev);
+    free(filtered);
     if (!ok) {
         snprintf(err, err_len, sink.ok ? "png encode fail" : "png write fail");
         return false;
@@ -329,7 +463,7 @@ static bool captureDisplayToPngDeflate(File& f, const int w, const int h, uint8_
     return true;
 }
 
-// 逐行读屏流式写 PNG（RGB888，filter=None）
+// tdefl_compressor 约 160KB；不够则走 RLE
 static bool shotLowHeapForDeflate() {
     const size_t need = sizeof(tdefl_compressor) + sizeof(ShotDeflateCtx) + 4096u;
     return ESP.getMaxAllocHeap() < need;
@@ -358,11 +492,11 @@ static bool captureDisplayToPngFile(File& f, char* err, const size_t err_len) {
 
     d.waitDMA();
 
-    // 堆够走 tdefl；不够走 store（勿在同一文件上失败后再追加）
+    // 堆够走 tdefl；不够走 RLE（勿再用未压缩 store，体积≈旧 BMP）
     bool ok;
     if (shotLowHeapForDeflate()) {
-        Serial.printf("[shot] low heap maxalloc=%u, png store\n", ESP.getMaxAllocHeap());
-        ok = captureDisplayToPngStore(f, w, h, row, err, err_len);
+        Serial.printf("[shot] low heap maxalloc=%u, png rle\n", ESP.getMaxAllocHeap());
+        ok = captureDisplayToPngRle(f, w, h, row, err, err_len);
     } else {
         ok = captureDisplayToPngDeflate(f, w, h, row, err, err_len);
     }
@@ -748,17 +882,12 @@ static bool saveToFs(fs::FS& fs, const bool is_sd, const char* app_slug, char* o
         return false;
     }
 
-    const size_t min_free =
-        is_sd ? SHOT_MIN_FREE_SD
-              : (shotLowHeapForDeflate() ? SHOT_MIN_FREE_SAVE_STORE : SHOT_MIN_FREE_SAVE);
-    for (int i = 0; i < 4 && fsFreeBytes(fs, is_sd) < min_free; i++) {
-        if (!deleteLastOn(fs, is_sd)) {
-            break;
-        }
-    }
-    if (fsFreeBytes(fs, is_sd) < min_free) {
+    // 空间不足时不删旧图，只报错（由调用方提示）
+    const size_t min_free = is_sd ? SHOT_MIN_FREE_SD : SHOT_MIN_FREE_SAVE;
+    const size_t free_n = fsFreeBytes(fs, is_sd);
+    if (free_n < min_free) {
         snprintf(err, err_len, "%s full free=%u", is_sd ? "TF" : "fs",
-                 static_cast<unsigned>(fsFreeBytes(fs, is_sd)));
+                 static_cast<unsigned>(free_n));
         return false;
     }
 
@@ -789,7 +918,7 @@ static bool saveToFs(fs::FS& fs, const bool is_sd, const char* app_slug, char* o
     out.flush();
     const size_t sz = out.size();
     out.close();
-    // 防止编码“成功”却写出空/残缺文件
+    // 防止编码“成功”却写出空/残缺文件；亦拦截未压缩量级（约 ≥90KB）
     if (sz < 64) {
         fs.remove(path);
         snprintf(err, err_len, "empty shot %uB", static_cast<unsigned>(sz));
@@ -801,8 +930,8 @@ static bool saveToFs(fs::FS& fs, const bool is_sd, const char* app_slug, char* o
         strncpy(out_name, filename, out_name_len);
         out_name[out_name_len - 1] = '\0';
     }
-    Serial.printf("[shot] saved %s on %s free=%u\n", path, is_sd ? "TF" : "Flash",
-                  static_cast<unsigned>(fsFreeBytes(fs, is_sd)));
+    Serial.printf("[shot] saved %s (%uB) on %s free=%u\n", path, static_cast<unsigned>(sz),
+                  is_sd ? "TF" : "Flash", static_cast<unsigned>(fsFreeBytes(fs, is_sd)));
     return true;
 }
 
@@ -837,6 +966,21 @@ static void flashScreenshotFeedback() {
     d.invertDisplay(!inv);
     delay(50);
     d.invertDisplay(inv);
+}
+
+// 空间不足等失败：底栏黄条提示（约 1s；下层可能被盖住，交互后界面会重绘）
+static void showScreenshotFailTip(const char* msg) {
+    auto& d = M5Cardputer.Display;
+    const int screen_w = d.width();
+    const int screen_h = d.height();
+    const int box_h = 14;
+    const int box_y = screen_h - box_h - 1;
+    d.fillRect(0, box_y, screen_w, box_h, APP_COLOR_WARN);
+    d.setTextSize(1);
+    d.setTextColor(BLACK, APP_COLOR_WARN);
+    d.setCursor(4, box_y + 3);
+    d.print(msg != nullptr ? msg : "shot fail");
+    delay(1100);
 }
 
 bool tryHandleScreenshotHotkey() {
@@ -874,6 +1018,12 @@ bool tryHandleScreenshotHotkey() {
             playUiTone(300.0f, 80);
         }
         Serial.printf("[shot] Fn+s fail: %s\n", err);
+        // 空间不足：明确提示，不删旧截图
+        if (strstr(err, "full") != nullptr) {
+            showScreenshotFailTip("no space for shot");
+        } else {
+            showScreenshotFailTip("shot failed");
+        }
     }
     return true;
 }
@@ -1012,6 +1162,53 @@ int clearFlashScreenshots() {
 
 int clearAllScreenshots() {
     return clearTfScreenshots() + clearFlashScreenshots();
+}
+
+// 删除单张：storage 为 "TF" / "Flash"；name 为 basename
+bool deleteScreenshotFile(const char* storage, const char* basename) {
+    if (storage == nullptr || !isShotFileName(basename)) {
+        return false;
+    }
+    char path[64];
+    snprintf(path, sizeof(path), "%s/%s", SHOT_DIR, basename);
+    // 路径安全：与 isSafeShotPath 同规则
+    String uri = String(path);
+    if (!isSafeShotPath(uri)) {
+        return false;
+    }
+
+    fs::FS* fs = nullptr;
+    bool is_sd = false;
+    if (strcmp(storage, "TF") == 0) {
+        if (!shotEnsureSd()) {
+            return false;
+        }
+        fs = &SD;
+        is_sd = true;
+    } else if (strcmp(storage, "Flash") == 0) {
+        if (!LittleFS.begin(false)) {
+            return false;
+        }
+        fs = &LittleFS;
+    } else {
+        return false;
+    }
+
+    if (!fs->exists(path)) {
+        return false;
+    }
+    if (!fs->remove(path)) {
+        return false;
+    }
+
+    // 若删的是 .last 记录的那张，清掉指针
+    char last[48];
+    if (readLastShotNameOn(*fs, last, sizeof(last)) && strcmp(last, basename) == 0) {
+        fs->remove(SHOT_LAST);
+    }
+    Serial.printf("[shot] deleted %s on %s free=%u\n", basename, is_sd ? "TF" : "Flash",
+                  static_cast<unsigned>(fsFreeBytes(*fs, is_sd)));
+    return true;
 }
 
 bool isSafeShotPath(const String& uri) {

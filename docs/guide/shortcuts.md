@@ -19,9 +19,10 @@
 | `Fn` + `s` | 将当前屏幕保存为 PNG |
 
 - 优先写入 TF 卡；否则写入 Flash LittleFS：`/shot/app_<界面>_NNN.png`
-- 空间不足时自动删除最旧截图腾地方
+- 空间不足时**不删除**已有截图，仅提示 `no space for shot`
 - 成功后屏幕反色闪一下；提示音由 Options → Sound → `screenshot`（`sound.screenshot`）控制
-- 在 [Config](/apps/config) Web 的 `/shots` 可预览、下载、清空 TF / Flash 分区截图
+- 在 [Config](/apps/config) Web 的 `/shots` 可预览、单张下载 / 删除、清空 TF / Flash
+- Info → Storage 按 `c` 可清除全部截图（`y` 确认 / `n` 取消）
 
 ## 顶栏
 

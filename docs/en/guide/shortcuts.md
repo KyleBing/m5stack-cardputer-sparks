@@ -19,9 +19,10 @@ Most screens share the keys below. Each App may also have its own shortcuts — 
 | `Fn` + `s` | Save the current screen as PNG |
 
 - Prefer TF card; otherwise Flash LittleFS: `/shot/app_<screen>_NNN.png`
-- When space is low, the oldest shots are deleted automatically
+- When space is low, existing shots are **not** deleted; the device shows `no space for shot`
 - On success the screen flashes once (invert); beep is controlled by Options → Sound → `screenshot` (`sound.screenshot`)
-- Preview, download, or clear TF / Flash shots at `/shots` in [Config](/en/apps/config) Web
+- Preview, download, delete one, or clear TF / Flash shots at `/shots` in [Config](/en/apps/config) Web
+- Info → Storage: press `c` to clear all shots (`y` confirm / `n` cancel)
 
 ## Top Bar
 

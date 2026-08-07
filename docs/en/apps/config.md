@@ -38,7 +38,7 @@ Back to menu: `ESC` / `GO`.
 3. Common Web entry points:
    - Device and group editing
    - `/wifi`: up to 5 WiFi profiles and Active
-   - `/shots`: screenshot preview, download, clear TF / Flash
+   - `/shots`: screenshot preview, download, delete one, clear TF / Flash
    - `/about`: firmware version
    - RGB565 bake: `POST /bake-rgb565` (generate icon bake files on device; see [Image processing and baking](/en/dev/images))
 4. Saves write to LittleFS; some items (invert, volume) take effect immediately.

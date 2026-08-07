@@ -51,10 +51,13 @@ int clearAllScreenshots();
 int clearTfScreenshots();
 int clearFlashScreenshots();
 
+// 删除单张：storage 为 "TF" 或 "Flash"；basename 如 app_menu_001.png
+bool deleteScreenshotFile(const char* storage, const char* basename);
+
 // 删除 LittleFS 上最后一张截图（开机腾 Flash 用），成功返回 true
 bool deleteLastScreenshot();
 
-// 开机恢复：上次启动崩溃则删最后一张；空间不足则继续删到可用
+// 开机恢复：上次启动崩溃则删最后一张；mkdir 失败时再尝试腾空间
 // 并打上 boot_pending；setup 成功结束须调 markScreenshotBootOk()
 void recoverScreenshotsOnBoot();
 

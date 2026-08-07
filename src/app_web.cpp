@@ -398,8 +398,10 @@ static void sendHtmlPage(const String& body, const uint8_t css_flags = HTML_CSS_
             ".shot-card .meta{margin-top:6px;font-size:12px;line-height:1.35}"
             ".shot-card .meta a.name{color:var(--link);word-break:break-all}"
             ".shot-card .size{color:var(--hint)}"
-            ".shot-card .acts{margin-top:6px}"
-            ".shot-card .acts a.btn{margin:0;padding:4px 10px;font-size:12px}"
+            ".shot-card .acts{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}"
+            ".shot-card .acts form{margin:0}"
+            ".shot-card .acts a.btn,.shot-card .acts button{"
+            "margin:0;padding:4px 10px;font-size:12px}"
         ));
     }
     if (css_flags & HTML_CSS_FILES) {
@@ -1381,12 +1383,21 @@ static void handleSave() {
 static void handleExample() {
     String body;
     appendTopBar(body, "示例 config.json", WebNavTab::Example);
-    body += F("<p>WiFi 米家用 <code>ip</code> + <code>token</code>；"
-              "BLE 传感器用 <code>mac</code> + <code>ble.key</code>，可加 <code>name_zh</code>。"
-              "可选 <code>hotkey</code>（a-z/0-9，勿用 q）供设备端 Q 快速选择；重复时保留靠前第一个。"
-              "米家设备编组见 <code>device_groups</code>，成员用设备 <code>id</code> 引用。"
-              "系统项见 <a href='/system'>系统设置</a>（时区 / 屏幕 / 提示音 / infrared）。"
-              "Cursor 用量见 <a href='/cursor'>Cursor</a> 页。</p><pre>");
+    body += F(
+        "<p class='hint'>下面是一份完整的 <code>config.json</code> 示例，可复制到"
+        "「高级 JSON」粘贴保存，或对照各管理页逐项填写。</p>"
+        "<ul class='hint' style='padding-left:1.2em;line-height:1.55;margin:0 0 12px'>"
+        "<li><code>wifis</code> / <code>wifi_active</code>：WiFi 档案列表与当前选用的 SSID</li>"
+        "<li><code>devices</code>：米家设备。"
+        "WiFi 灯/插座等填 <code>ip</code>+<code>token</code>；"
+        "BLE 传感器填 <code>mac</code>+<code>ble.key</code>；"
+        "可选 <code>name_zh</code>、<code>hotkey</code>（a-z / 0-9，勿用 <code>q</code>）</li>"
+        "<li><code>device_groups</code>：编组；<code>members</code> 用设备 <code>id</code> 引用</li>"
+        "<li><code>screen</code> / <code>sound</code> / <code>time</code> / "
+        "<code>calendar</code> / <code>infrared</code>：系统项，也可在"
+        "<a href='/system'>系统设置</a>修改</li>"
+        "<li><code>cursor.token</code>：Cursor 用量，见 <a href='/cursor'>Cursor</a> 页</li>"
+        "</ul><pre>");
     body += DEFAULT_CONFIG;
     body += F("</pre>");
     appendCardEnd(body);
@@ -1468,7 +1479,7 @@ static void fmReadTimes(const String& sd_path, time_t& mtime, time_t& ctime_out)
     ctime_out = st.st_ctime;
 }
 
-// enumScreenshots 回调：往 HTML 网格追加一张
+// enumScreenshots 回调：往 HTML 网格追加一张（含单张删除）
 static void appendShotCard(const char* storage, const char* basename, const size_t size, void* user) {
     String* body = static_cast<String*>(user);
     *body += F("<div class='shot-card'>"
@@ -1492,7 +1503,17 @@ static void appendShotCard(const char* storage, const char* basename, const size
     *body += basename;
     *body += F("?dl=1' download='");
     *body += basename;
-    *body += F("'>下载</a></div></div></div>");
+    *body += F("'>下载</a>"
+               "<form method='POST' action='/shots/delete'>"
+               "<input type='hidden' name='src' value='");
+    *body += storage;
+    *body += F("'>"
+               "<input type='hidden' name='name' value='");
+    *body += basename;
+    *body += F("'>"
+               "<button type='submit' class='danger' "
+               "onclick=\"return confirm('删除这张截图？')\">删除</button>"
+               "</form></div></div></div>");
 }
 
 // 截图列表页：TF / Flash 分区；Fn+s 优先 TF，否则 Flash
@@ -1520,8 +1541,8 @@ static void handleShotsList() {
     appendTopBar(body, "截图", WebNavTab::Shots);
     body += F("<p class='hint'>任意界面按 <code>Fn+s</code> 截图："
               "有 TF 卡优先存卡，否则存 Flash；"
-              "文件名 <code>app_&lt;界面&gt;_001.png</code> 序号递增（PNG 压缩，远小于旧 BMP）。"
-              "本页可预览、单张下载，或流式打包成 ZIP（不二次压缩，较省内存）。</p>"
+              "文件名 <code>app_&lt;界面&gt;_001.png</code> 序号递增。"
+              "本页可预览、单张下载 / 删除，或打包 ZIP。</p>"
               "<p class='hint'>新截图将存到：<strong>");
     body += sd_ok ? F("TF 卡") : F("Flash（LittleFS）");
     body += F("</strong></p>");
@@ -1892,6 +1913,40 @@ static void handleShotsClearTf() {
 // 清空 Flash 截图
 static void handleShotsClearFlash() {
     sendShotsClearResult("已清空 Flash", clearFlashScreenshots(), "Flash");
+}
+
+// 删除单张截图（src=TF|Flash，name=basename）
+static void handleShotsDeleteOne() {
+    const String src = g_server.hasArg("src") ? g_server.arg("src") : "";
+    const String name = g_server.hasArg("name") ? g_server.arg("name") : "";
+    String body;
+    if (src.length() == 0 || name.length() == 0) {
+        appendTopBar(body, "删除失败");
+        body += F("<p class='err'>缺少参数。</p>"
+                  "<p><a href='/shots'>返回截图</a></p>");
+        appendCardEnd(body);
+        sendHtmlPage(body);
+        return;
+    }
+    if (deleteScreenshotFile(src.c_str(), name.c_str())) {
+        appendTopBar(body, "已删除");
+        body += F("<p>已删除 ");
+        body += name;
+        body += F("（");
+        body += src;
+        body += F("）。</p>"
+                  "<p><a href='/shots'>返回截图</a></p>");
+    } else {
+        appendTopBar(body, "删除失败");
+        body += F("<p class='err'>无法删除 ");
+        body += name;
+        body += F("（");
+        body += src;
+        body += F("）。</p>"
+                  "<p><a href='/shots'>返回截图</a></p>");
+    }
+    appendCardEnd(body);
+    sendHtmlPage(body);
 }
 
 // ===== TF 卡文件管理（仅 Config Web）=====
@@ -2677,6 +2732,7 @@ static void registerWebRoutes() {
     g_server.on("/shots/zip", HTTP_GET, handleShotsZip);
     g_server.on("/shots/clear-tf", HTTP_POST, handleShotsClearTf);
     g_server.on("/shots/clear-flash", HTTP_POST, handleShotsClearFlash);
+    g_server.on("/shots/delete", HTTP_POST, handleShotsDeleteOne);
     g_server.on("/files", HTTP_GET, handleFilesList);
     g_server.on("/files/delete", HTTP_POST, handleFilesDelete);
     g_server.on("/files/mkdir", HTTP_POST, handleFilesMkdir);

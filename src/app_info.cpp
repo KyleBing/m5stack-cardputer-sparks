@@ -101,6 +101,11 @@ static uint32_t g_drawn_sto_tf_total = 0;
 static bool g_drawn_sto_tf_ok = false;
 static bool g_drawn_sto_valid = false;
 
+// Storage：清除截图确认（c → y/n）
+static bool g_sto_clear_confirm = false;
+static char g_sto_shots_line[28] = "";
+static char g_drawn_sto_shots_line[28] = "";
+
 // 文字页上次已绘制行（按值比较，跳过未变行）
 static char g_drawn_sec_vals[INFO_MAX_LINES][28] = {};
 static int g_drawn_sec_count = 0;
@@ -495,11 +500,13 @@ static void drawInfoStorageShell(const int x, const int y, const int w) {
     cy = drawStorageBarRow(x, cy, w, "Flash", 0, 0, 0, true);
     cy = drawStorageBarRow(x, cy, w, "TF", 0, 0, 0, true);
 
-    // 补充两行说明，避免内容区太空
-    M5Cardputer.Display.fillRect(x, cy, w, INFO_LINE_H * 2, BLACK);
+    // 补充说明，避免内容区太空
+    M5Cardputer.Display.fillRect(x, cy, w, INFO_LINE_H * 3, BLACK);
     drawInfoLineAt(x, cy, "Flash", "LittleFS", INFO_BODY_SIZE);
     cy += INFO_LINE_H;
     drawInfoLineAt(x, cy, "TF", "optional", INFO_BODY_SIZE);
+    cy += INFO_LINE_H;
+    drawInfoLineAt(x, cy, "Shots", "--", INFO_BODY_SIZE);
 }
 
 // 采样 Storage（Flash/TF 均降频；无 TF 时本页内不反复挂载）
@@ -531,6 +538,20 @@ static void sampleInfoStorage(const bool force_slow) {
         g_sto_tf_ok = g_sto_tf_total > 0;
         g_sto_tf_probed = true;
     }
+
+    // 截图张数 / 占用（清除后立刻刷新）
+    const int shot_n = countScreenshots();
+    const size_t shot_b = screenshotsUsedBytes();
+    if (shot_n <= 0) {
+        strncpy(g_sto_shots_line, "0", sizeof(g_sto_shots_line) - 1);
+    } else if (shot_b >= 1024u) {
+        snprintf(g_sto_shots_line, sizeof(g_sto_shots_line), "%d / %uKB", shot_n,
+                 static_cast<unsigned>(shot_b / 1024u));
+    } else {
+        snprintf(g_sto_shots_line, sizeof(g_sto_shots_line), "%d / %uB", shot_n,
+                 static_cast<unsigned>(shot_b));
+    }
+    g_sto_shots_line[sizeof(g_sto_shots_line) - 1] = '\0';
 
     g_sto_cache_valid = true;
 }
@@ -583,12 +604,16 @@ static void drawInfoStoragePage(const int x, const int y, const int w, const boo
         cy += row_h;
     }
 
-    // 说明行：翻页强刷，或 TF 挂载状态变化时重画
-    if (footer_dirty) {
-        M5Cardputer.Display.fillRect(x, cy, w, INFO_LINE_H * 2, BLACK);
+    // 说明行：翻页强刷，或 TF / 截图统计变化时重画
+    if (footer_dirty || strcmp(g_drawn_sto_shots_line, g_sto_shots_line) != 0) {
+        M5Cardputer.Display.fillRect(x, cy, w, INFO_LINE_H * 3, BLACK);
         drawInfoLineAt(x, cy, "Flash", "LittleFS", INFO_BODY_SIZE);
         cy += INFO_LINE_H;
         drawInfoLineAt(x, cy, "TF", g_sto_tf_ok ? "mounted" : "not present", INFO_BODY_SIZE);
+        cy += INFO_LINE_H;
+        drawInfoLineAt(x, cy, "Shots", g_sto_shots_line, INFO_BODY_SIZE);
+        strncpy(g_drawn_sto_shots_line, g_sto_shots_line, sizeof(g_drawn_sto_shots_line) - 1);
+        g_drawn_sto_shots_line[sizeof(g_drawn_sto_shots_line) - 1] = '\0';
     }
 
     g_drawn_sto_valid = true;
@@ -711,6 +736,22 @@ static void drawInfoHints() {
                                  BLACK);
 
     int cx = APP_CONTENT_X;
+    // Storage 清除确认：y/n
+    if (g_info_page == static_cast<int>(InfoPage::Storage) && g_sto_clear_confirm) {
+        cx += drawKeyBadge(cx, hint_y, 'y', 1);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(cx, hint_y);
+        M5Cardputer.Display.print("yes ");
+        cx = M5Cardputer.Display.getCursorX();
+        cx += drawKeyBadge(cx, hint_y, 'n', 1);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(cx, hint_y);
+        M5Cardputer.Display.print("no");
+        return;
+    }
+
     cx += drawTextBadge(cx, hint_y, "[ ]", 1);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK); // 徽章后恢复 tip 色
@@ -721,6 +762,18 @@ static void drawInfoHints() {
     char pager[12];
     snprintf(pager, sizeof(pager), "%d/%d", g_info_page + 1, static_cast<int>(InfoPage::Count));
     M5Cardputer.Display.print(pager);
+    cx = M5Cardputer.Display.getCursorX();
+
+    // Storage：c 清除全部截图
+    if (g_info_page == static_cast<int>(InfoPage::Storage)) {
+        M5Cardputer.Display.print(" ");
+        cx = M5Cardputer.Display.getCursorX();
+        cx += drawKeyBadge(cx, hint_y, 'c', 1);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(cx, hint_y);
+        M5Cardputer.Display.print("clear");
+    }
 }
 
 // 采样当前页到缓存（不碰屏幕）
@@ -758,6 +811,7 @@ static void drawInfoContent(const bool force) {
 static void invalidateInfoDrawnCache() {
     g_drawn_mem_valid = false;
     g_drawn_sto_valid = false;
+    g_drawn_sto_shots_line[0] = '\0';
     g_drawn_sec_count = 0;
     g_drawn_sec_page = -1;
 }
@@ -818,6 +872,7 @@ static bool advanceInfoPage(const int delta) {
     if (count <= 1 || delta == 0) {
         return false;
     }
+    g_sto_clear_confirm = false;
     g_info_page = (g_info_page + delta + count) % count;
     g_sec_cache_valid = false;
     g_mem_cache_valid = false;
@@ -846,6 +901,7 @@ void enterInfoApp() {
     g_mem_cache_valid = false;
     g_sto_cache_valid = false;
     g_sto_tf_probed = false;
+    g_sto_clear_confirm = false;
     g_info_last_slow_ms = 0;
     invalidateInfoDrawnCache();
     drawInfoApp(true);
@@ -868,6 +924,37 @@ void updateInfoApp() {
 }
 
 void handleInfoApp(const Keyboard_Class::KeysState& status) {
+    // Storage：清除截图确认 / 触发
+    if (g_info_page == static_cast<int>(InfoPage::Storage)) {
+        for (const char c : status.word) {
+            if (g_sto_clear_confirm) {
+                if (c == 'y' || c == 'Y') {
+                    g_sto_clear_confirm = false;
+                    const int n = clearAllScreenshots();
+                    Serial.printf("[info] cleared %d screenshots\n", n);
+                    g_sto_cache_valid = false;
+                    g_sto_tf_probed = false;
+                    invalidateInfoDrawnCache();
+                    drawInfoApp(true);
+                    return;
+                }
+                if (c == 'n' || c == 'N') {
+                    g_sto_clear_confirm = false;
+                    drawInfoHints();
+                    return;
+                }
+            } else if (c == 'c' || c == 'C') {
+                g_sto_clear_confirm = true;
+                drawInfoHints();
+                return;
+            }
+        }
+        // 确认态下禁止翻页误触，等 y/n
+        if (g_sto_clear_confirm) {
+            return;
+        }
+    }
+
     const int bracket = getInfoBracketDelta(status);
     if (bracket != 0) {
         if (advanceInfoPage(bracket)) {

@@ -38,7 +38,7 @@
 3. Web 常见入口：
    - 设备与编组编辑
    - `/wifi`：多 WiFi 档案（最多 5 条）与 Active
-   - `/shots`：截图预览、下载、清空 TF / Flash
+   - `/shots`：截图预览、单张下载 / 删除、清空 TF / Flash
    - `/about`：固件版本信息
    - RGB565 烘焙：`POST /bake-rgb565`（现场生成图标 bake 文件；说明见 [图片处理与烘焙](/dev/images)）
 4. 修改保存后写入 LittleFS；部分项（如反色、音量）会立即生效。
