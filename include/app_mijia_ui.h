@@ -8,6 +8,7 @@
 static constexpr int MIJIA_ICON_BASE = 16; // 16x16 设计基准
 static constexpr int MIJIA_ICON_SCALE_DEFAULT = 1;
 static constexpr int MIJIA_ICON_SCALE_LIST = 2;        // 概览列表矢量图标倍数
+static constexpr int MIJIA_ICON_SCALE_INFO = 3;        // Info 页矢量回退约 48px（近 50）
 static constexpr int MIJIA_LIST_VISIBLE_COUNT = 3;     // 概览列表每页设备数
 static constexpr int MIJIA_GRID_COLS = 3;             // 概览宫格列数
 static constexpr int MIJIA_GRID_ROWS = 3;             // 概览宫格行数
@@ -48,6 +49,11 @@ void drawMijiaDeviceIconFor(const MijiaDevice* dev, MijiaDevKind kind, int x, in
 void drawMijiaDeviceIconForList(const MijiaDevice* dev, MijiaDevKind kind, int x, int y,
                                 uint16_t color, bool active,
                                 int scale = MIJIA_ICON_SCALE_LIST, float png_scale = 1.0f);
+
+// Info 页：优先 _50w.png，失败回退矢量图标
+void drawMijiaDeviceIconForInfo(const MijiaDevice* dev, MijiaDevKind kind, int x, int y,
+                                uint16_t color, bool active,
+                                int scale = MIJIA_ICON_SCALE_INFO, float png_scale = 1.0f);
 
 // 圆角 tag，active 时高亮；返回占用宽度（含间距）
 int drawMijiaStatusTag(int x, int y, const char* text, bool active, uint16_t active_bg,
