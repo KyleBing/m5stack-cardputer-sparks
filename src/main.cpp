@@ -2495,6 +2495,7 @@ static void drawDispVLines1px(const int x, const int y, const int w, const int h
 
 // 屏幕验证图案（无 header，全屏图案 + 底部说明）
 void drawDisplayApp(const int patternIndex) {
+    clearAppHeaderStatusRefresh(); // 全屏测屏，禁止刷 header 状态
     static const uint16_t solid_colors[] = {RED, GREEN, BLUE, YELLOW, CYAN, MAGENTA, WHITE};
     const int count = static_cast<int>(DispPattern::COUNT);
     dispPatternIndex = ((patternIndex % count) + count) % count;
@@ -2653,6 +2654,8 @@ static void leaveHardwareTestChild(const HardwareTestMode mode) {
         leaveLedApp();
     } else if (mode == HardwareTestMode::MIC) {
         leaveMicApp();
+    } else if (mode == HardwareTestMode::BLE) {
+        leaveBleApp();
     }
     g_i2c_help_visible = false;
 }
@@ -2755,6 +2758,9 @@ static SleepPhase sleepPhase = SleepPhase::NONE;
 static uint32_t sleepPromptMs = 0;
 static int sleepPromptLastSec = -1;
 static uint8_t sleepSavedBrightness = 30;
+static bool g_sleep_help_visible = false;
+// 打开 Help 时已流逝的倒计时，关闭后继续
+static uint32_t sleepHelpFrozenElapsed = 0;
 // 倒计时数字区布局（局部刷新用）
 static int sleepCountX = 0;
 static int sleepCountY = 0;
@@ -2765,20 +2771,21 @@ static int sleepCountH = 0;
 static constexpr gpio_num_t SLEEP_WAKE_PIN = GPIO_NUM_0;
 static constexpr uint32_t SLEEP_PROMPT_MS = 5000;
 
-// Sleep 页右侧 ButtonGo 示意图（data/icon/btngo.png）
-static constexpr const char* SLEEP_BTNGO_ICON_PATH = "/icon/btngo.png";
-static constexpr int SLEEP_BTNGO_ICON_W = 138;
-static constexpr int SLEEP_BTNGO_ICON_H = 88;
-static constexpr int SLEEP_BTNGO_ICON_RIGHT_PAD = 10; // 距右缘至少 10px
+// Sleep 页右上角 BtnGO 示意图（data/icon/btngo_deep|light.png）
+static constexpr int SLEEP_BTNGO_ICON_W = 130;
+static constexpr int SLEEP_BTNGO_ICON_RIGHT_PAD = 10;
+static constexpr int SLEEP_BTNGO_ICON_Y = 28;
+static constexpr int SLEEP_TITLE_X = 10;
+static constexpr int SLEEP_TITLE_Y = 10;
+static constexpr int SLEEP_MODE_Y = 34;
+static constexpr int SLEEP_COUNT_Y = 99; // 底边对齐区上移 8px
 
-// 右对齐绘制 ButtonGo 图标（内容区垂直居中）
-static void drawSleepBtnGoIcon() {
-    const int screen_w = M5Cardputer.Display.width();
-    const int screen_h = M5Cardputer.Display.height();
-    const int x = screen_w - SLEEP_BTNGO_ICON_RIGHT_PAD - SLEEP_BTNGO_ICON_W;
-    const int content_h = screen_h - APP_CONTENT_Y;
-    const int y = APP_CONTENT_Y + (content_h - SLEEP_BTNGO_ICON_H) / 2;
-    drawLittleFsPng(SLEEP_BTNGO_ICON_PATH, x, y, 1.0f);
+// 右上角绘制对应模式的 BtnGO 图标
+static void drawSleepBtnGoIcon(const bool deep) {
+    const char* path = deep ? "/icon/btngo_deep.png" : "/icon/btngo_light.png";
+    const int x =
+        M5Cardputer.Display.width() - SLEEP_BTNGO_ICON_RIGHT_PAD - SLEEP_BTNGO_ICON_W;
+    drawLittleFsPng(path, x, SLEEP_BTNGO_ICON_Y, 1.0f);
 }
 
 // 入睡前断开无线
@@ -2837,90 +2844,113 @@ static void enterDeepSleep() {
     esp_deep_sleep_start();
 }
 
-// 仅刷新倒计时数字
+// 仅刷新底部「enter in Ns」（数字 x3，前缀保持 x2）
 static void drawSleepCountdownOnly(const int seconds_left) {
-    char buf[8];
-    snprintf(buf, sizeof(buf), "%ds", seconds_left);
+    char sec_buf[8];
+    snprintf(sec_buf, sizeof(sec_buf), "%ds", seconds_left);
+
+    const char* prefix = "enter in ";
+    M5Cardputer.Display.setTextSize(2);
+    const int prefix_w = M5Cardputer.Display.textWidth(prefix);
     M5Cardputer.Display.setTextSize(3);
+    const int sec_w = M5Cardputer.Display.textWidth(sec_buf);
+    const int total_w = prefix_w + sec_w;
+    const int num_h = infoLineHeight(3);
+    const int prefix_h = infoLineHeight(2);
+    // 与右上图标右缘对齐；前缀与数字底边对齐
+    const int icon_right =
+        M5Cardputer.Display.width() - SLEEP_BTNGO_ICON_RIGHT_PAD;
+    const int x = icon_right - total_w;
+    const int prefix_y = SLEEP_COUNT_Y + (num_h - prefix_h);
+
     if (sleepCountW > 0) {
         M5Cardputer.Display.fillRect(sleepCountX, sleepCountY, sleepCountW, sleepCountH, BLACK);
     }
+    sleepCountX = x;
+    sleepCountY = SLEEP_COUNT_Y;
+    sleepCountW = total_w;
+    sleepCountH = num_h;
+
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setTextColor(WHITE, BLACK);
+    M5Cardputer.Display.setCursor(x, prefix_y);
+    M5Cardputer.Display.print(prefix);
+    M5Cardputer.Display.setTextSize(3);
     M5Cardputer.Display.setTextColor(YELLOW, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, sleepCountY);
-    M5Cardputer.Display.print(buf);
-    sleepCountW = M5Cardputer.Display.textWidth(buf);
-    sleepCountH = 24;
-    sleepCountX = APP_CONTENT_X;
+    M5Cardputer.Display.setCursor(x + prefix_w, SLEEP_COUNT_Y);
+    M5Cardputer.Display.print(sec_buf);
 }
 
-// 浅休眠提示：默认路径，倒计时内按 s 可切到深度休眠
+// 无 header：左上 Sleep/模式，右上 BtnGO 图，底部倒计时（无 tip，h 进 help）
+static void drawSleepPrompt(const bool deep, const int seconds_left) {
+    M5Cardputer.Display.fillScreen(BLACK);
+
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setTextColor(WHITE, BLACK);
+    M5Cardputer.Display.setCursor(SLEEP_TITLE_X, SLEEP_TITLE_Y);
+    M5Cardputer.Display.print("Sleep");
+    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
+    M5Cardputer.Display.setCursor(SLEEP_TITLE_X, SLEEP_MODE_Y);
+    M5Cardputer.Display.print(deep ? "Deep" : "Light");
+
+    drawSleepBtnGoIcon(deep);
+
+    sleepCountW = 0;
+    drawSleepCountdownOnly(seconds_left);
+}
+
 static void drawLightSleepPrompt(const int seconds_left) {
-    // Header：Sleep + Light（次要色）
-    beginAppScreenAccent("Sleep ", "Light", APP_COLOR_LABEL);
-    // 先画右侧示意图，再画左侧文案（重叠处文字压在图标上）
-    drawSleepBtnGoIcon();
-
-    int y = APP_CONTENT_INSET_Y;
-    M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
-    M5Cardputer.Display.print("Will enter in");
-    y += INFO_LINE_H_2X + 4;
-
-    sleepCountY = y;
-    sleepCountX = APP_CONTENT_X;
-    sleepCountW = 0;
-    drawSleepCountdownOnly(seconds_left);
-    y += 30;
-
-    // 两行 2x 提示：BtnGO wake / S Deep
-    int cx = APP_CONTENT_X;
-    cx += drawTextBadge(cx, y, "BtnGO", 2);
-    M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print("wake");
-    y += INFO_LINE_H_2X + 4;
-
-    cx = APP_CONTENT_X;
-    cx += drawKeyBadge(cx, y, 's', 2);
-    M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print("Deep");
+    drawSleepPrompt(false, seconds_left);
 }
 
-// 深度休眠提示
 static void drawDeepSleepPrompt(const int seconds_left) {
-    // Header：Sleep + Deep（次要色）
-    beginAppScreenAccent("Sleep ", "Deep", APP_COLOR_LABEL);
-    drawSleepBtnGoIcon();
+    drawSleepPrompt(true, seconds_left);
+}
 
-    int y = APP_CONTENT_INSET_Y;
+// Sleep Help：无 header 全屏，风格对齐 Time Help
+static void drawSleepHelpPage() {
+    M5Cardputer.Display.fillScreen(BLACK);
+
+    constexpr int title_y = 2;
     M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
-    M5Cardputer.Display.print("Will enter in");
-    y += INFO_LINE_H_2X + 4;
+    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
+    M5Cardputer.Display.setCursor(2, title_y);
+    M5Cardputer.Display.print("Help");
+    int y = title_y + 16 + 10;
 
-    sleepCountY = y;
-    sleepCountX = APP_CONTENT_X;
-    sleepCountW = 0;
-    drawSleepCountdownOnly(seconds_left);
-    y += 30;
+    y = drawSimpleHelpKey(2, y, 's', "to deep sleep");
+    y = drawSimpleHelpKey(2, y, 'h', "help / close");
+    y = drawSimpleHelpBadge(2, y, "BtnGO", "cancel");
+    y = drawSimpleHelpText(2, y, "Light: wake resume");
+    y = drawSimpleHelpText(2, y, "Deep: wake reboot");
+    y = drawSimpleHelpText(2, y, "5s then sleep; side BtnA wakes");
 
-    int cx = APP_CONTENT_X;
-    cx += drawTextBadge(cx, y, "BtnGO", 2);
-    M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print("wake");
-    y += INFO_LINE_H_2X + 4;
+    drawHelpHintRight("close");
+}
 
-    M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setTextColor(APP_COLOR_MUTED, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
-    M5Cardputer.Display.print("reboot on wake");
+// 按当前剩余秒重绘倒计时页
+static void redrawSleepPrompt() {
+    const uint32_t elapsed = millis() - sleepPromptMs;
+    int sec_left = 5 - static_cast<int>(elapsed / 1000);
+    if (sec_left < 1) {
+        sec_left = 1;
+    }
+    sleepPromptLastSec = -1;
+    drawSleepPrompt(sleepPhase == SleepPhase::PROMPT_DEEP, sec_left);
+}
+
+static void toggleSleepHelp() {
+    if (g_sleep_help_visible) {
+        // 关闭 Help：恢复倒计时并重绘提示页
+        g_sleep_help_visible = false;
+        sleepPromptMs = millis() - sleepHelpFrozenElapsed;
+        redrawSleepPrompt();
+        return;
+    }
+    // 打开 Help：冻结倒计时
+    sleepHelpFrozenElapsed = millis() - sleepPromptMs;
+    g_sleep_help_visible = true;
+    drawSleepHelpPage();
 }
 
 // 进入浅休眠提示流程（5 秒后进 light sleep）
@@ -2929,7 +2959,7 @@ static void enterSleepApp() {
     sleepPhase = SleepPhase::PROMPT_LIGHT;
     sleepPromptMs = millis();
     sleepPromptLastSec = -1;
-    M5Cardputer.Display.clear();
+    g_sleep_help_visible = false;
     drawLightSleepPrompt(5);
 }
 
@@ -2938,12 +2968,17 @@ static void switchToDeepSleepPrompt() {
     sleepPhase = SleepPhase::PROMPT_DEEP;
     sleepPromptMs = millis();
     sleepPromptLastSec = -1;
+    g_sleep_help_visible = false;
     drawDeepSleepPrompt(5);
 }
 
 // 倒计时结束后进入对应休眠（light sleep 唤醒后会返回）
 static void updateSleepPrompt() {
     if (sleepPhase != SleepPhase::PROMPT_LIGHT && sleepPhase != SleepPhase::PROMPT_DEEP) {
+        return;
+    }
+    // Help 打开时倒计时已冻结，不推进
+    if (g_sleep_help_visible) {
         return;
     }
 
@@ -2968,6 +3003,8 @@ static void updateSleepPrompt() {
 
 void enterApp(const AppState state) {
     menuNoAppPrompt = false;
+    // 默认不刷 header 状态；各 app 绘制共享 header 时再 opt-in
+    clearAppHeaderStatusRefresh();
     if (currentState == AppState::MIC && state != AppState::MIC) {
         leaveMicApp();
     }
@@ -2985,6 +3022,9 @@ void enterApp(const AppState state) {
     }
     if (currentState == AppState::HARDWARE_TESTS && state != AppState::HARDWARE_TESTS) {
         leaveHardwareTestChild(hardwareTestMode);
+    }
+    if (currentState == AppState::BLE && state != AppState::BLE) {
+        leaveBleApp();
     }
     if (currentState == AppState::MORSE && state != AppState::MORSE) {
         leaveMorseApp();
@@ -3206,6 +3246,7 @@ void loop() {
         // btngo：取消休眠倒计时并回主菜单（入睡唤醒仍用侧边 BtnA）
         if (wasBtnGoPressed()) {
             sleepPhase = SleepPhase::NONE;
+            g_sleep_help_visible = false;
             showMenu();
             return;
         }
@@ -3219,7 +3260,10 @@ void loop() {
                 // Fn 按下时不消费字母键（留给全局热键）
                 if (!status.fn) {
                     const String key = getPressedKey();
-                    if (key == "s" && sleepPhase == SleepPhase::PROMPT_LIGHT) {
+                    if (key == "h") {
+                        toggleSleepHelp();
+                    } else if (!g_sleep_help_visible && key == "s" &&
+                               sleepPhase == SleepPhase::PROMPT_LIGHT) {
                         switchToDeepSleepPrompt();
                     }
                 }
@@ -3262,6 +3306,9 @@ void loop() {
             if (currentState == AppState::RTC) {
                 leaveRtcApp();
             }
+            if (currentState == AppState::BLE) {
+                leaveBleApp();
+            }
             showMenu();
             return;
         }
@@ -3272,25 +3319,13 @@ void loop() {
     // 开机期间按整点记录电池（sleep 中不跑 loop）
     batteryLogTick();
 
-    // 主菜单 / 子界面 header 状态定时刷新
+    // 主菜单 / 子界面 header 状态定时刷新（子界面靠绘制 header 时 opt-in）
     static uint32_t lastHeaderStatusMs = 0;
     if (now - lastHeaderStatusMs >= 2000) {
         lastHeaderStatusMs = now;
         if (currentState == AppState::MENU) {
             updateMenuHeaderStatus(getMenuPageCount());
-        } else if (currentState != AppState::SLEEP && currentState != AppState::DISP &&
-                   currentState != AppState::NEON_FX && currentState != AppState::DICE &&
-                   currentState != AppState::NEWTON_CRADLE && currentState != AppState::GAMES &&
-                   currentState != AppState::HARDWARE_TESTS &&
-                   // Time 全屏无 header（含 Help），不刷状态图标
-                   !(currentState == AppState::RTC && isTimePureMode()) &&
-                   !(currentState == AppState::CURSOR && isCursorDisplayBlanked()) &&
-                   !(currentState == AppState::MIJIA && mijiaAppSuppressesHeader()) &&
-                   !(currentState == AppState::IR && irAppSuppressesHeader()) &&
-                   !(currentState == AppState::AC_AUTO && acAutoAppSuppressesHeader()) &&
-                   !(currentState == AppState::WIFI && wifiAppSuppressesHeader()) &&
-                   !(currentState == AppState::HID_KEYBOARD && hidKeyboardSuppressesHeader()) &&
-                   !(currentState == AppState::WEB && webAppSuppressesHeader())) {
+        } else {
             updateAppHeaderStatus();
         }
     }

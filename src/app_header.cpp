@@ -2,7 +2,9 @@
 #include "app_icons.h"
 #include "app_common.h"
 #include "app_connectivity.h"
+#include "app_cursor.h"
 #include "app_hid_keyboard.h"
+#include "app_ir.h"
 #include "app_mijia.h"
 #include "app_mijia_ui.h"
 #include "app_web.h"
@@ -15,6 +17,8 @@ static constexpr int HEADER_STATUS_CLEAR_PAD = 2;
 static constexpr int HEADER_RIGHT_PAD = 8;
 static bool s_app_header_draw_divider = true;
 static bool s_app_header_include_battery = false;
+// 共享 header 已绘制 → 允许定时刷新状态图标（opt-in）
+static bool s_app_header_status_refresh = false;
 // 子界面 header 分页圆点（hub 页用）；page_count <= 1 表示不显示
 static int s_app_header_page = 0;
 static int s_app_header_page_count = 1;
@@ -129,6 +133,7 @@ static void drawHeaderDivider(const int screen_w) {
 // page_count <= 1 时不画圆点，同时清掉上个界面残留的分页状态
 static void drawAppHeaderCore(const char* title, const char* accent, const uint16_t accent_color,
                               const bool draw_divider, const int page, const int page_count) {
+    s_app_header_status_refresh = true;
     s_app_header_draw_divider = draw_divider;
     s_app_header_page = page;
     s_app_header_page_count = page_count;
@@ -231,6 +236,7 @@ void beginAppScreenWithDevicePager(const char* title, const int device_idx, cons
 }
 
 void drawMenuScreenHeader(const char* app_name, const int page, const int page_count) {
+    s_app_header_status_refresh = true;
     const int screen_w = M5Cardputer.Display.width();
     M5Cardputer.Display.fillRect(0, 0, screen_w, APP_HEADER_H, BLACK);
 
@@ -288,9 +294,24 @@ void updateMenuHeaderStatus(const int page_count) {
     }
 }
 
+void clearAppHeaderStatusRefresh() {
+    s_app_header_status_refresh = false;
+}
+
+bool isAppHeaderStatusRefreshEnabled() {
+    if (!s_app_header_status_refresh) {
+        return false;
+    }
+    // 同 app 内临时全屏（Help 外遥控 / 快捷键编辑 / Config UI / 灭屏等）
+    if (hidKeyboardSuppressesHeader() || mijiaAppSuppressesHeader() || webAppSuppressesHeader() ||
+        irAppSuppressesHeader() || isCursorDisplayBlanked()) {
+        return false;
+    }
+    return true;
+}
+
 void updateAppHeaderStatus() {
-    // Keyboard / 米家 Exiting / Config 等期间禁止刷蓝牙等图标
-    if (hidKeyboardSuppressesHeader() || mijiaAppSuppressesHeader() || webAppSuppressesHeader()) {
+    if (!isAppHeaderStatusRefreshEnabled()) {
         return;
     }
     static int prev_clear_left = -1;

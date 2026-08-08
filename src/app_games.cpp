@@ -935,6 +935,7 @@ static void drawHelpLine(const int y, const char* key, const char* text) {
 }
 
 static void drawHelp() {
+    clearAppHeaderStatusRefresh(); // Help 自绘全屏标题，无共享 header
     M5Cardputer.Display.fillScreen(BLACK);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
@@ -1182,6 +1183,10 @@ static bool sampleImu() {
 
 static void selectMode(const GameMode mode) {
     leaveModeApp(g_mode);
+    if (mode != GameMode::HUB) {
+        // 离开 hub 后为全屏游戏；hub 重进时 beginAppHubScreen 会再 opt-in
+        clearAppHeaderStatusRefresh();
+    }
     if (mode == GameMode::HUB) {
         if (g_canvas_ok) {
             gamesCanvas.deleteSprite();

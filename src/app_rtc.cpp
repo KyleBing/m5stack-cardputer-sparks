@@ -820,11 +820,6 @@ void handleTimeApp(const Keyboard_Class::KeysState& status) {
     }
 }
 
-bool isTimePureMode() {
-    // Time 全部页面（含 Help / 同步提示）均无 header
-    return true;
-}
-
 bool isTimeClockLikeMode() {
     // Uptime / Clock（含 big time）可降频；CD/SW 需更高刷新
     return !timeHelpVisible &&

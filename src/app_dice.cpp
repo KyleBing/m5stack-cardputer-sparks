@@ -1162,6 +1162,7 @@ void handleDiceApp(const Keyboard_Class::KeysState& status) {
                 g_space_held = false;
                 drawHelpPage();
             } else {
+                clearAppHeaderStatusRefresh(); // 回到全屏 canvas
                 M5Cardputer.Display.clear();
                 if (diceCanvasOk) {
                     diceCanvas.pushSprite(0, 0);

@@ -366,6 +366,17 @@ void enterBleApp() {
     drawBleApp(true);
 }
 
+// 退出时完整释放 BLE 栈，避免扫描后仍占协议栈 / header 显示蓝牙
+void leaveBleApp() {
+    bleScreenReady = false;
+    bleHelpVisible = false;
+    bleScanning = false;
+    if (isBleScanBusy()) {
+        endBleScanSession(false);
+    }
+    resetBleStackFully();
+}
+
 void updateBleApp() {
     if (!bleScreenReady || bleHelpVisible) {
         return;

@@ -47,8 +47,12 @@ void updateMenuPageDots(int page, int page_count);
 // 刷新主菜单 header 状态区（电量 / WiFi / BLE）
 void updateMenuHeaderStatus(int page_count);
 
-// 刷新子界面 header 状态区（WiFi / BLE）
+// 刷新子界面 header 状态区（WiFi / BLE）；仅在共享 header 已绘制且未 suppress 时生效
 void updateAppHeaderStatus();
+
+// 绘制共享 header 时自动置位；全屏/无 header 界面应清除，避免定时刷状态图标
+void clearAppHeaderStatusRefresh();
+bool isAppHeaderStatusRefreshEnabled();
 
 // 仅刷新主菜单 header 电量块（兼容旧调用）
 void updateMenuScreenBattery(int page_count);

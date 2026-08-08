@@ -8,8 +8,6 @@ void updateRtcApp();
 // 每帧轮询 BtnA（Countdown / Stopwatch 开始暂停）
 void pollTimeAppBtnA();
 void handleTimeApp(const Keyboard_Class::KeysState& status);
-// Time 全屏无 header（含 Help）；主循环据此跳过全局 header 刷新
-bool isTimePureMode();
 // Uptime / Clock（含 big time）：可降频省电的纯时间显示
 bool isTimeClockLikeMode();
 // 无操作满 1 分钟后主循环可降到 1s 一拍

@@ -1050,11 +1050,6 @@ void enterWifiApp() {
     drawWifiApp();
 }
 
-// 各页都带 header，定时状态刷新照常
-bool wifiAppSuppressesHeader() {
-    return false;
-}
-
 void drawWifiApp() {
     if (wifiHelpVisible) {
         drawWifiHelpPage();

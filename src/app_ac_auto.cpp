@@ -170,11 +170,6 @@ static void wakeAcAutoDisplay(const bool redraw) {
     }
 }
 
-bool acAutoAppSuppressesHeader() {
-    // 本 App 全程自绘顶栏，不使用系统 header
-    return true;
-}
-
 // 无 header 的全屏提示（对齐 IR / Mijia leave）
 static void drawAcAutoBusyTip(const char* msg) {
     M5Cardputer.Display.fillScreen(BLACK);

@@ -533,6 +533,7 @@ void handleNeonFxApp(const Keyboard_Class::KeysState& status) {
             drawNeonFxHelpPage();
         } else {
             // 关闭 help：直接 push 当前画布恢复全屏 FX
+            clearAppHeaderStatusRefresh();
             fxDrawFpsOverlay();
             fxCanvas.pushSprite(0, 0);
             // 重置 FPS 计数窗口，避免 help 期间计入长间隔
