@@ -46,12 +46,43 @@ Full firmware docs:
 - English: [Docs](https://kylebing.github.io/m5stack-cardputer-sparks/en/)
 - 中文：[在线文档](https://kylebing.github.io/m5stack-cardputer-sparks/)
 
-## 3. Flashing
+## 3. Flash layout & usage
+
+Cardputer-ADV (StampS3) has **8 MB** on-chip Flash. The partition table is Arduino / PlatformIO `default_8MB.csv` (same layout as the Release merged image).
+
+| Partition | Offset | Size | Role |
+|-----------|--------|------|------|
+| bootloader | `0x0` | ~32 KB reserved | Boot |
+| partitions | `0x8000` | 4 KB | Partition table |
+| nvs | `0x9000` | 20 KB | NVS (WiFi, etc.) |
+| otadata | `0xE000` | 8 KB | OTA slot select |
+| **app0** | `0x10000` | **3.19 MB** (3264 KB) | Running firmware |
+| app1 | `0x340000` | 3.19 MB | OTA alternate (normal upgrades write app0 only) |
+| **spiffs / LittleFS** | `0x670000` | **1.5 MB** (1536 KB) | Filesystem (`config.json`, icons, logs, shots, …) |
+| coredump | `0x7F0000` | 64 KB | Crash dump |
+
+Flash offsets match Release notes: firmware `0x10000`, filesystem `0x670000`, full image `0x0`.
+
+### Current usage (v1.10 local build, approximate)
+
+| Item | Used | Partition | Usage |
+|------|------|-----------|-------|
+| Firmware (Sketch / app0) | ~**2.49 MB** (2551 KB) | 3.19 MB | **~78%** |
+| LittleFS assets (`data/`) | ~**0.66 MB** (671 KB, ~244 files) | 1.5 MB | **~44%** |
+
+Notes:
+
+- Firmware size changes with features; on-device **Info → Memory** shows live Sketch / LittleFS bars.
+- The LittleFS image fills the full 1.5 MB region; “used” above is source file bytes — FS metadata and runtime writes (config, logs, screenshots, game records) add more on device.
+- app1 is usually empty on the normal flash path and is not counted as day-to-day usage.
+
+
+## 4. Flashing
 
 See the [Releases](https://github.com/KyleBing/m5stack-cardputer-sparks/releases) page.
 
 
-## 4. Why Cardputer
+## 5. Why Cardputer
 
 I've always loved pixel displays — especially low-power monochrome ones, like old Nokias that rely on reflected light.  
 For a while I wanted to build a small gadget with that kind of screen and some fun features. After doing the math, a watch would have been cheaper, so I dropped it.

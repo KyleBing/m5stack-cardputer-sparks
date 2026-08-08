@@ -44,11 +44,42 @@ _该固件内容为全英文，英文缩写比较多，所以需要有良好的�
 - English: [Docs](https://kylebing.github.io/m5stack-cardputer-sparks/en/)
 
 
-## 三、固件刷写
+## 三、Flash 划分与占用
+
+Cardputer-ADV（StampS3）片上 Flash 为 **8 MB**，分区表沿用 Arduino / PlatformIO 的 `default_8MB.csv`（与 Release 合并镜像一致）。
+
+| 分区 | 起始地址 | 大小 | 用途 |
+|------|----------|------|------|
+| bootloader | `0x0` | 约 32 KB 预留 | 启动引导 |
+| partitions | `0x8000` | 4 KB | 分区表 |
+| nvs | `0x9000` | 20 KB | 非易失键值（WiFi 等） |
+| otadata | `0xE000` | 8 KB | OTA 槽位选择 |
+| **app0** | `0x10000` | **3.19 MB**（3264 KB） | 当前运行固件 |
+| app1 | `0x340000` | 3.19 MB | OTA 备用槽（本固件常规升级只写 app0） |
+| **spiffs / LittleFS** | `0x670000` | **1.5 MB**（1536 KB） | 文件系统（`config.json`、图标、日志、截图等） |
+| coredump | `0x7F0000` | 64 KB | 崩溃转储 |
+
+烧录偏移与 Release 说明一致：程序 `0x10000`，资源 `0x670000`，整片 `0x0`。
+
+### 当前占用（v1.10 本地构建参考）
+
+| 项 | 已用 | 分区容量 | 占用率 |
+|----|------|----------|--------|
+| 固件（Sketch / app0） | 约 **2.49 MB**（2551 KB） | 3.19 MB | **约 78%** |
+| LittleFS 打包资源（`data/`） | 约 **0.66 MB**（671 KB，约 244 个文件） | 1.5 MB | **约 44%** |
+
+说明：
+
+- 固件体积随功能增减会变；设备上可在 **Info → Memory** 查看 Sketch / LittleFS 实时进度条。
+- LittleFS 镜像整区为 1.5 MB；上表「已用」按源资源文件合计，实际盘内还会有文件系统元数据与运行期写入（配置、日志、截图、游戏记录等）。
+- app1 在常规刷机路径下通常为空，不计入日常占用。
+
+
+## 四、固件刷写
 参见： [release 页面](https://github.com/KyleBing/m5stack-cardputer-sparks/releases)
 
 
-## 四、对 Cardputer 的喜爱
+## 五、对 Cardputer 的喜爱
 一直非常喜欢像素屏，尤其那种低功耗的单色像素屏，像诺基亚那种，靠反射光线看内容的更好。  
 前段时间想自己攒一个小设备出来，带个低功耗的这种屏幕，然后实现一些自己感觉比较好玩的功能。后来算了算，弄下来还不如直接买个手表划算了，就没有再弄。  
 
