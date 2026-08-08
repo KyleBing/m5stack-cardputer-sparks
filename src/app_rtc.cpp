@@ -50,6 +50,8 @@ static constexpr uint32_t TIME_MODE_LABEL_MS = 3000;    // 切换模式提示显
 static constexpr int TIME_MODE_LABEL_X = 2;
 static constexpr int TIME_MODE_LABEL_Y = 2;
 static constexpr int TIME_MODE_LABEL_H = 8; // text size 1
+// 忙屏 / 错误页正文起点：避开左上角模式小字
+static constexpr int TIME_TOP_CONTENT_Y = TIME_MODE_LABEL_Y + TIME_MODE_LABEL_H + 6;
 // tm_wday: 0=Sun .. 6=Sat
 static constexpr const char* RTC_WEEKDAY_ABBR[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 
@@ -245,8 +247,11 @@ static void drawRtcBusyScreen(const char* msg) {
     g_rtc_busy_msg = msg;
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, 8);
+    // 正文下移，避免与左上角 "clock" 模式提示重叠
+    M5Cardputer.Display.setCursor(APP_CONTENT_X, TIME_TOP_CONTENT_Y);
     M5Cardputer.Display.println(msg);
+    // fillScreen 会清掉模式小字，若仍在显示期内则补回
+    drawTimeModeLabelOverlay();
 }
 
 static bool rtcSyncBusy() {
@@ -596,7 +601,7 @@ static void drawRtcApp(const bool full_init) {
     }
     M5Cardputer.Display.fillScreen(BLACK);
     rtcScreenReady = true;
-    int y = 8;
+    int y = TIME_TOP_CONTENT_Y; // 避开左上角模式小字
     drawInfoLineAt(APP_CONTENT_X, y, "time", "not set", RTC_FAIL_TEXT_SIZE);
     y += INFO_LINE_H_2X;
     const AppConfig& cfg = getAppConfig();

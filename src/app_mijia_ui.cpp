@@ -3,6 +3,7 @@
 #include "app_common.h"
 #include "app_header.h"
 #include "app_device_icons.h"
+#include "app_icons.h"
 #include "M5Cardputer.h"
 #include <cstring>
 
@@ -1025,9 +1026,21 @@ int drawMijiaDeviceControls(const MijiaDevice* dev, const MijiaDevKind kind,
             }
             cy = drawMijiaKvRow(x, cy, w, "hum", buf, APP_COLOR_VALUE, 2);
 
+            // 电池图标 + 右侧电量，左对齐；距上方 5px（无 bat label）
             if (ui.battery_known) {
+                cy += 5;
+                const int bat_w = getIconBattery10DisplayWidth();
+                const int bat_h = getIconBatteryBodyHeight();
                 snprintf(buf, sizeof(buf), "%d%%", ui.battery);
-                cy = drawMijiaKvRow(x, cy, w, "bat", buf, APP_COLOR_VALUE, 1);
+                M5Cardputer.Display.setTextSize(1);
+                constexpr int gap = 4;
+                constexpr int font_h = 8; // size-1 默认字高
+                drawIconBattery10(x, cy, ui.battery);
+                // 电量文字与电池纵向居中
+                M5Cardputer.Display.setTextColor(APP_COLOR_VALUE, BLACK);
+                M5Cardputer.Display.setCursor(x + bat_w + gap, cy + (bat_h - font_h) / 2);
+                M5Cardputer.Display.print(buf);
+                cy += bat_h + 2;
             }
 
             // 有读数后 inline status 会被隐藏，这里单独显示 listening / Xs ago

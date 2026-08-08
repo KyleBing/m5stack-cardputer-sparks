@@ -13,31 +13,25 @@
 
 static constexpr int MENU_LOGO_SIZE = 24;
 static constexpr int HEADER_STATUS_CLEAR_PAD = 2;
-// 右侧图标/分页圆点相对屏幕右缘的最小间距
+// 右侧图标/分页 indicator 相对屏幕右缘的最小间距
 static constexpr int HEADER_RIGHT_PAD = 8;
 static bool s_app_header_draw_divider = true;
 static bool s_app_header_include_battery = false;
 // 共享 header 已绘制 → 允许定时刷新状态图标（opt-in）
 static bool s_app_header_status_refresh = false;
-// 子界面 header 分页圆点（hub 页用）；page_count <= 1 表示不显示
+// 子界面 header 分页 indicator（hub 页用）；page_count <= 1 表示不显示
 static int s_app_header_page = 0;
 static int s_app_header_page_count = 1;
 // 米家控制页设备 indicator；count <= 0 表示不显示
 static int s_app_header_pager_idx = 0;
 static int s_app_header_pager_count = 0;
-static constexpr int HEADER_DOT_R = 2;
-static constexpr int HEADER_DOT_GAP = 6;
-
 static int headerStatusIconY(const int icon_h) {
     // 图标几何中心对齐 header 垂直中线（避免奇偶高度差 1px）
     return APP_HEADER_H / 2 - icon_h / 2;
 }
 
 static int headerPageDotsWidth(const int page_count) {
-    if (page_count <= 1) {
-        return 0;
-    }
-    return page_count * HEADER_DOT_R * 2 + (page_count - 1) * HEADER_DOT_GAP;
+    return getIconPageDotsWidth(page_count);
 }
 
 static int getMenuStatusRightX(const int screen_w, const int page_count) {

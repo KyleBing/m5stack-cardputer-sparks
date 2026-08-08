@@ -83,8 +83,19 @@ static void drawDemoBattery(const int x, const int y) {
     drawDemoInBox(x, y, bw, bh,
                   [](const int bx, const int by) { drawIconBattery(bx, by, 75, false); });
 }
+static void drawDemoBattery10(const int x, const int y) {
+    const int bw = getIconBattery10DisplayWidth();
+    const int bh = getIconBatteryBodyHeight();
+    drawDemoInBox(x, y, bw, bh,
+                  [](const int bx, const int by) { drawIconBattery10(bx, by, 70); });
+}
 static void drawDemoPageDots(const int x, const int y) {
-    drawDemoInBox(x, y, 22, 4, [](const int bx, const int by) { drawIconPageDots(bx, by + 2, 1, 4); });
+    const int w = getIconPageDotsWidth(4);
+    const int h = getIconBatteryBodyHeight(); // active 与电池等高
+    drawDemoInBox(x, y, w, h,
+                  [](const int bx, const int by) {
+                      drawIconPageDots(bx, by + getIconBatteryBodyHeight() / 2, 1, 4);
+                  });
 }
 
 static constexpr int DEVICE_ICON_DEMO_GAP = 8;
@@ -178,6 +189,7 @@ static const IconDemoItem ICON_DEMO_ITEMS[] = {
     {"ble", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoBle},
     {"charging bolt", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoChargingBolt},
     {"battery", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoBattery},
+    {"battery 10", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoBattery10},
     {"page dots", ICON_DEMO_SIZE, ICON_DEMO_SIZE, drawDemoPageDots},
     {"device airpurifier", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX, drawDemoDevice_airpurifier},
     {"device bslamp2", DEVICE_ICON_DEMO_PAIR_W, DEVICE_ICON_NATIVE_PX, drawDemoDevice_bslamp2},

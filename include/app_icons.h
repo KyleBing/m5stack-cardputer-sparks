@@ -60,6 +60,9 @@ void drawIconChargingBolt(int zone_x, int y, int body_h);
 int getIconBatteryBodyHeight();
 int getIconBatteryDisplayWidth(bool charging);
 void drawIconBattery(int x, int y, int level, bool charging);
+// 10 格电池（温湿度等外设电量，无充电闪电）
+int getIconBattery10DisplayWidth();
+void drawIconBattery10(int x, int y, int level);
 
 // ===== 运行 / 停止（媒体控制风格） =====
 static constexpr int ICON_PLAY_W = 8;
@@ -71,5 +74,13 @@ static constexpr int ICON_STOP_H = 9;
 void drawIconPlay(int x, int cy, uint16_t color = 0xFFFF);
 void drawIconStop(int x, int cy, uint16_t color = 0xFFFF);
 
-// ===== 分页圆点 =====
+// ===== 分页 indicator（横向长条，主菜单 / hub）=====
+static constexpr int ICON_PAGE_DOT_W = 3;
+static constexpr int ICON_PAGE_DOT_H = 8; // idle 高度；active = 电池高度 - 2
+static constexpr int ICON_PAGE_DOT_GAP = 2;
+static constexpr uint16_t ICON_PAGE_DOT_IDLE = 0x9492; // 与 MIJIA_PAGER_COLOR_IDLE 一致
+static constexpr uint16_t ICON_PAGE_DOT_ACTIVE = 0xFFFF; // 白
+// 分页条总宽（page_count <= 1 返回 0）
+int getIconPageDotsWidth(int page_count);
+// x 为左缘，cy 为垂直中心
 void drawIconPageDots(int x, int cy, int page, int page_count);

@@ -281,6 +281,49 @@ void drawIconBattery(const int x, const int y, const int level, const bool charg
     }
 }
 
+// 10 格：格宽略窄，整体高度与原电池一致
+static constexpr int BATTERY10_SEGMENTS = 10;
+static constexpr int BATTERY10_SEG_W = 2;
+
+static int getBattery10InnerWidth() {
+    return BATTERY10_SEGMENTS * BATTERY10_SEG_W + (BATTERY10_SEGMENTS - 1) * BATTERY_SEG_GAP;
+}
+
+static int getBattery10BodyWidth() {
+    return getBattery10InnerWidth() + getBatteryInset() * 2;
+}
+
+int getIconBattery10DisplayWidth() {
+    return BATTERY_HEAD_W + getBattery10BodyWidth();
+}
+
+void drawIconBattery10(const int x, const int y, const int level) {
+    const int body_w = getBattery10BodyWidth();
+    const int body_h = getIconBatteryBodyHeight();
+    const int head_x = x;
+    const int body_x = x + BATTERY_HEAD_W;
+    const int total_w = getIconBattery10DisplayWidth();
+    constexpr uint16_t accent = WHITE;
+
+    M5Cardputer.Display.fillRect(x, y, total_w, body_h, BLACK);
+
+    const int head_y = y + (body_h - BATTERY_HEAD_H) / 2;
+    M5Cardputer.Display.fillRect(head_x, head_y, BATTERY_HEAD_W, BATTERY_HEAD_H, accent);
+    M5Cardputer.Display.drawRect(body_x, y, body_w, body_h, accent);
+
+    const int inset = getBatteryInset();
+    const int seg_x0 = body_x + inset;
+    const int seg_y = y + inset;
+    // 每格 10%：(level+9)/10 → 1..10；0% 全灭
+    const int filled = constrain((level + 9) / 10, 0, BATTERY10_SEGMENTS);
+    for (int i = 0; i < BATTERY10_SEGMENTS; i++) {
+        const int sx = seg_x0 + i * (BATTERY10_SEG_W + BATTERY_SEG_GAP);
+        if (i >= BATTERY10_SEGMENTS - filled) {
+            M5Cardputer.Display.fillRect(sx, seg_y, BATTERY10_SEG_W, BATTERY_SEG_H, accent);
+        }
+    }
+}
+
 // ===== 运行 / 停止 =====
 
 void drawIconPlay(const int x, const int cy, const uint16_t color) {
@@ -294,22 +337,28 @@ void drawIconStop(const int x, const int cy, const uint16_t color) {
     M5Cardputer.Display.fillRect(x, cy - ICON_STOP_H / 2, ICON_STOP_W, ICON_STOP_H, color);
 }
 
-// ===== 分页圆点 =====
+// ===== 分页 indicator（横向长条；active = 电池高度 - 2）=====
+
+int getIconPageDotsWidth(const int page_count) {
+    if (page_count <= 1) {
+        return 0;
+    }
+    return page_count * ICON_PAGE_DOT_W + (page_count - 1) * ICON_PAGE_DOT_GAP;
+}
 
 void drawIconPageDots(const int x, const int cy, const int page, const int page_count) {
     if (page_count <= 1) {
         return;
     }
 
-    constexpr int dot_r = 2;
-    constexpr int dot_gap = 6;
+    const int active_h = getIconBatteryBodyHeight() - 2;
+    const int step = ICON_PAGE_DOT_W + ICON_PAGE_DOT_GAP;
     for (int i = 0; i < page_count; i++) {
-        const int cx = x + dot_r + i * (dot_r * 2 + dot_gap);
-        if (i == page) {
-            M5Cardputer.Display.fillCircle(cx, cy, dot_r, WHITE);
-        } else {
-            M5Cardputer.Display.drawCircle(cx, cy, dot_r, DARKGREY);
-        }
+        const bool active = (i == page);
+        const int h = active ? active_h : ICON_PAGE_DOT_H;
+        const int y = cy - h / 2;
+        const uint16_t color = active ? ICON_PAGE_DOT_ACTIVE : ICON_PAGE_DOT_IDLE;
+        M5Cardputer.Display.fillRect(x + i * step, y, ICON_PAGE_DOT_W, h, color);
     }
 }
 
