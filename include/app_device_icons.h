@@ -7,7 +7,7 @@
 static constexpr const char* DEVICE_ICON_NATIVE_DIR = "/icon/device";
 static constexpr int DEVICE_ICON_NATIVE_PX = 70;
 static constexpr int DEVICE_ICON_LIST_PX = 25; // 列表用 _25w.png 边长
-static constexpr int DEVICE_ICON_INFO_PX = 50; // Info 页用 _50w.png 边长
+static constexpr int DEVICE_ICON_INFO_PX = 40; // Info 页用 _40w.png 边长
 
 // 按 model 子串匹配图标名；无匹配返回 "default"
 const char* deviceIconBasenameForModel(const char* model);
@@ -21,7 +21,7 @@ const char* deviceIconPathForModel(const char* model, bool active);
 // 生成列表用小图标路径：{basename}_25w.png / {basename}_active_25w.png
 const char* deviceIconPathForModelList(const char* model, bool active);
 
-// 生成 Info 页图标路径：{basename}_50w.png / {basename}_active_50w.png
+// 生成 Info 页图标路径：{basename}_40w.png / {basename}_active_40w.png
 const char* deviceIconPathForModelInfo(const char* model, bool active);
 
 // data 根目录打包后的 Version logo（优先 bake 的 .rgb565，缺失回退 .png）
@@ -53,7 +53,7 @@ bool drawDeviceIconForScaled(const MijiaDevice* dev, int x, int y, bool active, 
 // 绘制列表用 _25w.png 小图标（1:1，无缩放）；失败返回 false
 bool drawDeviceIconForList(const MijiaDevice* dev, int x, int y, bool active, float scale = 1.0f);
 
-// 绘制 Info 页 _50w.png 图标；失败返回 false
+// 绘制 Info 页 _40w.png 图标；失败返回 false
 bool drawDeviceIconForInfo(const MijiaDevice* dev, int x, int y, bool active, float scale = 1.0f);
 
 // 无设备信息时绘制默认图标

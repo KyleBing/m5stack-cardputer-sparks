@@ -50,7 +50,7 @@ void drawMijiaDeviceIconForList(const MijiaDevice* dev, MijiaDevKind kind, int x
                                 uint16_t color, bool active,
                                 int scale = MIJIA_ICON_SCALE_LIST, float png_scale = 1.0f);
 
-// Info 页：优先 _50w.png，失败回退矢量图标
+// Info 页：优先 _40w.png，失败回退矢量图标
 void drawMijiaDeviceIconForInfo(const MijiaDevice* dev, MijiaDevKind kind, int x, int y,
                                 uint16_t color, bool active,
                                 int scale = MIJIA_ICON_SCALE_INFO, float png_scale = 1.0f);

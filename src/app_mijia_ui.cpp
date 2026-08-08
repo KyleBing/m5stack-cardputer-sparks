@@ -155,7 +155,7 @@ void drawMijiaDeviceIconForList(const MijiaDevice* dev, const MijiaDevKind kind,
     drawMijiaDeviceIconVector(kind, x, y, color, scale);
 }
 
-// Info 页：优先 _50w.png（1:1），失败回退矢量图标
+// Info 页：优先 _40w.png（1:1），失败回退矢量图标
 void drawMijiaDeviceIconForInfo(const MijiaDevice* dev, const MijiaDevKind kind, const int x,
                                 const int y, const uint16_t color, const bool active,
                                 const int scale, const float png_scale) {

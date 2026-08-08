@@ -3073,7 +3073,7 @@ static void openMijiaDeviceInfo() {
     redrawMijiaScreen();
 }
 
-// 设备信息单页：顶栏中文名（与 value 左对齐）+ 右上角 50x50 图标；下方 KV
+// 设备信息单页：顶栏中文名（与 value 左对齐）+ 右上角 40x40 图标；下方 KV
 // 切设备时只刷变化区（值 / 名 / 图标 / pager），key 与 close 提示保持不动
 static void drawMijiaDeviceInfoPage() {
     clearAppHeaderStatusRefresh();
@@ -3096,7 +3096,7 @@ static void drawMijiaDeviceInfoPage() {
     const int label_right_x = APP_HELP_CONTENT_X + max_key_w;
     const int value_x = label_right_x + MIJIA_INFO_KEY_VALUE_GAP;
     const int value_clear_w = screen_w - value_x - APP_HELP_EDGE;
-    // 文案布局保持原 20px 顶栏；仅图标换成 50px
+    // 文案布局保持原 20px 顶栏；仅图标换成 40px
     constexpr int title_band = 20;
     const int cn_y = icon_y + title_band - MIJIA_INFO_CN_H;
     const int rows_y = cn_y + MIJIA_INFO_CN_H + 5;

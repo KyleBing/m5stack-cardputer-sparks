@@ -102,14 +102,14 @@ const char* deviceIconPathForModelList(const char* model, const bool active) {
     return s_device_icon_path;
 }
 
-// Info 页图标：{basename}_50w.png / {basename}_active_50w.png
+// Info 页图标：{basename}_40w.png / {basename}_active_40w.png
 const char* deviceIconPathForModelInfo(const char* model, const bool active) {
     const char* basename = deviceIconBasenameForModel(model);
     if (active) {
-        snprintf(s_device_icon_path, sizeof(s_device_icon_path), "%s/%s_active_50w.png",
+        snprintf(s_device_icon_path, sizeof(s_device_icon_path), "%s/%s_active_40w.png",
                  DEVICE_ICON_NATIVE_DIR, basename);
     } else {
-        snprintf(s_device_icon_path, sizeof(s_device_icon_path), "%s/%s_50w.png",
+        snprintf(s_device_icon_path, sizeof(s_device_icon_path), "%s/%s_40w.png",
                  DEVICE_ICON_NATIVE_DIR, basename);
     }
     return s_device_icon_path;
