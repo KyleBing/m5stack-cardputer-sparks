@@ -154,7 +154,7 @@ int drawAppHelpBegin(const char* subtitle) {
         M5Cardputer.Display.setCursor(APP_HELP_CONTENT_X + help_w + APP_HELP_SUBTITLE_GAP, sub_y);
         M5Cardputer.Display.print(subtitle);
     }
-    return title_y + 16 + 10; // 标题高 + 与内容区间距
+    return title_y + 16 + 7; // 标题高 + 与内容区间距
 }
 
 int drawAppHelpKey(const int x, const int y, const char key, const char* text) {
