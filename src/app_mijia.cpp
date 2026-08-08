@@ -411,7 +411,7 @@ static void applyMijiaControlRefresh(const bool force_full) {
         return;
     }
 
-    // 设备名作 header 标题；右侧 BLE（WiFi 信号只在 WiFi 列表）
+    // 设备名作 header 标题；右侧 WiFi（已连接时）/ BLE
     const char* title = (dev->name[0] != '\0') ? dev->name : "device";
     if (force_full || !mijiaControlInitialized || device_changed) {
         beginAppScreenWithDevicePager(title, mijiaDeviceIdx, cfg.device_count);

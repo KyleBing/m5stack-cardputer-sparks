@@ -66,6 +66,7 @@ enum class RtcTimeSync : uint8_t {
 static RtcTimeSync g_rtc_sync = RtcTimeSync::Idle;
 static uint32_t g_rtc_sync_deadline_ms = 0;
 static uint32_t g_rtc_wifi_retry_ms = 0;
+static uint32_t g_rtc_header_ms = 0; // 同步中刷新 header WiFi 图标
 static const char* g_rtc_busy_msg = nullptr; // 同步中提示文案
 
 static void drawRtcApp(const bool full_init);
@@ -241,17 +242,14 @@ static void redrawCurrentTimeMode() {
 }
 
 static void drawRtcBusyScreen(const char* msg) {
-    // 同步中提示：无 header，全屏（不阻塞按键；update 里继续推进 NTP）
-    M5Cardputer.Display.fillScreen(BLACK);
+    // 同步中用共享 header，便于显示 WiFi 连接状态
+    beginAppScreen("Clock");
     rtcScreenReady = true;
     g_rtc_busy_msg = msg;
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    // 正文下移，避免与左上角 "clock" 模式提示重叠
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, TIME_TOP_CONTENT_Y);
+    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y);
     M5Cardputer.Display.println(msg);
-    // fillScreen 会清掉模式小字，若仍在显示期内则补回
-    drawTimeModeLabelOverlay();
 }
 
 static bool rtcSyncBusy() {
@@ -268,6 +266,7 @@ static void abortClockSync() {
     releaseConfigWifi();
     g_rtc_sync = RtcTimeSync::Idle;
     g_rtc_busy_msg = nullptr;
+    clearAppHeaderStatusRefresh();
 }
 
 static bool readCurrentTime(struct tm& out, const char*& source) {
@@ -339,6 +338,8 @@ static void finishClockSync(const bool ok, const bool timed_out) {
     releaseConfigWifi();
     g_rtc_sync = RtcTimeSync::Idle;
     g_rtc_busy_msg = nullptr;
+    // 回到 Pure 全屏时钟，停止刷 header 状态图标
+    clearAppHeaderStatusRefresh();
     if (ok) {
         clockSyncedOnce = true;
         rtcSyncTimedOut = false;
@@ -454,6 +455,14 @@ static void updateClockSync() {
                 finishClockSync(hasValidClockTime(), true);
             }
             break;
+    }
+
+    // 联网期间刷新 header WiFi 图标
+    if (g_rtc_sync == RtcTimeSync::WaitWifi || g_rtc_sync == RtcTimeSync::WaitNtp) {
+        if (millis() - g_rtc_header_ms >= 500) {
+            g_rtc_header_ms = millis();
+            updateAppHeaderStatus();
+        }
     }
 }
 

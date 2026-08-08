@@ -5,7 +5,7 @@
 // 全局 header 高度与内容区坐标
 static constexpr int APP_HEADER_H = 28;
 static constexpr int APP_CONTENT_X = 4;
-// header 右侧状态图标（电池 / BLE / 分页圆点）之间的最小间距
+// header 右侧状态图标（电池 / WiFi / BLE / 分页圆点）之间的最小间距
 static constexpr int APP_HEADER_ICON_GAP = 5;
 // 内容区顶边 = header 下沿（背景填充从这里开始，含 padding 带）
 static constexpr int APP_CONTENT_Y = APP_HEADER_H;
@@ -44,10 +44,10 @@ void drawMenuScreenHeader(const char* app_name, int page, int page_count);
 // 仅刷新主菜单分页圆点（翻页时用，不碰电量区）
 void updateMenuPageDots(int page, int page_count);
 
-// 刷新主菜单 header 状态区（电量 / BLE）
+// 刷新主菜单 header 状态区（电量 / WiFi / BLE）
 void updateMenuHeaderStatus(int page_count);
 
-// 刷新子界面 header 状态区（BLE 等）；仅在共享 header 已绘制且未 suppress 时生效
+// 刷新子界面 header 状态区（WiFi / BLE 等）；仅在共享 header 已绘制且未 suppress 时生效
 void updateAppHeaderStatus();
 
 // 绘制共享 header 时自动置位；全屏/无 header 界面应清除，避免定时刷状态图标
