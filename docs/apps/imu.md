@@ -8,7 +8,7 @@ BMI270 加速度 / 姿态可视化（XY / Z 点迹）。
 
 <div class="shot-row">
 
-![imu](/shots/app_hardware.png)
+![imu](/shots/app_imu.png)
 
 </div>
 
