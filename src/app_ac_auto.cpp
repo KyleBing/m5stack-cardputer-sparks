@@ -326,208 +326,40 @@ static void markCfgDirty() {
     g_cfg_dirty = true;
 }
 
-static void drawHelpKeyLine(int& y, const char key, const char* text) {
-    int cx = APP_CONTENT_X;
-    cx += drawKeyBadge(cx, y, key, 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK); // 徽章后恢复 tip 色
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(text);
-    y += 11;
-}
-
-// Help 分段着色：打印一段后推进 cx
-static void helpPrint(int& cx, const int y, const char* text, const uint16_t color) {
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(color, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(text);
-    cx = M5Cardputer.Display.getCursorX();
-}
-
-static void drawHelpRichLine(int& y, const char* const* parts, const uint16_t* colors, const int n) {
-    int cx = APP_CONTENT_X;
-    for (int i = 0; i < n; i++) {
-        helpPrint(cx, y, parts[i], colors[i]);
-    }
-    y += 11;
-}
-
+// Help：Time 风格单栏；多页底栏翻页指示
 static void drawHelpPage() {
-    M5Cardputer.Display.fillScreen(BLACK);
-    int y = 2;
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
-    char title[24];
-    snprintf(title, sizeof(title), "AC Auto help %d/%d", g_help_page + 1, AC_AUTO_HELP_PAGES);
-    M5Cardputer.Display.print(title);
-    y += 12;
-
-    const uint16_t hum_c = AC_AUTO_COLOR_HUM;
+    int y = drawAppHelpBegin("AC Auto");
+    constexpr int x = APP_HELP_CONTENT_X;
 
     if (g_help_page == 0) {
-        // 键位：动作关键字着色
-        {
-            const char* p[] = {"start / stop ", "AUTO"};
-            const uint16_t c[] = {APP_COLOR_HINT, APP_COLOR_OK};
-            int cx = APP_CONTENT_X;
-            cx += drawKeyBadge(cx, y, 't', 1);
-            M5Cardputer.Display.setTextSize(1);
-            for (int i = 0; i < 2; i++) {
-                helpPrint(cx, y, p[i], c[i]);
-            }
-            y += 11;
-        }
-        drawHelpKeyLine(y, 's', "blank screen");
-        {
-            const char* p[] = {"config", " / ", "display"};
-            const uint16_t c[] = {APP_COLOR_LABEL, APP_COLOR_HINT, APP_COLOR_VALUE};
-            int cx = APP_CONTENT_X;
-            cx += drawKeyBadge(cx, y, 'c', 1);
-            M5Cardputer.Display.setTextSize(1);
-            for (int i = 0; i < 3; i++) {
-                helpPrint(cx, y, p[i], c[i]);
-            }
-            y += 11;
-        }
-        {
-            const char* p[] = {"reset ", "on", "/", "off", " counts"};
-            const uint16_t c[] = {APP_COLOR_HINT, APP_COLOR_WARN, APP_COLOR_HINT, APP_COLOR_OK,
-                                  APP_COLOR_HINT};
-            int cx = APP_CONTENT_X;
-            cx += drawKeyBadge(cx, y, 'r', 1);
-            M5Cardputer.Display.setTextSize(1);
-            for (int i = 0; i < 5; i++) {
-                helpPrint(cx, y, p[i], c[i]);
-            }
-            y += 11;
-        }
-        {
-            // 仅对齐内部假定开关，不发红外
-            const char* p[] = {"assume ", "AC", " on", "/", "off", " (no IR)"};
-            const uint16_t c[] = {APP_COLOR_HINT, APP_COLOR_LABEL, APP_COLOR_OK, APP_COLOR_HINT,
-                                  APP_COLOR_HINT, APP_COLOR_HINT};
-            int cx = APP_CONTENT_X;
-            cx += drawKeyBadge(cx, y, 'p', 1);
-            M5Cardputer.Display.setTextSize(1);
-            for (int i = 0; i < 6; i++) {
-                helpPrint(cx, y, p[i], c[i]);
-            }
-            y += 11;
-        }
-        drawHelpKeyLine(y, 'h', "help / close");
-        {
-            const char* p[] = {"BtnA", ": blank / wake"};
-            const uint16_t c[] = {APP_COLOR_LABEL, APP_COLOR_HINT};
-            drawHelpRichLine(y, p, c, 2);
-        }
-        {
-            const char* p[] = {",.[]", "  help page"};
-            const uint16_t c[] = {APP_COLOR_MENU_KEY, APP_COLOR_HINT};
-            drawHelpRichLine(y, p, c, 2);
-        }
+        y = drawAppHelpKey(x, y, 't', "start / stop AUTO");
+        y = drawAppHelpKey(x, y, 's', "blank screen");
+        y = drawAppHelpKey(x, y, 'c', "config / display");
+        y = drawAppHelpKey(x, y, 'r', "reset on/off counts");
+        // 仅对齐内部假定开关，不发红外
+        y = drawAppHelpKey(x, y, 'p', "assume AC on/off (no IR)");
+        y = drawAppHelpKey(x, y, 'h', "help / close");
+        (void)drawAppHelpBadge(x, y, "BtnA", "blank / wake");
     } else if (g_help_page == 1) {
-        // 配置参数含义
-        M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-        M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
-        M5Cardputer.Display.print("params (cfg)");
-        y += 11;
-        {
-            const char* p[] = {"sensor", ": ", "BLE", " HT meter"};
-            const uint16_t c[] = {APP_COLOR_LABEL, APP_COLOR_HINT, APP_COLOR_LABEL, APP_COLOR_HINT};
-            drawHelpRichLine(y, p, c, 4);
-        }
-        {
-            const char* p[] = {"on temp", ": ", ">N", " => ", "AC ON"};
-            const uint16_t c[] = {APP_COLOR_WARN, APP_COLOR_HINT, APP_COLOR_VALUE, APP_COLOR_HINT,
-                                  APP_COLOR_OK};
-            drawHelpRichLine(y, p, c, 5);
-        }
-        {
-            const char* p[] = {"off temp", ": ", "<N", " => ", "AC OFF"};
-            const uint16_t c[] = {APP_COLOR_OK, APP_COLOR_HINT, APP_COLOR_VALUE, APP_COLOR_HINT,
-                                  APP_COLOR_HINT};
-            drawHelpRichLine(y, p, c, 5);
-        }
-        {
-            const char* p[] = {"filter", ": streak readings"};
-            const uint16_t c[] = {APP_COLOR_LABEL, APP_COLOR_HINT};
-            drawHelpRichLine(y, p, c, 2);
-        }
-        {
-            const char* p[] = {"brand", "/", "mode", "/", "temp", "/", "fan", ": ", "IR"};
-            const uint16_t c[] = {APP_COLOR_LABEL, APP_COLOR_HINT, APP_COLOR_LABEL, APP_COLOR_HINT,
-                                  AC_AUTO_COLOR_TEMP, APP_COLOR_HINT, APP_COLOR_LABEL,
-                                  APP_COLOR_HINT, APP_COLOR_WARN};
-            drawHelpRichLine(y, p, c, 9);
-        }
-        {
-            const char* p[] = {";.", " row  ", "-=", " value"};
-            const uint16_t c[] = {APP_COLOR_MENU_KEY, APP_COLOR_HINT, APP_COLOR_MENU_KEY,
-                                  APP_COLOR_HINT};
-            drawHelpRichLine(y, p, c, 4);
-        }
+        y = drawAppHelpTextColored(x, y, "params (cfg)", APP_COLOR_LABEL);
+        y = drawAppHelpText(x, y, "sensor: BLE HT meter");
+        y = drawAppHelpLabelText(x, y, "on temp", APP_COLOR_WARN, ": >N => AC ON");
+        y = drawAppHelpLabelText(x, y, "off temp", APP_COLOR_OK, ": <N => AC OFF");
+        y = drawAppHelpText(x, y, "filter: streak readings");
+        y = drawAppHelpText(x, y, "brand/mode/temp/fan: IR");
+        (void)drawAppHelpBadge(x, y, ";. -=", "row / value");
     } else {
-        // 运行机制 + 主界面元素
-        M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-        M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
-        M5Cardputer.Display.print("how it runs");
-        y += 11;
-        {
-            const char* p[] = {"T", ": ", "AUTO", " ok while lit"};
-            const uint16_t c[] = {APP_COLOR_MENU_KEY, APP_COLOR_HINT, APP_COLOR_OK, APP_COLOR_HINT};
-            drawHelpRichLine(y, p, c, 4);
-        }
-        {
-            const char* p[] = {"S", "/", "BtnA", " blank, key wake"};
-            const uint16_t c[] = {APP_COLOR_MENU_KEY, APP_COLOR_HINT, APP_COLOR_LABEL,
-                                  APP_COLOR_HINT};
-            drawHelpRichLine(y, p, c, 4);
-        }
-        {
-            const char* p[] = {">", "on", " ", "filter", " => ", "IR", " ON"};
-            const uint16_t c[] = {APP_COLOR_HINT, APP_COLOR_WARN, APP_COLOR_HINT, APP_COLOR_LABEL,
-                                  APP_COLOR_HINT, APP_COLOR_WARN, APP_COLOR_OK};
-            drawHelpRichLine(y, p, c, 7);
-        }
-        {
-            // 关机前提：内部假定状态为 ON（可用 p 对齐）
-            const char* p[] = {"<", "off", " ", "filter", " + ", "ON", " => ", "IR", " OFF"};
-            const uint16_t c[] = {APP_COLOR_HINT, APP_COLOR_OK, APP_COLOR_HINT, APP_COLOR_LABEL,
-                                  APP_COLOR_HINT, APP_COLOR_OK, APP_COLOR_HINT, APP_COLOR_WARN,
-                                  APP_COLOR_HINT};
-            drawHelpRichLine(y, p, c, 9);
-        }
-        {
-            const char* p[] = {"BLE", " ", "listen", "<=6m ", "nap", " 4m"};
-            const uint16_t c[] = {APP_COLOR_LABEL, APP_COLOR_HINT, APP_COLOR_OK, APP_COLOR_HINT,
-                                  APP_COLOR_WARN, APP_COLOR_HINT};
-            drawHelpRichLine(y, p, c, 6);
-        }
-        {
-            const char* p[] = {"chart ", "T", " always; ", "on", "/", "off", " lines"};
-            const uint16_t c[] = {APP_COLOR_HINT, AC_AUTO_COLOR_TEMP, APP_COLOR_HINT, APP_COLOR_WARN,
-                                  APP_COLOR_HINT, APP_COLOR_OK, APP_COLOR_HINT};
-            drawHelpRichLine(y, p, c, 7);
-        }
-        {
-            const char* p[] = {"L:", "Temp", " ", "Hum", "  R:", "on", " ", "off"};
-            const uint16_t c[] = {APP_COLOR_HINT, AC_AUTO_COLOR_TEMP, APP_COLOR_HINT, hum_c,
-                                  APP_COLOR_HINT, APP_COLOR_WARN, APP_COLOR_HINT, APP_COLOR_OK};
-            drawHelpRichLine(y, p, c, 8);
-        }
+        y = drawAppHelpTextColored(x, y, "how it runs", APP_COLOR_LABEL);
+        y = drawAppHelpText(x, y, "T: AUTO ok while lit");
+        y = drawAppHelpText(x, y, "S/BtnA blank, key wake");
+        y = drawAppHelpLabelText(x, y, ">on", APP_COLOR_WARN, " filter => IR ON");
+        // 关机前提：内部假定状态为 ON（可用 p 对齐）
+        y = drawAppHelpLabelText(x, y, "<off", APP_COLOR_OK, " filter + ON => IR OFF");
+        y = drawAppHelpText(x, y, "BLE listen<=6m nap 4m");
+        (void)drawAppHelpText(x, y, "chart T; L Temp/Hum  R on/off");
     }
 
-    // 底栏：翻页（横向并排上下箭头）+ 关闭
-    const int hint_y = M5Cardputer.Display.height() - AC_AUTO_HINT_H + 1;
-    int cx = APP_CONTENT_X;
-    cx += drawArrowUpDownFlatBadge(cx, hint_y, 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK); // 徽章后恢复 tip 色
-    M5Cardputer.Display.setCursor(cx, hint_y);
-    M5Cardputer.Display.print("page");
-    drawHelpHintRight("close", 1);
+    drawAppHelpFooter(g_help_page, AC_AUTO_HELP_PAGES);
 }
 
 // 虚线：水平触发线
@@ -1490,17 +1322,13 @@ void handleAcAutoApp(const Keyboard_Class::KeysState& status) {
                 drawAcAutoApp();
                 return;
             }
-            // help 分页：,. 与 []
-            if (c == ',' || c == '<' || c == '[') {
-                g_help_page = (g_help_page + AC_AUTO_HELP_PAGES - 1) % AC_AUTO_HELP_PAGES;
-                drawAcAutoApp();
-                return;
-            }
-            if (c == '.' || c == '>' || c == ']') {
-                g_help_page = (g_help_page + 1) % AC_AUTO_HELP_PAGES;
-                drawAcAutoApp();
-                return;
-            }
+        }
+        // 方向键 / ;,./ / [] 翻页
+        const int delta = getHelpNavDelta(status);
+        if (delta != 0) {
+            g_help_page = applyHelpPageDelta(g_help_page, AC_AUTO_HELP_PAGES, delta);
+            drawAcAutoApp();
+            return;
         }
         if (status.enter) {
             g_help_visible = false;
@@ -1580,4 +1408,14 @@ void handleAcAutoApp(const Keyboard_Class::KeysState& status) {
             return;
         }
     }
+}
+
+// 关闭 Help 并重绘当前页
+bool closeAcAutoHelp() {
+    if (!g_help_visible) {
+        return false;
+    }
+    g_help_visible = false;
+    drawAcAutoApp();
+    return true;
 }

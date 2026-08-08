@@ -21,6 +21,8 @@ static M5Canvas micSpr(&M5Cardputer.Display);
 static bool micSprOk = false;
 static bool micHeaderReady = false;
 static MicUiMode micUiMode = MicUiMode::Scope;
+static int micHelpPage = 0;
+static constexpr int MIC_HELP_PAGES = 2;
 static int micUserGain = 1; // 1/2/4/8/16
 
 // 多缓冲采集：record() 只入队，落后 2 块的缓冲才已填满可绘图
@@ -76,70 +78,23 @@ static int micSampleToY(const int16_t sample, const int centerY, const int halfH
     return constrain(y, centerY - halfH + 1, centerY + halfH - 1);
 }
 
-static int drawMicHelpColHeader(const int x, const int y, const int w, const char* title) {
-    M5Cardputer.Display.fillRect(x, y, w, 11, APP_COLOR_LABEL);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(BLACK, APP_COLOR_LABEL);
-    M5Cardputer.Display.setCursor(x + 2, y + 1);
-    M5Cardputer.Display.print(title);
-    return y + 13;
-}
-
-static int drawMicHelpKeyAt(const int x, int y, const char key, const char* text) {
-    int cx = x;
-    cx += drawKeyBadge(cx, y, key, 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(text);
-    return y + 11;
-}
-
-static int drawMicHelpBadgeAt(const int x, int y, const char* badge, const char* text) {
-    int cx = x;
-    cx += drawTextBadge(cx, y, badge, 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(text);
-    return y + 11;
-}
-
-static int drawMicHelpTextAt(const int x, int y, const char* text) {
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(x, y);
-    M5Cardputer.Display.print(text);
-    return y + 10;
-}
-
+// Help：增益键 / 说明分两页；CLIP 警告着色
 static void drawMicHelpPage() {
-    beginAppScreen("Mic");
-    const int screen_w = M5Cardputer.Display.width();
-    constexpr int col_gap = 4;
-    const int col_w = (screen_w - col_gap) / 2;
-    const int keys_x = 0;
-    const int notes_x = col_w + col_gap;
-    const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
-    const int content_h = M5Cardputer.Display.height() - col_y;
-    M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y, content_h, DARKGREY);
-
-    int y = drawMicHelpColHeader(keys_x, col_y, col_w, "keymap");
-    const int kx = keys_x + 2;
-    y = drawMicHelpBadgeAt(kx, y, "-=", "gain down");
-    y = drawMicHelpBadgeAt(kx, y, "=+", "gain up");
-    y = drawMicHelpBadgeAt(kx, y, ",.", "gain too");
-    y = drawMicHelpKeyAt(kx, y, 'h', "help / close");
-
-    y = drawMicHelpColHeader(notes_x, col_y, screen_w - notes_x, "manual");
-    const int nx = notes_x + 2;
-    y = drawMicHelpTextAt(nx, y, "live scope + VU");
-    y = drawMicHelpTextAt(nx, y, "gain x1..x16");
-    y = drawMicHelpTextAt(nx, y, "16kHz mono PCM");
-    y = drawMicHelpTextAt(nx, y, "CLIP = too loud");
-
-    drawHelpHintRight("close");
-    updateAppHeaderStatus();
+    int y = drawAppHelpBegin("Mic");
+    constexpr int x = APP_HELP_CONTENT_X;
+    if (micHelpPage == 0) {
+        y = drawAppHelpBadge(x, y, "-=", "gain down");
+        y = drawAppHelpBadge(x, y, "=+", "gain up");
+        y = drawAppHelpBadge(x, y, ",.", "gain too");
+        (void)drawAppHelpKey(x, y, 'h', "help / close");
+    } else {
+        y = drawAppHelpTextColored(x, y, "Scope", APP_COLOR_LABEL);
+        y = drawAppHelpText(x, y, "live scope + VU");
+        y = drawAppHelpText(x, y, "gain x1..x16");
+        y = drawAppHelpText(x, y, "16kHz mono PCM");
+        (void)drawAppHelpLabelText(x, y, "CLIP", APP_COLOR_ERROR, " = too loud");
+    }
+    drawAppHelpFooter(micHelpPage, MIC_HELP_PAGES);
 }
 
 static void drawMicScope() {
@@ -384,15 +339,24 @@ void updateMicApp() {
     drawMicScope();
 }
 
+bool closeMicHelp() {
+    // Help 未打开则忽略
+    if (micUiMode != MicUiMode::Help) {
+        return false;
+    }
+    micUiMode = MicUiMode::Scope;
+    micHeaderReady = false;
+    micEnsureCaptureOn();
+    micResetCapturePipeline();
+    updateMicApp();
+    return true;
+}
+
 void handleMicApp(const Keyboard_Class::KeysState& status) {
     for (const char c : status.word) {
         if (c == 'h' || c == 'H') {
             if (micUiMode == MicUiMode::Help) {
-                micUiMode = MicUiMode::Scope;
-                micHeaderReady = false;
-                micEnsureCaptureOn();
-                micResetCapturePipeline();
-                updateMicApp();
+                closeMicHelp();
             } else {
                 // Help 页不采麦，避免功放被 PDM 时钟干扰
                 if (M5Cardputer.Mic.isRunning()) {
@@ -405,13 +369,21 @@ void handleMicApp(const Keyboard_Class::KeysState& status) {
                     micSprOk = false;
                 }
                 micUiMode = MicUiMode::Help;
+                micHelpPage = 0;
                 drawMicHelpPage();
             }
             return;
         }
-        if (micUiMode == MicUiMode::Help) {
-            continue;
+    }
+    if (micUiMode == MicUiMode::Help) {
+        const int delta = getHelpNavDelta(status);
+        if (delta != 0) {
+            micHelpPage = applyHelpPageDelta(micHelpPage, MIC_HELP_PAGES, delta);
+            drawMicHelpPage();
         }
+        return;
+    }
+    for (const char c : status.word) {
         if (c == '-' || c == ',') {
             if (micUserGain > 1) {
                 micUserGain >>= 1;

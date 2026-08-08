@@ -10,3 +10,5 @@ void handleHidKeyboardApp(const Keyboard_Class::KeysState& status);
 bool pollHidKeyboardBtnAExit();
 // 主输入界面无 header：禁止全局刷蓝牙/WiFi 图标
 bool hidKeyboardSuppressesHeader();
+// Help 可见时关闭并重绘；否则返回 false
+bool closeHidKeyboardHelp();

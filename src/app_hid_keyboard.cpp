@@ -68,7 +68,7 @@ static constexpr uint8_t kModRAlt = 0x40;
 static constexpr uint8_t kModRGui = 0x80;
 static constexpr uint8_t kHidCapsLock = 0x39;
 
-static constexpr int kHelpPageCount = 2;
+static constexpr int kHelpPageCount = 3;
 static constexpr int kBleHostSlots = 5;  // 最多保存 5 台已配对主机
 static constexpr int kHostAliasMax = 16;  // 设备别名最大长度（屏宽约能放下）
 // Hosts 卡片：左侧单列 5 槽；右侧竖排 tip
@@ -1525,18 +1525,33 @@ static bool tryHandleModeHotkey(const Keyboard_Class::KeysState& status) {
         return true;
     }
 
-    // 帮助页：h 关闭；方向键/;,./ 翻页（不发给主机）
+    // 帮助页：h / ` 关闭（不向主机发 Esc）；方向键/;,./ 翻页
     if (g_help_visible) {
         if (!M5Cardputer.Keyboard.isPressed()) {
             g_fn_h_latched = false;
             return true;
         }
+        // ` / HID 0x35：关 Help，勿发 Esc 给主机
+        for (const uint8_t hid : status.hid_keys) {
+            if ((hid & 0x7F) == BTNGO_HID) {
+                g_help_visible = false;
+                g_fn_h_latched = true;
+                drawHidKeyboardApp(true);
+                return true;
+            }
+        }
         for (const char c : status.word) {
+            if (c == BTNGO_KEY_CHAR || c == '~') {
+                g_help_visible = false;
+                g_fn_h_latched = true;
+                drawHidKeyboardApp(true);
+                return true;
+            }
             if (c == 'h' || c == 'H') {
                 if (!g_fn_h_latched) {
                     g_help_visible = false;
                     g_fn_h_latched = true;
-                    // 帮助从 NO_GAP 画起，clearAppContentArea 清不干净，需全屏重绘
+                    // 帮助全屏无 header，需整页重绘
                     drawHidKeyboardApp(true);
                 }
                 return true;
@@ -1554,14 +1569,11 @@ static bool tryHandleModeHotkey(const Keyboard_Class::KeysState& status) {
                 }
             }
         }
-        // [ ] 仅在帮助页翻页；主输入界面仍原样透传给主机
-        int delta = getMenuNavDelta(status);
-        if (delta == 0) {
-            delta = getBracketNavDelta(status);
-        }
+        // [ ] / 方向键：帮助页翻页；主输入界面 [] 仍原样透传给主机
+        const int delta = getHelpNavDelta(status);
         if (delta != 0) {
-            const int next = g_help_page + delta;
-            if (next >= 0 && next < kHelpPageCount) {
+            const int next = applyHelpPageDelta(g_help_page, kHelpPageCount, delta);
+            if (next != g_help_page) {
                 g_help_page = next;
                 drawHelpPage();
             }
@@ -2579,179 +2591,37 @@ static void drawMainFooter() {
     drawPairFooter(true);
 }
 
-// Help：分区小标题（无色块栏，易扫读）
-static int helpDrawSection(const int x, const int y, const char* title) {
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-    M5Cardputer.Display.setCursor(x, y);
-    M5Cardputer.Display.print(title);
-    return y + 10;
-}
-
-// 徽章后打印说明，并恢复提示色
-static void helpPrintAfterBadge(int& x, const int y, const char* text) {
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(x, y + 1);
-    M5Cardputer.Display.print(text);
-    x = M5Cardputer.Display.getCursorX();
-}
-
-// 单行：文本徽章 + 说明
-static int helpRowBadge(const int x0, const int y, const char* badge, const char* text) {
-    int x = x0;
-    x += drawTextBadge(x, y, badge, 1);
-    helpPrintAfterBadge(x, y, text);
-    return y + 11;
-}
-
-// 单行：单字符徽章 + 说明
-static int helpRowKey(const int x0, const int y, const char key, const char* text) {
-    int x = x0;
-    x += drawKeyBadge(x, y, key, 1);
-    helpPrintAfterBadge(x, y, text);
-    return y + 11;
-}
-
 // 底栏：箭头徽章翻页 + 页码，右侧 h close
 static void drawHelpHintBar() {
-    const int hint_y = M5Cardputer.Display.height() - 12;
-    int cx = APP_CONTENT_X;
-    cx += drawArrowBadge(cx, hint_y, 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, hint_y + 1);
-    M5Cardputer.Display.print("page ");
-    cx += M5Cardputer.Display.textWidth("page ");
-    char buf[8];
-    snprintf(buf, sizeof(buf), "%d/%d", g_help_page + 1, kHelpPageCount);
-    M5Cardputer.Display.setCursor(cx, hint_y + 1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.print(buf);
-    drawHelpHintRight("close");
+    drawAppHelpFooter(g_help_page, kHelpPageCount);
 }
 
-// Help：无固定 header / 左右栏；单列流式阅读，按键一律徽章包裹
+// Help：Time 标题 + 单列；章节标题用强调色；复合 Fn 行保留徽章拼装
 static void drawHelpPage() {
-    M5Cardputer.Display.fillScreen(BLACK);
     g_screen_ready = true;
-
-    constexpr int x0 = 4;
-    int y = 2;
+    int y = drawAppHelpBegin("Keyboard");
+    constexpr int x = APP_HELP_CONTENT_X;
 
     if (g_help_page == 0) {
-        y = helpDrawSection(x0, y, "Mode");
-        y = helpRowBadge(x0, y, "BtnGO", " hold=exit  tap=hosts");
-        {
-            int x = x0;
-            M5Cardputer.Display.setTextSize(1);
-            M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-            M5Cardputer.Display.setCursor(x, y + 1);
-            M5Cardputer.Display.print("hold ");
-            x = M5Cardputer.Display.getCursorX();
-            x += drawTextBadge(x, y, "Fn", 1);
-            helpPrintAfterBadge(x, y, " IMU on/off");
-            y += 11;
-        }
-        {
-            int x = x0;
-            x += drawTextBadge(x, y, "Fn", 1);
-            helpPrintAfterBadge(x, y, "+");
-            x += drawKeyBadge(x, y, 'u', 1);
-            helpPrintAfterBadge(x, y, " USB  ");
-            x += drawTextBadge(x, y, "Fn", 1);
-            helpPrintAfterBadge(x, y, "+");
-            x += drawKeyBadge(x, y, 'b', 1);
-            helpPrintAfterBadge(x, y, " BLE");
-            y += 11;
-        }
-        {
-            int x = x0;
-            x += drawTextBadge(x, y, "Fn", 1);
-            helpPrintAfterBadge(x, y, "+");
-            x += drawKeyBadge(x, y, 'p', 1);
-            helpPrintAfterBadge(x, y, " hosts  ");
-            x += drawTextBadge(x, y, "Fn", 1);
-            helpPrintAfterBadge(x, y, "+");
-            x += drawKeyBadge(x, y, 'h', 1);
-            helpPrintAfterBadge(x, y, " help");
-            y += 12;
-        }
-
-        y = helpDrawSection(x0, y, "IMU mouse");
-        {
-            int x = x0;
-            x += drawTextBadge(x, y, "ygv", 1);
-            helpPrintAfterBadge(x, y, " left click");
-            y += 11;
-        }
-        {
-            int x = x0;
-            x += drawTextBadge(x, y, "uhb", 1);
-            helpPrintAfterBadge(x, y, " right click");
-            y += 11;
-        }
-        {
-            int x = x0;
-            x += drawKeyBadge(x, y, '1', 1);
-            helpPrintAfterBadge(x, y, "-");
-            x += drawKeyBadge(x, y, '0', 1);
-            helpPrintAfterBadge(x, y, " sens · other keys OK");
-            y += 11;
-        }
-        y = helpRowKey(x0, y, '`', " Esc to host");
+        y = drawAppHelpTextColored(x, y, "Mode", APP_COLOR_LABEL);
+        y = drawAppHelpBadge(x, y, "BtnGO", "hold=exit  tap=hosts");
+        y = drawAppHelpBadge(x, y, "Fn hold", "IMU on/off");
+        y = drawAppHelpBadge(x, y, "Fn+u/b", "USB / BLE");
+        (void)drawAppHelpBadge(x, y, "Fn+p/h", "hosts / help");
+    } else if (g_help_page == 1) {
+        y = drawAppHelpTextColored(x, y, "IMU mouse", APP_COLOR_LABEL);
+        y = drawAppHelpBadge(x, y, "ygv", "left click");
+        y = drawAppHelpBadge(x, y, "uhb", "right click");
+        y = drawAppHelpBadge(x, y, "1-0", "sens · other keys OK");
+        (void)drawAppHelpKey(x, y, '`', "Esc to host");
     } else {
-        y = helpDrawSection(x0, y, "Fn layer");
-        y = helpRowKey(x0, y, '`', " Esc");
-        {
-            int x = x0;
-            x += drawTextBadge(x, y, "Fn", 1);
-            helpPrintAfterBadge(x, y, "+");
-            x += drawTextBadge(x, y, "Bksp", 1);
-            helpPrintAfterBadge(x, y, " Delete");
-            y += 11;
-        }
-        {
-            int x = x0;
-            x += drawTextBadge(x, y, "Fn", 1);
-            helpPrintAfterBadge(x, y, "+");
-            x += drawTextBadge(x, y, ";,./", 1);
-            helpPrintAfterBadge(x, y, " arrows");
-            y += 11;
-        }
-        {
-            int x = x0;
-            x += drawTextBadge(x, y, "Fn", 1);
-            helpPrintAfterBadge(x, y, "+");
-            x += drawTextBadge(x, y, "1-0", 1);
-            helpPrintAfterBadge(x, y, " F1-F10");
-            y += 11;
-        }
-        {
-            int x = x0;
-            x += drawTextBadge(x, y, "Fn", 1);
-            helpPrintAfterBadge(x, y, "+");
-            x += drawTextBadge(x, y, "-=", 1);
-            helpPrintAfterBadge(x, y, " F11/F12");
-            y += 11;
-        }
-        {
-            int x = x0;
-            x += drawTextBadge(x, y, "Fn", 1);
-            helpPrintAfterBadge(x, y, "+");
-            x += drawTextBadge(x, y, "Aa", 1);
-            helpPrintAfterBadge(x, y, " Caps · mods=right");
-            y += 12;
-        }
-
-        y = helpDrawSection(x0, y, "Tip");
-        {
-            int x = x0;
-            x += drawTextBadge(x, y, "Fn", 1);
-            helpPrintAfterBadge(x, y, "+");
-            x += drawKeyBadge(x, y, 'p', 1);
-            helpPrintAfterBadge(x, y, " hosts list");
-        }
+        y = drawAppHelpTextColored(x, y, "Fn layer", APP_COLOR_LABEL);
+        y = drawAppHelpKey(x, y, '`', "Esc");
+        y = drawAppHelpBadge(x, y, "Fn+Bksp", "Delete");
+        y = drawAppHelpBadge(x, y, "Fn+;,./", "arrows");
+        y = drawAppHelpBadge(x, y, "Fn+1-0", "F1-F10");
+        y = drawAppHelpBadge(x, y, "Fn+-=", "F11/F12");
+        (void)drawAppHelpBadge(x, y, "Fn+Aa", "Caps · mods=right");
     }
 
     drawHelpHintBar();
@@ -3213,4 +3083,14 @@ bool pollHidKeyboardBtnAExit() {
 // 主输入 / Help / Hosts / 退出中：均无 header（避免蓝牙图标刷到无顶栏界面）
 bool hidKeyboardSuppressesHeader() {
     return g_active || g_exiting;
+}
+
+// 关闭 Help 并重绘主输入界面
+bool closeHidKeyboardHelp() {
+    if (!g_help_visible) {
+        return false;
+    }
+    g_help_visible = false;
+    drawHidKeyboardApp(true);
+    return true;
 }

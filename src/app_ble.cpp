@@ -31,6 +31,8 @@ static bool bleScanning = false;
 static int bleScanCount = 0;
 static int bleScanPage = 0;
 static bool bleHelpVisible = false;
+static int bleHelpPage = 0;
+static constexpr int BLE_HELP_PAGES = 2;
 static bool bleListDirty = true;
 static bool bleLastScanning = false;
 static int bleLastScanCount = -1;
@@ -113,87 +115,23 @@ static int getBlePageCount() {
     return (bleScanCount + BLE_SCAN_PAGE_SIZE - 1) / BLE_SCAN_PAGE_SIZE;
 }
 
-// Help 分栏标题
-static int drawBleHelpColHeader(const int x, const int y, const int w, const char* title) {
-    M5Cardputer.Display.fillRect(x, y, w, 11, APP_COLOR_LABEL);
-    setBleFont(1);
-    M5Cardputer.Display.setTextColor(BLACK, APP_COLOR_LABEL);
-    M5Cardputer.Display.setCursor(x + 2, y + 1);
-    M5Cardputer.Display.print(title);
-    resetBleFont();
-    return y + 13;
-}
-
-// Help 按键说明；徽章后恢复说明文字颜色
-static int drawBleHelpKey(const int x, const int y, const char key, const char* text) {
-    const int cx = x + drawKeyBadge(x, y, key, 1);
-    setBleFont(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(text);
-    resetBleFont();
-    return y + 11;
-}
-
-static int drawBleHelpBadge(const int x, const int y, const char* badge, const char* text) {
-    const int cx = x + drawTextBadge(x, y, badge, 1);
-    setBleFont(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(text);
-    resetBleFont();
-    return y + 11;
-}
-
-static int drawBleHelpText(const int x, const int y, const char* text) {
-    setBleFont(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(x, y);
-    M5Cardputer.Display.print(text);
-    resetBleFont();
-    return y + 11;
-}
-
-// 黄色类别名 + 用途说明
-static int drawBleHelpType(const int x, const int y, const char* cat, const char* use) {
-    setBleFont(1);
-    M5Cardputer.Display.setTextColor(YELLOW, BLACK);
-    M5Cardputer.Display.setCursor(x, y);
-    M5Cardputer.Display.print(cat);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.print(" ");
-    M5Cardputer.Display.print(use);
-    resetBleFont();
-    return y + 11;
-}
-
+// Help：扫描键 / 类型说明分两页；类型名着色
 static void drawBleHelpPage() {
-    beginAppScreen("Help");
-    constexpr int col_gap = 4;
-    const int screen_w = M5Cardputer.Display.width();
-    const int col_w = (screen_w - col_gap) / 2;
-    const int types_x = col_w + col_gap;
-    const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
-    M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y,
-                                      M5Cardputer.Display.height() - col_y, DARKGREY);
-
-    int y = drawBleHelpColHeader(0, col_y, col_w, "keymap");
-    y = drawBleHelpKey(2, y, 's', "scan nearby");
-    y = drawBleHelpBadge(2, y, ",.", "page");
-    y = drawBleHelpBadge(2, y, "[]", "page too");
-    y = drawBleHelpKey(2, y, 'h', "help / close");
-
-    y = drawBleHelpColHeader(types_x, col_y, screen_w - types_x, "types");
-    y = drawBleHelpText(types_x + 2, y, "scan nearby BLE");
-    y = drawBleHelpType(types_x + 2, y, "normal", "phone/buds");
-    y = drawBleHelpText(types_x + 2, y, " generic peripheral");
-    y = drawBleHelpType(types_x + 2, y, "beacon", "locate/ads");
-    y = drawBleHelpText(types_x + 2, y, " iBeacon/Eddystone");
-    y = drawBleHelpType(types_x + 2, y, "ble-svc", "sensor/IoT");
-    y = drawBleHelpText(types_x + 2, y, " advertises GATT");
-
-    drawHelpHintRight("close");
-    updateAppHeaderStatus();
+    int y = drawAppHelpBegin("BLE");
+    constexpr int x = APP_HELP_CONTENT_X;
+    if (bleHelpPage == 0) {
+        y = drawAppHelpKey(x, y, 's', "scan nearby");
+        y = drawAppHelpBadge(x, y, ",.", "page");
+        y = drawAppHelpBadge(x, y, "[]", "page too");
+        y = drawAppHelpKey(x, y, 'h', "help / close");
+        (void)drawAppHelpText(x, y, "scan nearby BLE");
+    } else {
+        y = drawAppHelpTextColored(x, y, "Categories", APP_COLOR_LABEL);
+        y = drawAppHelpLabelText(x, y, "normal", APP_COLOR_OK, ": phone/buds");
+        y = drawAppHelpLabelText(x, y, "beacon", APP_COLOR_WARN, ": locate/ads iBeacon");
+        (void)drawAppHelpLabelText(x, y, "ble-svc", APP_COLOR_LABEL, ": sensor/IoT GATT");
+    }
+    drawAppHelpFooter(bleHelpPage, BLE_HELP_PAGES);
 }
 
 // 底栏 tip：scan + 分页页码；右侧 h help（[] 翻页只写在 Help）
@@ -384,16 +322,27 @@ void updateBleApp() {
     drawBleApp(false);
 }
 
+bool closeBleHelp() {
+    // Help 未打开则忽略
+    if (!bleHelpVisible) {
+        return false;
+    }
+    bleHelpVisible = false;
+    // Help 清过全屏，关闭后强制重绘主界面
+    bleScreenReady = false;
+    bleListDirty = true;
+    drawBleApp(true);
+    return true;
+}
+
 void handleBleApp(const String& key) {
     if (key == "h") {
-        bleHelpVisible = !bleHelpVisible;
         if (bleHelpVisible) {
-            drawBleHelpPage();
+            closeBleHelp();
         } else {
-            // Help 清过全屏，关闭后强制重绘主界面
-            bleScreenReady = false;
-            bleListDirty = true;
-            drawBleApp(true);
+            bleHelpVisible = true;
+            bleHelpPage = 0;
+            drawBleHelpPage();
         }
         updateAppHeaderStatus();
         return;
@@ -412,23 +361,24 @@ void handleBleApp(const String& key) {
 }
 
 bool handleBlePageNav(const Keyboard_Class::KeysState& status) {
-    if (bleHelpVisible || bleScanning) {
+    // Help 打开时：方向键 / [] 翻帮助页
+    if (bleHelpVisible) {
+        const int delta = getHelpNavDelta(status);
+        if (delta != 0) {
+            bleHelpPage = applyHelpPageDelta(bleHelpPage, BLE_HELP_PAGES, delta);
+            drawBleHelpPage();
+            return true;
+        }
+        return false;
+    }
+    if (bleScanning) {
         return false;
     }
 
     // 方向键 / ;,. / 以及 [] 翻页
     int delta = getMenuNavDelta(status);
     if (delta == 0) {
-        for (const char c : status.word) {
-            if (c == '[') {
-                delta = -1;
-                break;
-            }
-            if (c == ']') {
-                delta = 1;
-                break;
-            }
-        }
+        delta = getBracketNavDelta(status);
     }
     if (delta == 0) {
         return false;

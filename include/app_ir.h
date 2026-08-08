@@ -11,6 +11,8 @@ void updateIrApp();
 void handleIrApp(const Keyboard_Class::KeysState& status);
 // 每帧轮询 BtnA：发送当前遥控指令（wasPressed 仅单帧有效）
 void pollIrBtnA();
+// Help 可见时关闭并重绘；否则返回 false
+bool closeIrHelp();
 
 // 共享红外空调发送（供 Infrared / 空调自动化共用）
 // brand: 0..IR_AC_BRAND_COUNT-1

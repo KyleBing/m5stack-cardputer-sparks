@@ -62,6 +62,8 @@ static char wifiStatus[48] = "";
 static uint32_t wifiConnectDeadline = 0;
 static bool wifiConnectFromConfig = false;
 static bool wifiHelpVisible = false;
+static int wifiHelpPage = 0;
+static constexpr int WIFI_HELP_PAGES = 2;
 // 连接目标（脱离扫描索引，失败页仍可显示）
 static char wifiTargetSsid[33] = "";
 static int wifiTargetRssi = -100;
@@ -221,63 +223,25 @@ static void truncateTextToWidth(const char* src, char* out, const size_t out_siz
     }
 }
 
-// Help 按键说明；徽章后恢复说明文字颜色
-static int drawWifiHelpKey(const int x, const int y, const char key, const char* text) {
-    const int cx = x + drawKeyBadge(x, y, key, 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(text);
-    return y + 12;
-}
-
-static int drawWifiHelpBadge(const int x, const int y, const char* badge, const char* text) {
-    const int cx = x + drawTextBadge(x, y, badge, 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(text);
-    return y + 12;
-}
-
-// Help 功能说明
-static int drawWifiHelpText(const int x, const int y, const char* text) {
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_MUTED, BLACK);
-    M5Cardputer.Display.setCursor(x, y);
-    M5Cardputer.Display.print(text);
-    return y + 11;
-}
-
-// Help：单栏按键表
+// Help：键位 / 导航分两页，避免超出底栏
 static void drawWifiHelpPage() {
-    beginAppScreen("Help");
-    int y = APP_CONTENT_Y_NO_TAP_TO_HEADER + 3;
-    y = drawWifiHelpBadge(APP_CONTENT_X, y, "s/w", "saved <-> scan");
-    y = drawWifiHelpKey(APP_CONTENT_X, y, 'r', "connect / retry");
-    y = drawWifiHelpKey(APP_CONTENT_X, y, 'p', "edit pass on fail");
-    y = drawWifiHelpBadge(APP_CONTENT_X, y, "1-4", "pick saved / scan");
-    y = drawWifiHelpBadge(APP_CONTENT_X, y, "Enter", "connect / list");
-    y = drawWifiHelpBadge(APP_CONTENT_X, y, "Bksp", "del saved");
-    y = drawWifiHelpBadge(APP_CONTENT_X, y, "Fn+Q", "leave password");
-    // 一行放两个徽章：方向键移动光标 / 括号翻页
-    {
-        int x = APP_CONTENT_X;
-        x += drawTextBadge(x, y, ";,./", 1);
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(x, y);
-        M5Cardputer.Display.print("move  ");
-        x = M5Cardputer.Display.getCursorX();
-        x += drawTextBadge(x, y, "[]", 1);
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(x, y);
-        M5Cardputer.Display.print("page");
-        y += 12;
+    int y = drawAppHelpBegin("WiFi");
+    constexpr int x = APP_HELP_CONTENT_X;
+    if (wifiHelpPage == 0) {
+        y = drawAppHelpBadge(x, y, "s/w", "saved <-> scan");
+        y = drawAppHelpKey(x, y, 'r', "connect / retry");
+        y = drawAppHelpKey(x, y, 'p', "edit pass on fail");
+        y = drawAppHelpBadge(x, y, "1-4", "pick saved / scan");
+        y = drawAppHelpBadge(x, y, "Enter", "connect / list");
+        y = drawAppHelpBadge(x, y, "Bksp", "del saved");
+        (void)drawAppHelpBadge(x, y, "Fn+Q", "leave password");
+    } else {
+        y = drawAppHelpTextColored(x, y, "Navigate", APP_COLOR_LABEL);
+        y = drawAppHelpBadge(x, y, ";,./", "move");
+        y = drawAppHelpBadge(x, y, "[]", "page");
+        (void)drawAppHelpText(x, y, "h closes this help");
     }
-
-    drawHelpHintRight("close");
+    drawAppHelpFooter(wifiHelpPage, WIFI_HELP_PAGES);
 }
 
 static void drawWifiStatusScreen() {
@@ -1152,18 +1116,38 @@ void updateWifiApp() {
     }
 }
 
+bool closeWifiHelp() {
+    // Help 未打开则忽略
+    if (!wifiHelpVisible) {
+        return false;
+    }
+    wifiHelpVisible = false;
+    drawWifiApp();
+    return true;
+}
+
 void handleWifiApp(const Keyboard_Class::KeysState& status) {
     // 密码输入页保留 h 作为普通密码字符，其它页面可打开帮助
     if (wifiPhase != WifiAppPhase::PASSWORD) {
         for (const char c : status.word) {
             if (c == 'h' || c == 'H') {
-                wifiHelpVisible = !wifiHelpVisible;
-                drawWifiApp();
+                if (wifiHelpVisible) {
+                    closeWifiHelp();
+                } else {
+                    wifiHelpVisible = true;
+                    wifiHelpPage = 0;
+                    drawWifiApp();
+                }
                 return;
             }
         }
     }
     if (wifiHelpVisible) {
+        const int delta = getHelpNavDelta(status);
+        if (delta != 0) {
+            wifiHelpPage = applyHelpPageDelta(wifiHelpPage, WIFI_HELP_PAGES, delta);
+            drawWifiApp();
+        }
         return;
     }
 

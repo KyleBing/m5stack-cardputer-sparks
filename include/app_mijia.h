@@ -20,3 +20,5 @@ bool handleMijiaDeviceNav(const Keyboard_Class::KeysState& status);
 void updateMijiaApp();
 // 每帧调用：BtnA 切换当前设备/编组开关（控制页 / Grid / Groups）；快捷键编辑页确认
 void pollMijiaBtnA();
+// Help 可见时关闭并重绘；否则返回 false
+bool closeMijiaHelp();

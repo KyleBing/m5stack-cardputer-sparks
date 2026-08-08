@@ -1,0 +1,51 @@
+---
+description: Help 页 UI 格式与 ESC 关闭约定
+alwaysApply: true
+---
+
+# Help 页约定
+
+## UI 格式（对齐 Time Help）
+
+全屏 Help **不要**用 `beginAppScreen("Help")` / 双栏 keymap·manual。统一用 `app_common` 共享辅助：
+
+```cpp
+int y = drawAppHelpBegin("Clock"); // 黑底 + size-2 "Help" + 浅色副标题，返回内容起始 y
+constexpr int x = APP_HELP_CONTENT_X; // = APP_HELP_EDGE(5)，距边至少 5px
+y = drawAppHelpKey(x, y, 'r', "sync time over WiFi");
+y = drawAppHelpBadge(x, y, "BtnGO", "start / pause");
+y = drawAppHelpText(x, y, "Uses RTC; sync source is NTP.");
+drawHelpHintRight("close");
+```
+
+- 边距：`APP_HELP_CONTENT_X` / 顶栏 y 均为 `APP_HELP_EDGE`（5px）；右侧 tip 同理
+- 副标题：跟在 `Help` 后，色用 `APP_COLOR_HINT`，与主标题间距 `APP_HELP_SUBTITLE_GAP`（≥10px）
+- 单列；徽章后说明文字色由 helpers 恢复为 `APP_COLOR_HINT`
+- 每个带 Help 的 app 提供 `bool closeXxxHelp()`：未打开返回 false；打开则关闭并重绘主界面，返回 true
+
+## 多页 Help
+
+内容超过约 7 行（`APP_HELP_MAX_LINES`）须分页：
+
+```cpp
+y = drawAppHelpTextColored(x, y, "Mode", APP_COLOR_LABEL); // 章节标题着色
+y = drawAppHelpLabelText(x, y, "CLIP", APP_COLOR_ERROR, " = too loud"); // 关键词着色
+drawAppHelpFooter(page, page_count); // 底栏箭头+页码 + h close
+// 翻页：方向键 / ;,./ 或 []
+const int delta = getHelpNavDelta(status);
+page = applyHelpPageDelta(page, page_count, delta);
+```
+
+- 章节标题用 `APP_COLOR_LABEL`；警告/成功等用 `APP_COLOR_WARN` / `OK` / `ERROR`
+- 翻页统一 `getHelpNavDelta`（含方向键与 `[]`）
+- 多页时标题仍为 size-2 `Help` + 副标题，页码在底栏
+
+## ESC / BtnGO 行为
+
+**Help 打开时，ESC（` / BtnGO）等同按 `h` 关闭 Help**，不得直接回主菜单或退出子界面。
+
+- 全局入口：`main.cpp` 的 `tryCloseCurrentAppHelp()`（在 leave app / `showMenu` 之前）
+- Sleep 倒计时：Help 打开时 ESC 只关 Help，不取消休眠
+- HID Keyboard：Help 打开时 `` ` `` / HID `0x35` 关 Help，不发给主机（本 App 仍用侧边 BtnA 退出）
+
+新增 Help 时：实现 Time 风格绘制 + `closeXxxHelp()`，并把它挂进 `tryCloseCurrentAppHelp()`。

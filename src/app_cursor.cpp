@@ -145,6 +145,8 @@ static bool g_display_blanked = false;
 static uint8_t g_saved_brightness = 30;
 // Help 页
 static bool g_help_visible = false;
+static int g_help_page = 0;
+static constexpr int CURSOR_HELP_PAGES = 2;
 // FreeRTOS：网络请求与主循环键扫分离
 static constexpr uint32_t CURSOR_FETCH_STACK = 8192; // FreeRTOS 单位：字（≈32KB）
 static volatile bool g_task_running = false;
@@ -1459,86 +1461,25 @@ static void drawCursorHints() {
   drawHelpHintRight("help");
 }
 
-// Help 分栏标题
-static int drawCursorHelpColHeader(const int x, const int y, const int w, const char* title) {
-  M5Cardputer.Display.fillRect(x, y, w, 11, APP_COLOR_LABEL);
-  M5Cardputer.Display.setTextSize(1);
-  M5Cardputer.Display.setTextColor(BLACK, APP_COLOR_LABEL);
-  M5Cardputer.Display.setCursor(x + 2, y + 1);
-  M5Cardputer.Display.print(title);
-  return y + 13;
-}
-
-// Help 功能说明
-static int drawCursorHelpText(const int x, const int y, const char* text) {
-  M5Cardputer.Display.setTextSize(1);
-  M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-  M5Cardputer.Display.setCursor(x, y);
-  M5Cardputer.Display.print(text);
-  return y + 11;
-}
-
-// Help：按键徽章 + 说明（徽章后恢复 hint 色）
-static int drawCursorHelpKey(const int x, const int y, const char key, const char* text) {
-  const int cx = x + drawKeyBadge(x, y, key, 1);
-  M5Cardputer.Display.setTextSize(1);
-  M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-  M5Cardputer.Display.setCursor(cx, y);
-  M5Cardputer.Display.print(text);
-  return y + 11;
-}
-
-// Help：文本徽章 + 说明
-static int drawCursorHelpBadge(const int x, const int y, const char* badge, const char* text) {
-  const int cx = x + drawTextBadge(x, y, badge, 1);
-  M5Cardputer.Display.setTextSize(1);
-  M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-  M5Cardputer.Display.setCursor(cx, y);
-  M5Cardputer.Display.print(text);
-  return y + 11;
-}
-
-// Help：箭头徽章 + 说明
-static int drawCursorHelpArrows(const int x, const int y, const char* text) {
-  const int cx = x + drawArrowBadge(x, y, 1);
-  M5Cardputer.Display.setTextSize(1);
-  M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-  M5Cardputer.Display.setCursor(cx, y);
-  M5Cardputer.Display.print(text);
-  return y + 11;
-}
-
+// Help：键位 / 说明分两页；auth 警告着色
 static void drawCursorHelpPage() {
-  beginAppScreen("Help");
-  constexpr int col_gap = 4;
-  const int screen_w = M5Cardputer.Display.width();
-  const int col_w = (screen_w - col_gap) / 2;
-  const int manual_x = col_w + col_gap;
-  const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
-  M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y,
-                                   M5Cardputer.Display.height() - col_y, DARKGREY);
-
-  int y = drawCursorHelpColHeader(0, col_y, col_w, "keymap");
-  y = drawCursorHelpArrows(2, y, "switch views");
-  y = drawCursorHelpKey(2, y, 's', "summary");
-  y = drawCursorHelpKey(2, y, 'u', "latest usage");
-  y = drawCursorHelpBadge(2, y, "d/w/m", "charts");
-  y = drawCursorHelpBadge(2, y, "[ ]", "records");
-  y = drawCursorHelpKey(2, y, 'r', "refresh");
-  y = drawCursorHelpBadge(2, y, "BtnGO", "screen off");
-
-  y = drawCursorHelpColHeader(manual_x, col_y, screen_w - manual_x, "manual");
-  y = drawCursorHelpText(manual_x + 2, y, "Cursor usage viewer");
-  y = drawCursorHelpText(manual_x + 2, y, "Auto/API/On-Demand");
-  y = drawCursorHelpText(manual_x + 2, y, "latest + charts");
-  y = drawCursorHelpText(manual_x + 2, y, "idle auto refresh");
-  y = drawCursorHelpText(manual_x + 2, y, "WiFi hold 1m / off");
-  // 长时间反复连断可能导致堆碎片，TLS 失败显示为 auth -1
-  y = drawCursorHelpText(manual_x + 2, y, "auth -1: low mem");
-  y = drawCursorHelpText(manual_x + 2, y, "r retry / reboot");
-
-  drawHelpHintRight("close");
-  updateAppHeaderStatus();
+  clearAppHeaderStatusRefresh();
+  int y = drawAppHelpBegin("Cursor");
+  constexpr int x = APP_HELP_CONTENT_X;
+  if (g_help_page == 0) {
+    y = drawAppHelpArrows(x, y, "switch views");
+    y = drawAppHelpKey(x, y, 's', "summary");
+    y = drawAppHelpKey(x, y, 'u', "latest usage");
+    y = drawAppHelpBadge(x, y, "d/w/m", "charts");
+    y = drawAppHelpBadge(x, y, "[ ]", "records");
+    y = drawAppHelpKey(x, y, 'r', "refresh / retry");
+    (void)drawAppHelpBadge(x, y, "BtnGO", "screen off");
+  } else {
+    y = drawAppHelpTextColored(x, y, "Notes", APP_COLOR_LABEL);
+    y = drawAppHelpText(x, y, "idle refresh; WiFi hold 1m");
+    (void)drawAppHelpLabelText(x, y, "auth -1", APP_COLOR_WARN, ": low mem / reboot");
+  }
+  drawAppHelpFooter(g_help_page, CURSOR_HELP_PAGES);
 }
 
 // 摘要：标签色=条色；百分比右对齐同一起点；On-Demand / reset 数值用界面蓝色
@@ -2547,6 +2488,12 @@ void handleCursorApp(const Keyboard_Class::KeysState& status) {
       g_help_visible = false;
       g_screen_ready = false;
       drawCursorApp();
+      return;
+    }
+    const int delta = getHelpNavDelta(status);
+    if (delta != 0) {
+      g_help_page = applyHelpPageDelta(g_help_page, CURSOR_HELP_PAGES, delta);
+      drawCursorHelpPage();
     }
     return;
   }
@@ -2554,6 +2501,7 @@ void handleCursorApp(const Keyboard_Class::KeysState& status) {
   noteCursorActivity();
   if (key == "h") {
     g_help_visible = true;
+    g_help_page = 0;
     drawCursorHelpPage();
     return;
   }
@@ -2634,4 +2582,15 @@ void handleCursorApp(const Keyboard_Class::KeysState& status) {
     }
     beginCursorFetch(CursorFetchMode::FULL);
   }
+}
+
+// 关闭 Help 并重绘主界面
+bool closeCursorHelp() {
+  if (!g_help_visible) {
+    return false;
+  }
+  g_help_visible = false;
+  g_screen_ready = false;
+  drawCursorApp();
+  return true;
 }

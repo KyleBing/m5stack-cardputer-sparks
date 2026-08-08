@@ -1994,69 +1994,21 @@ static uint8_t g_led_b = 255;
 static uint8_t g_led_saved_brightness = 30;
 static bool g_i2c_help_visible = false;
 
-// 简单 Help 页的分栏标题
-static int drawSimpleHelpColHeader(const int x, const int y, const int w, const char* title) {
-    M5Cardputer.Display.fillRect(x, y, w, 11, APP_COLOR_LABEL);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(BLACK, APP_COLOR_LABEL);
-    M5Cardputer.Display.setCursor(x + 2, y + 1);
-    M5Cardputer.Display.print(title);
-    return y + 13;
-}
-
-// 简单 Help 页的按键说明；徽章后恢复说明文字颜色
-static int drawSimpleHelpKey(const int x, const int y, const char key, const char* text) {
-    const int cx = x + drawKeyBadge(x, y, key, 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(text);
-    return y + 11;
-}
-
-static int drawSimpleHelpBadge(const int x, const int y, const char* badge, const char* text) {
-    const int cx = x + drawTextBadge(x, y, badge, 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(text);
-    return y + 11;
-}
-
-// 简单 Help 页的功能说明
-static int drawSimpleHelpText(const int x, const int y, const char* text) {
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(x, y);
-    M5Cardputer.Display.print(text);
-    return y + 11;
-}
+// ===== LED / I2C Help（Time 风格全屏）=====
 
 static void drawLedHelpPage() {
-    beginAppScreen("Help");
-    constexpr int col_gap = 4;
-    const int screen_w = M5Cardputer.Display.width();
-    const int col_w = (screen_w - col_gap) / 2;
-    const int manual_x = col_w + col_gap;
-    const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
-    M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y,
-                                     M5Cardputer.Display.height() - col_y, DARKGREY);
-
-    int y = drawSimpleHelpColHeader(0, col_y, col_w, "keymap");
-    y = drawSimpleHelpKey(2, y, 't', "toggle");
-    y = drawSimpleHelpKey(2, y, '0', "off");
-    y = drawSimpleHelpBadge(2, y, "1-7", "select color");
-    y = drawSimpleHelpBadge(2, y, "-=", "brightness");
-
-    y = drawSimpleHelpColHeader(manual_x, col_y, screen_w - manual_x, "manual");
-    y = drawSimpleHelpText(manual_x + 2, y, "test onboard RGB");
-    y = drawSimpleHelpText(manual_x + 2, y, "1-7: R G B Y C M W");
-    y = drawSimpleHelpText(manual_x + 2, y, "shares LCD power");
-    y = drawSimpleHelpText(manual_x + 2, y, "-= change bright");
-    y = drawSimpleHelpText(manual_x + 2, y, "exit restores level");
-
+    int y = drawAppHelpBegin("RGB LED");
+    constexpr int x = APP_HELP_CONTENT_X;
+    y = drawAppHelpKey(x, y, 't', "toggle");
+    y = drawAppHelpKey(x, y, '0', "off");
+    y = drawAppHelpBadge(x, y, "1-7", "select color");
+    y = drawAppHelpBadge(x, y, "-=", "brightness");
+    y = drawAppHelpText(x, y, "test onboard RGB");
+    y = drawAppHelpText(x, y, "1-7: R G B Y C M W");
+    y = drawAppHelpText(x, y, "shares LCD power");
+    y = drawAppHelpText(x, y, "-= change bright");
+    y = drawAppHelpText(x, y, "exit restores level");
     drawHelpHintRight("close");
-    updateAppHeaderStatus();
 }
 
 // 取板载 RGB 数据线脚位
@@ -2313,29 +2265,14 @@ void handleLedApp(const String& key) {
 // ===== IN I2C =====
 
 static void drawI2cHelpPage(const bool internal_bus) {
-    beginAppScreen("Help");
-    constexpr int col_gap = 4;
-    const int screen_w = M5Cardputer.Display.width();
-    const int col_w = (screen_w - col_gap) / 2;
-    const int manual_x = col_w + col_gap;
-    const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
-    M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y,
-                                     M5Cardputer.Display.height() - col_y, DARKGREY);
-
-    int y = drawSimpleHelpColHeader(0, col_y, col_w, "keymap");
-    y = drawSimpleHelpKey(2, y, 'h', "help / close");
-
-    y = drawSimpleHelpColHeader(manual_x, col_y, screen_w - manual_x, "manual");
-    y = drawSimpleHelpText(manual_x + 2, y,
-                           internal_bus ? "scan internal I2C" : "scan external I2C");
-    y = drawSimpleHelpText(manual_x + 2, y,
-                           internal_bus ? "internal bus debug" : "HY2.0 Port A bus");
-    y = drawSimpleHelpText(manual_x + 2, y, "show SDA/SCL pins");
-    y = drawSimpleHelpText(manual_x + 2, y, "scan address 1-119");
-    y = drawSimpleHelpText(manual_x + 2, y, "list found devices");
-
+    int y = drawAppHelpBegin(internal_bus ? "IN I2C" : "EX I2C");
+    constexpr int x = APP_HELP_CONTENT_X;
+    y = drawAppHelpText(x, y, internal_bus ? "scan internal I2C" : "scan external I2C");
+    y = drawAppHelpText(x, y, internal_bus ? "internal bus debug" : "HY2.0 Port A bus");
+    y = drawAppHelpText(x, y, "show SDA/SCL pins");
+    y = drawAppHelpText(x, y, "scan address 1-119");
+    y = drawAppHelpText(x, y, "list found devices");
     drawHelpHintRight("close");
-    updateAppHeaderStatus();
 }
 
 // 绘制 I2C 扫描结果（IN I2C / EX I2C 共用）
@@ -2909,22 +2846,13 @@ static void drawDeepSleepPrompt(const int seconds_left) {
 
 // Sleep Help：无 header 全屏，风格对齐 Time Help
 static void drawSleepHelpPage() {
-    M5Cardputer.Display.fillScreen(BLACK);
-
-    constexpr int title_y = 2;
-    M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-    M5Cardputer.Display.setCursor(2, title_y);
-    M5Cardputer.Display.print("Help");
-    int y = title_y + 16 + 10;
-
-    y = drawSimpleHelpKey(2, y, 's', "to deep sleep");
-    y = drawSimpleHelpKey(2, y, 'h', "help / close");
-    y = drawSimpleHelpBadge(2, y, "BtnGO", "cancel");
-    y = drawSimpleHelpText(2, y, "Light: wake resume");
-    y = drawSimpleHelpText(2, y, "Deep: wake reboot");
-    y = drawSimpleHelpText(2, y, "5s then sleep; side BtnA wakes");
-
+    int y = drawAppHelpBegin("Sleep");
+    constexpr int x = APP_HELP_CONTENT_X;
+    y = drawAppHelpKey(x, y, 's', "to deep sleep");
+    y = drawAppHelpBadge(x, y, "BtnGO", "cancel");
+    y = drawAppHelpText(x, y, "Light: wake resume");
+    y = drawAppHelpText(x, y, "Deep: wake reboot");
+    y = drawAppHelpText(x, y, "5s then sleep; side BtnA wakes");
     drawHelpHintRight("close");
 }
 
@@ -3234,6 +3162,89 @@ void setup() {
                    static_cast<unsigned>(ESP.getFreeHeap()));
 }
 
+// Help 打开时 ESC/BtnGO ≡ 按 h 关闭 Help，不回主菜单 / 不退子界面
+static bool tryCloseCurrentAppHelp() {
+    switch (currentState) {
+        case AppState::RTC:
+            return closeRtcHelp();
+        case AppState::BLE:
+            return closeBleHelp();
+        case AppState::WIFI:
+            return closeWifiHelp();
+        case AppState::CURSOR:
+            return closeCursorHelp();
+        case AppState::MIJIA:
+            return closeMijiaHelp();
+        case AppState::IR:
+            return closeIrHelp();
+        case AppState::WEB:
+            return closeWebHelp();
+        case AppState::AC_AUTO:
+            return closeAcAutoHelp();
+        case AppState::GAMES:
+            return closeGamesHelp();
+        case AppState::DICE:
+            return closeDiceHelp();
+        case AppState::NEON_FX:
+            return closeNeonFxHelp();
+        case AppState::MIC:
+            return closeMicHelp();
+        case AppState::CALENDAR:
+            return closeCalendarHelp();
+        case AppState::ICONS:
+            return closeIconDemoHelp();
+        case AppState::LED:
+            if (!g_led_help_visible) {
+                return false;
+            }
+            g_led_help_visible = false;
+            drawLedApp();
+            return true;
+        case AppState::IN_I2C:
+            if (!g_i2c_help_visible) {
+                return false;
+            }
+            g_i2c_help_visible = false;
+            drawI2cScanApp(M5Cardputer.In_I2C, "InI2");
+            return true;
+        case AppState::EX_I2C:
+            if (!g_i2c_help_visible) {
+                return false;
+            }
+            g_i2c_help_visible = false;
+            drawI2cScanApp(M5Cardputer.Ex_I2C, "ExI2");
+            return true;
+        case AppState::HARDWARE_TESTS:
+            if (hardwareTestMode == HardwareTestMode::LED && g_led_help_visible) {
+                g_led_help_visible = false;
+                drawLedApp();
+                return true;
+            }
+            if (hardwareTestMode == HardwareTestMode::IN_I2C && g_i2c_help_visible) {
+                g_i2c_help_visible = false;
+                drawI2cScanApp(M5Cardputer.In_I2C, "InI2");
+                return true;
+            }
+            if (hardwareTestMode == HardwareTestMode::EX_I2C && g_i2c_help_visible) {
+                g_i2c_help_visible = false;
+                drawI2cScanApp(M5Cardputer.Ex_I2C, "ExI2");
+                return true;
+            }
+            if (hardwareTestMode == HardwareTestMode::MIC) {
+                return closeMicHelp();
+            }
+            if (hardwareTestMode == HardwareTestMode::BLE) {
+                return closeBleHelp();
+            }
+            if (hardwareTestMode == HardwareTestMode::ICONS) {
+                return closeIconDemoHelp();
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
 void loop() {
     M5Cardputer.update();
     // 提示音播完后关功放+拉低脚；音量防抖写盘
@@ -3243,8 +3254,12 @@ void loop() {
     // 休眠提示倒计时
     if (sleepPhase == SleepPhase::PROMPT_LIGHT || sleepPhase == SleepPhase::PROMPT_DEEP) {
         updateSleepPrompt();
-        // btngo：取消休眠倒计时并回主菜单（入睡唤醒仍用侧边 BtnA）
+        // btngo：Help 打开时等同 h 关闭；否则取消休眠回主菜单
         if (wasBtnGoPressed()) {
+            if (g_sleep_help_visible) {
+                toggleSleepHelp();
+                return;
+            }
             sleepPhase = SleepPhase::NONE;
             g_sleep_help_visible = false;
             showMenu();
@@ -3273,9 +3288,12 @@ void loop() {
     }
 
     // btngo：无 app 提示页 / 子界面返回主菜单
-    // HID 键盘占用全部按键（含 ESC），改由侧边 BtnA 退出
+    // Help 打开时 ESC ≡ h 关闭 Help（HID 键盘自管 Esc，不走此处）
     if (currentState != AppState::HID_KEYBOARD && wasBtnGoPressed()) {
         if (menuNoAppPrompt || currentState != AppState::MENU) {
+            if (tryCloseCurrentAppHelp()) {
+                return;
+            }
             if (currentState == AppState::GAMES && handleGamesBack()) {
                 return;
             }
@@ -3550,7 +3568,7 @@ void loop() {
                 break;
             case AppState::WEB:
                 if (M5Cardputer.Keyboard.isPressed()) {
-                    handleWebApp(getPressedKey());
+                    handleWebApp(M5Cardputer.Keyboard.keysState());
                 }
                 break;
             case AppState::RTC:

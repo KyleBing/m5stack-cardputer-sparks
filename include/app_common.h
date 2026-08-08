@@ -54,6 +54,31 @@ void drawKeyHintsRow(int x, int y, const KeyHintItem* items, int item_count, int
 // 底栏右下角 h help（各应用统一位置；y_offset 整行下移，宫格 tip 用 1）
 void drawHelpHintRight(const char* help_label = "help", int y_offset = 0);
 
+// ===== Time 风格全屏 Help（无 header）=====
+// 行高：徽章约 10px × 1.3；底栏上方约可放 7 行，超出须分页
+static constexpr int APP_HELP_LINE_H = 13;
+static constexpr int APP_HELP_EDGE = 5; // 内容距屏幕边缘至少 5px
+static constexpr int APP_HELP_CONTENT_X = APP_HELP_EDGE;
+static constexpr int APP_HELP_MAX_LINES = 7;
+static constexpr int APP_HELP_SUBTITLE_GAP = 10; // 主标题与副标题间距
+// 全屏黑底 + size-2 "Help" + 可选浅色副标题，返回内容区起始 y
+int drawAppHelpBegin(const char* subtitle = nullptr);
+// 按键徽章 / 文本徽章 / 纯说明；徽章后恢复 APP_COLOR_HINT
+int drawAppHelpKey(int x, int y, char key, const char* text);
+int drawAppHelpBadge(int x, int y, const char* badge, const char* text);
+int drawAppHelpText(int x, int y, const char* text);
+int drawAppHelpArrows(int x, int y, const char* text);
+// 整行着色（章节标题 / 警告等）
+int drawAppHelpTextColored(int x, int y, const char* text, uint16_t color);
+// 彩色标签 + 灰色说明（如 "CLIP" + " = too loud"）
+int drawAppHelpLabelText(int x, int y, const char* label, uint16_t label_color, const char* text);
+// 多页底栏：左箭头+页码，右 h close；单页仅 close
+void drawAppHelpFooter(int page, int page_count);
+// Help 翻页：方向键/;,./ 或 []，-1/0/1
+int getHelpNavDelta(const Keyboard_Class::KeysState& status);
+// 按 delta 换页（循环）；page_count<=1 时原样返回
+int applyHelpPageDelta(int page, int page_count, int delta);
+
 // 提示小字：',' 左箭头，'.' 右箭头
 void drawHintText(int x, int y, const char* text, int text_size = 1);
 

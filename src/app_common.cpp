@@ -136,6 +136,113 @@ void drawKeyHintsRow(const int x, const int y, const KeyHintItem* items, const i
     }
 }
 
+// 全屏 Help：无 header，黑底 + size-2 "Help" + 可选浅色副标题
+int drawAppHelpBegin(const char* subtitle) {
+    M5Cardputer.Display.fillScreen(BLACK);
+    constexpr int title_y = APP_HELP_EDGE;
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
+    M5Cardputer.Display.setCursor(APP_HELP_CONTENT_X, title_y);
+    M5Cardputer.Display.print("Help");
+
+    if (subtitle != nullptr && subtitle[0] != '\0') {
+        const int help_w = M5Cardputer.Display.textWidth("Help");
+        // size-2≈16px、size-1≈8px，副标题垂直居中
+        const int sub_y = title_y + 4;
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK); // 浅色区分主标题
+        M5Cardputer.Display.setCursor(APP_HELP_CONTENT_X + help_w + APP_HELP_SUBTITLE_GAP, sub_y);
+        M5Cardputer.Display.print(subtitle);
+    }
+    return title_y + 16 + 10; // 标题高 + 与内容区间距
+}
+
+int drawAppHelpKey(const int x, const int y, const char key, const char* text) {
+    const int cx = x + drawKeyBadge(x, y, key, 1);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(cx, y);
+    M5Cardputer.Display.print(text);
+    return y + APP_HELP_LINE_H;
+}
+
+int drawAppHelpBadge(const int x, const int y, const char* badge, const char* text) {
+    const int cx = x + drawTextBadge(x, y, badge, 1);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(cx, y);
+    M5Cardputer.Display.print(text);
+    return y + APP_HELP_LINE_H;
+}
+
+int drawAppHelpText(const int x, const int y, const char* text) {
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(x, y);
+    M5Cardputer.Display.print(text);
+    return y + APP_HELP_LINE_H;
+}
+
+int drawAppHelpArrows(const int x, const int y, const char* text) {
+    const int cx = x + drawArrowBadge(x, y, 1);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+    M5Cardputer.Display.setCursor(cx, y);
+    M5Cardputer.Display.print(text);
+    return y + APP_HELP_LINE_H;
+}
+
+int drawAppHelpTextColored(const int x, const int y, const char* text, const uint16_t color) {
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(color, BLACK);
+    M5Cardputer.Display.setCursor(x, y);
+    M5Cardputer.Display.print(text);
+    return y + APP_HELP_LINE_H;
+}
+
+int drawAppHelpLabelText(const int x, const int y, const char* label, const uint16_t label_color,
+                         const char* text) {
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(label_color, BLACK);
+    M5Cardputer.Display.setCursor(x, y);
+    M5Cardputer.Display.print(label);
+    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK); // 标签后恢复说明色
+    M5Cardputer.Display.print(text);
+    return y + APP_HELP_LINE_H;
+}
+
+// 多页：左下箭头徽章 + N/M；右侧统一 h close
+void drawAppHelpFooter(const int page, const int page_count) {
+    if (page_count > 1) {
+        const int hint_y = M5Cardputer.Display.height() - 12;
+        int cx = APP_HELP_CONTENT_X;
+        cx += drawArrowBadge(cx, hint_y, 1);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK); // 徽章后恢复 tip 色
+        M5Cardputer.Display.setCursor(cx, hint_y + 1);
+        char buf[12];
+        const int safe_page = page < 0 ? 0 : page;
+        snprintf(buf, sizeof(buf), "%d/%d", safe_page + 1, page_count);
+        M5Cardputer.Display.print(buf);
+    }
+    drawHelpHintRight("close");
+}
+
+int getHelpNavDelta(const Keyboard_Class::KeysState& status) {
+    int delta = getMenuNavDelta(status);
+    if (delta == 0) {
+        delta = getBracketNavDelta(status);
+    }
+    return delta;
+}
+
+int applyHelpPageDelta(const int page, const int page_count, const int delta) {
+    if (page_count <= 1 || delta == 0) {
+        return page;
+    }
+    return (page + (delta % page_count) + page_count) % page_count;
+}
+
 // 底栏右下角 h help/close（徽章不动，说明文字下移 1px；y_offset 整行下移）
 void drawHelpHintRight(const char* help_label, const int y_offset) {
     const char* label = (help_label != nullptr && help_label[0] != '\0') ? help_label : "help";
@@ -151,7 +258,8 @@ void drawHelpHintRight(const char* help_label, const int y_offset) {
     constexpr int pad_x = 2;
     const int badge_w = tw + pad_x * 2 + 3;
     const int help_w = badge_w + M5Cardputer.Display.textWidth(help_item.text);
-    const int hx = screen_w - APP_CONTENT_X - help_w;
+    // Help / tip 右侧同样至少留 APP_HELP_EDGE
+    const int hx = screen_w - APP_HELP_EDGE - help_w;
 
     int cx = hx + drawKeyBadge(hx, y, help_item.key, 1);
     M5Cardputer.Display.setTextSize(1);

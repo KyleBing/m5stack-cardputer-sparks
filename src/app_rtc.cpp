@@ -103,36 +103,7 @@ static int rtcCenteredX(const char* text, const int text_size) {
     return (M5Cardputer.Display.width() - tw) / 2;
 }
 
-// Help 行高：徽章高度 10px 的 1.3 倍
-static constexpr int TIME_HELP_LINE_H = 13;
-
-// Help 按键说明；徽章后恢复说明文字颜色
-static int drawTimeHelpKey(const int x, const int y, const char key, const char* text) {
-    const int cx = x + drawKeyBadge(x, y, key, 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(text);
-    return y + TIME_HELP_LINE_H;
-}
-
-static int drawTimeHelpBadge(const int x, const int y, const char* badge, const char* text) {
-    const int cx = x + drawTextBadge(x, y, badge, 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(text);
-    return y + TIME_HELP_LINE_H;
-}
-
-// Help 功能说明
-static int drawTimeHelpText(const int x, const int y, const char* text) {
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(x, y);
-    M5Cardputer.Display.print(text);
-    return y + TIME_HELP_LINE_H;
-}
+// Help 行高：徽章高度 10px 的 1.3 倍（见 APP_HELP_LINE_H）
 
 // 彩色按键徽章（模块入口行用）
 static int drawTimeHelpColoredKey(const int x, const int y, const char key, const uint16_t bg) {
@@ -165,7 +136,7 @@ static void drawTimeHelpModulesRow(const int y) {
         {'c', "ountdown", APP_COLOR_WARN},
         {'s', "topwatch", APP_COLOR_OK},
     };
-    int cx = 2;
+    int cx = APP_HELP_CONTENT_X;
     for (const Entry& e : entries) {
         cx += drawTimeHelpColoredKey(cx, y, e.key, e.color);
         M5Cardputer.Display.setTextSize(1);
@@ -226,43 +197,36 @@ static void showTimeModeLabel() {
 }
 
 static void drawTimeHelpScreen() {
-    // 无 header：全屏黑底，不响应全局 header 刷新
-    M5Cardputer.Display.fillScreen(BLACK);
-
-    // 标题 Help（x2），与下方内容间距 10px
-    constexpr int title_y = 2;
-    M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-    M5Cardputer.Display.setCursor(2, title_y);
-    M5Cardputer.Display.print("Help");
-    int y = title_y + 16 + 10;
+    // 无 header：全屏黑底，风格对齐全局 Time Help
+    int y = drawAppHelpBegin(timeModeLabelName());
+    constexpr int x = APP_HELP_CONTENT_X;
 
     // 当前模块功能说明
     switch (timeMode) {
         case TimeMode::UPTIME:
-            y = drawTimeHelpText(2, y, "Shows time since device boot.");
+            y = drawAppHelpText(x, y, "Shows time since device boot.");
             break;
         case TimeMode::CLOCK:
-            y = drawTimeHelpKey(2, y, 'r', "sync time over WiFi");
-            y = drawTimeHelpKey(2, y, 'b', "big clock");
-            y = drawTimeHelpText(2, y, "Uses RTC; sync source is NTP.");
+            y = drawAppHelpKey(x, y, 'r', "sync time over WiFi");
+            y = drawAppHelpKey(x, y, 'b', "big clock");
+            y = drawAppHelpText(x, y, "Uses RTC; sync source is NTP.");
             break;
         case TimeMode::COUNTDOWN:
-            y = drawTimeHelpBadge(2, y, "Arrows", "select / adjust field");
-            y = drawTimeHelpBadge(2, y, "0-9", "enter duration");
-            y = drawTimeHelpBadge(2, y, "BtnGO", "start / pause / resume");
-            y = drawTimeHelpKey(2, y, 'r', "reset countdown");
-            y = drawTimeHelpText(2, y, "Keeps running in background.");
+            y = drawAppHelpBadge(x, y, "Arrows", "select / adjust field");
+            y = drawAppHelpBadge(x, y, "0-9", "enter duration");
+            y = drawAppHelpBadge(x, y, "BtnGO", "start / pause / resume");
+            y = drawAppHelpKey(x, y, 'r', "reset countdown");
+            y = drawAppHelpText(x, y, "Keeps running in background.");
             break;
         case TimeMode::STOPWATCH:
-            y = drawTimeHelpBadge(2, y, "BtnGO", "start / pause / resume");
-            y = drawTimeHelpKey(2, y, 'r', "reset stopwatch");
-            y = drawTimeHelpText(2, y, "1 ms display; runs in background.");
+            y = drawAppHelpBadge(x, y, "BtnGO", "start / pause / resume");
+            y = drawAppHelpKey(x, y, 'r', "reset stopwatch");
+            y = drawAppHelpText(x, y, "1 ms display; runs in background.");
             break;
     }
 
     // 所有模块入口一排（彩色首字母 + 剩余字母），贴在底栏 close 上方
-    const int modules_y = M5Cardputer.Display.height() - 12 - TIME_HELP_LINE_H - 2;
+    const int modules_y = M5Cardputer.Display.height() - 12 - APP_HELP_LINE_H - 2;
     drawTimeHelpModulesRow(modules_y);
 
     drawHelpHintRight("close");
@@ -818,6 +782,14 @@ void handleTimeApp(const Keyboard_Class::KeysState& status) {
     } else if (timeMode == TimeMode::STOPWATCH) {
         handleStopwatchApp(status);
     }
+}
+
+bool closeRtcHelp() {
+    if (!timeHelpVisible) {
+        return false;
+    }
+    redrawCurrentTimeMode();
+    return true;
 }
 
 bool isTimeClockLikeMode() {

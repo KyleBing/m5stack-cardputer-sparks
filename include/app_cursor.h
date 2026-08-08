@@ -11,3 +11,5 @@ bool isCursorDisplayBlanked();
 // 空闲满 5 分钟后可用 1s 主循环间隔
 bool isCursorIdleSlowLoop();
 void handleCursorApp(const Keyboard_Class::KeysState& status);
+// Help 可见时关闭并重绘主界面；否则返回 false
+bool closeCursorHelp();

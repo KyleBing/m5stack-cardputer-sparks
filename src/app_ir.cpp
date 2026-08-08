@@ -220,6 +220,8 @@ static uint8_t g_ac_temp = 26;
 static stdAc::fanspeed_t g_ac_fan = stdAc::fanspeed_t::kAuto;
 
 static bool g_help_visible = false;
+static int g_help_page = 0;
+static constexpr int IR_HELP_PAGES = 2;
 // 品牌/类别仅退出时写回，避免操控时卡顿
 static bool g_config_dirty = false;
 
@@ -1076,39 +1078,6 @@ static void adjustAcField(const int delta) {
     }
 }
 
-// Help 单栏行：按键徽章 + 功能名（白）+ 说明（灰）
-static constexpr int IR_HELP_BADGE_X = 5;
-static constexpr int IR_HELP_NAME_X = 40;
-static constexpr int IR_HELP_DESC_X = 82;
-static constexpr int IR_HELP_ROW_H = 11;
-
-// badge_kind：0 按键字母 / 1 文字徽章 / 2 上下箭头徽章
-enum class IrHelpBadge : uint8_t { Key = 0, Text, ArrowUpDown };
-
-static int drawIrHelpRow(const int y, const IrHelpBadge kind, const char key, const char* badge,
-                         const char* name, const char* desc) {
-    switch (kind) {
-        case IrHelpBadge::Text:
-            drawTextBadge(IR_HELP_BADGE_X, y, badge, 1);
-            break;
-        case IrHelpBadge::ArrowUpDown:
-            drawArrowUpDownBadge(IR_HELP_BADGE_X, y, 1);
-            break;
-        default:
-            drawKeyBadge(IR_HELP_BADGE_X, y, key, 1);
-            break;
-    }
-    // 徽章绘制会改 setTextColor，说明文字前必须恢复
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_TEXT, BLACK);
-    M5Cardputer.Display.setCursor(IR_HELP_NAME_X, y + 1);
-    M5Cardputer.Display.print(name);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(IR_HELP_DESC_X, y + 1);
-    M5Cardputer.Display.print(desc);
-    return y + IR_HELP_ROW_H;
-}
-
 static void flashAcBtn(const IrAcBtn btn) {
     g_press_ac = btn;
     g_press_tv = IrTvBtn::None;
@@ -1121,34 +1090,42 @@ static void flashTvBtn(const IrTvBtn btn) {
     g_press_until_ms = millis() + IR_PRESS_MS;
 }
 
-// Help：单栏按键表，内容跟随当前 TV / AC 功能块
+// Help：AC/TV 键位 + 硬件说明分页
 static void drawIrHelpPage() {
+    clearAppHeaderStatusRefresh();
     const bool is_ac = g_category == IrCategory::AC;
-    beginAppScreenAccent("Help ", is_ac ? "AC" : "TV", APP_COLOR_LABEL);
-
-    int y = APP_CONTENT_Y_NO_TAP_TO_HEADER + 3;
-    if (is_ac) {
-        y = drawIrHelpRow(y, IrHelpBadge::Key, 'p', nullptr, "Power", "on / off");
-        y = drawIrHelpRow(y, IrHelpBadge::Key, 'm', nullptr, "Mode", "cool heat dry fan auto");
-        y = drawIrHelpRow(y, IrHelpBadge::Key, 'f', nullptr, "Fan", "auto min low med hi max");
-        y = drawIrHelpRow(y, IrHelpBadge::ArrowUpDown, 0, nullptr, "Temp", "16 - 30 C  (also - =)");
-        y = drawIrHelpRow(y, IrHelpBadge::Key, 's', nullptr, "Send", "or SPC / ENT / BtnGO");
-        y = drawIrHelpRow(y, IrHelpBadge::Text, 0, "Tab", "Brand", "next AC brand");
-        y = drawIrHelpRow(y, IrHelpBadge::Key, 't', nullptr, "TV", "switch to TV remote");
+    int y = drawAppHelpBegin(is_ac ? "IR AC" : "IR TV");
+    constexpr int x = APP_HELP_CONTENT_X;
+    if (g_help_page == 0) {
+        if (is_ac) {
+            y = drawAppHelpTextColored(x, y, "AC remote", APP_COLOR_LABEL);
+            y = drawAppHelpKey(x, y, 'p', "Power on / off");
+            y = drawAppHelpKey(x, y, 'm', "Mode cool heat dry fan auto");
+            y = drawAppHelpKey(x, y, 'f', "Fan auto min low med hi max");
+            y = drawAppHelpBadge(x, y, "Arrows", "Temp 16-30 C (also -=)");
+            y = drawAppHelpKey(x, y, 's', "Send SPC / ENT / BtnGO");
+            (void)drawAppHelpBadge(x, y, "Tab", "next AC brand");
+        } else {
+            y = drawAppHelpTextColored(x, y, "TV remote", APP_COLOR_LABEL);
+            y = drawAppHelpKey(x, y, 'p', "Power sends immediately");
+            y = drawAppHelpBadge(x, y, "-=", "Volume down / up");
+            y = drawAppHelpBadge(x, y, "[ ]", "Chan CH+ / CH-");
+            y = drawAppHelpKey(x, y, 'm', "Mute toggle");
+            y = drawAppHelpKey(x, y, 'i', "Input source");
+            (void)drawAppHelpKey(x, y, 's', "Send SPC / ENT / BtnGO");
+        }
     } else {
-        y = drawIrHelpRow(y, IrHelpBadge::Key, 'p', nullptr, "Power", "sends immediately");
-        y = drawIrHelpRow(y, IrHelpBadge::Text, 0, "- =", "Volume", "down / up");
-        y = drawIrHelpRow(y, IrHelpBadge::Text, 0, "[ ]", "Chan", "CH+ / CH-");
-        y = drawIrHelpRow(y, IrHelpBadge::Key, 'm', nullptr, "Mute", "toggle mute");
-        y = drawIrHelpRow(y, IrHelpBadge::Key, 'i', nullptr, "Input", "input source");
-        y = drawIrHelpRow(y, IrHelpBadge::Key, 's', nullptr, "Send", "or SPC / ENT / BtnGO");
-        y = drawIrHelpRow(y, IrHelpBadge::Text, 0, "Tab", "Brand", "next TV brand");
-        y = drawIrHelpRow(y, IrHelpBadge::Key, 't', nullptr, "AC", "switch to AC remote");
+        y = drawAppHelpTextColored(x, y, "More", APP_COLOR_LABEL);
+        if (is_ac) {
+            y = drawAppHelpKey(x, y, 't', "switch to TV remote");
+        } else {
+            y = drawAppHelpBadge(x, y, "Tab", "next TV brand");
+            y = drawAppHelpKey(x, y, 't', "switch to AC remote");
+        }
+        y = drawAppHelpBadge(x, y, btnGoHintLabel(), "exit app");
+        (void)drawAppHelpLabelText(x, y, "IR TX", APP_COLOR_WARN, " GPIO44");
     }
-    drawIrHelpRow(y, IrHelpBadge::Text, 0, btnGoHintLabel(), "Back", "IR TX on GPIO44");
-
-    drawHelpHintRight("close");
-    updateAppHeaderStatus();
+    drawAppHelpFooter(g_help_page, IR_HELP_PAGES);
 }
 
 static bool isAcBtnPressed(const IrAcBtn btn) {
@@ -1563,9 +1540,9 @@ void leaveIrApp() {
     freeAcIconCache();
 }
 
-// 只有 Help 页带 header；遥控主页需要屏蔽定时刷新
+// 遥控主页与 Help 均无共享 header
 bool irAppSuppressesHeader() {
-    return !g_help_visible;
+    return true;
 }
 
 void updateIrApp() {
@@ -1602,6 +1579,9 @@ void handleIrApp(const Keyboard_Class::KeysState& status) {
     for (const char c : status.word) {
         if (c == 'h' || c == 'H') {
             g_help_visible = !g_help_visible;
+            if (g_help_visible) {
+                g_help_page = 0;
+            }
             g_screen_ready = false;
             redrawIr();
             return;
@@ -1609,6 +1589,11 @@ void handleIrApp(const Keyboard_Class::KeysState& status) {
     }
 
     if (g_help_visible) {
+        const int delta = getHelpNavDelta(status);
+        if (delta != 0) {
+            g_help_page = applyHelpPageDelta(g_help_page, IR_HELP_PAGES, delta);
+            drawIrHelpPage();
+        }
         return;
     }
 
@@ -1766,4 +1751,15 @@ void pollIrBtnA() {
         return;
     }
     sendFromTvPage();
+}
+
+// 关闭 Help 并重绘遥控主页
+bool closeIrHelp() {
+    if (!g_help_visible) {
+        return false;
+    }
+    g_help_visible = false;
+    g_screen_ready = false;
+    redrawIr();
+    return true;
 }

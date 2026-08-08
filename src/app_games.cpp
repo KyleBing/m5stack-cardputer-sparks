@@ -923,137 +923,127 @@ static void showGamesHubScreen() {
     drawHubCards();
 }
 
-static void drawHelpLine(const int y, const char* key, const char* text) {
-    int cx = 5;
-    if (key != nullptr && key[0] != '\0') {
-        cx += drawTextBadge(cx, y, key, 1);
-    }
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(text);
-}
-
 static void drawHelp() {
     clearAppHeaderStatusRefresh(); // Help 自绘全屏标题，无共享 header
-    M5Cardputer.Display.fillScreen(BLACK);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-    M5Cardputer.Display.setCursor(5, 4);
-    M5Cardputer.Display.print(modeName());
-    M5Cardputer.Display.print(" HELP");
+    // Hub 用 Games；进游戏后用卡片名作副标题
+    const char* subtitle = "Games";
+    for (const GamesHubItem& item : GAMES_HUB_ITEMS) {
+        if (item.mode == g_mode) {
+            subtitle = item.title;
+            break;
+        }
+    }
+    int y = drawAppHelpBegin(subtitle);
+    constexpr int x = APP_HELP_CONTENT_X;
 
     switch (g_mode) {
         case GameMode::COIN:
-            drawHelpLine(20, "SPC", "toss the coin");
-            drawHelpLine(34, "IMU", "shake to toss");
-            drawHelpLine(48, "", "Front portrait / back emblem");
+            y = drawAppHelpBadge(x, y, "SPC", "toss the coin");
+            y = drawAppHelpBadge(x, y, "IMU", "shake to toss");
+            (void)drawAppHelpText(x, y, "Front portrait / back emblem");
             break;
         case GameMode::DOUBLE_PENDULUM:
-            drawHelpLine(20, "SPC", "reset");
-            drawHelpLine(34, "R", "random initial pose");
-            drawHelpLine(48, "-=", "2nd arm length");
-            drawHelpLine(62, "", "Coupled chaotic pendulum");
+            y = drawAppHelpBadge(x, y, "SPC", "reset");
+            y = drawAppHelpKey(x, y, 'r', "random initial pose");
+            y = drawAppHelpBadge(x, y, "-=", "2nd arm length");
+            (void)drawAppHelpText(x, y, "Coupled chaotic pendulum");
             break;
         case GameMode::WHEEL:
-            drawHelpLine(20, "SPC", "hold = power");
-            drawHelpLine(34, "IMU", "shake to spin");
-            drawHelpLine(48, "-=", "items 2-12, resets spin");
+            y = drawAppHelpBadge(x, y, "SPC", "hold = power");
+            y = drawAppHelpBadge(x, y, "IMU", "shake to spin");
+            (void)drawAppHelpBadge(x, y, "-=", "items 2-12, resets spin");
             break;
         case GameMode::DICE:
-            drawHelpLine(20, "SPC", "hold and release to toss");
-            drawHelpLine(34, "IMU", "shake to toss");
-            drawHelpLine(48, "-=", "dice count 1 - 5");
+            y = drawAppHelpBadge(x, y, "SPC", "hold and release to toss");
+            y = drawAppHelpBadge(x, y, "IMU", "shake to toss");
+            (void)drawAppHelpBadge(x, y, "-=", "dice count 1 - 5");
             break;
         case GameMode::NEWTON_CRADLE:
-            drawHelpLine(20, "123", "launch ball count");
-            drawHelpLine(34, "SPC", "replay");
-            drawHelpLine(48, "R", "reset to one ball");
+            y = drawAppHelpBadge(x, y, "123", "launch ball count");
+            y = drawAppHelpBadge(x, y, "SPC", "replay");
+            (void)drawAppHelpKey(x, y, 'r', "reset to one ball");
             break;
         case GameMode::NEON_FX:
-            drawHelpLine(20, "EASD", "move core / cube");
-            drawHelpLine(34, "M", "cycle pattern");
-            drawHelpLine(48, "C", "change color");
-            drawHelpLine(62, "-=", "animation speed");
-            drawHelpLine(76, "R", "reverse");
-            drawHelpLine(90, "SPC", "pulse");
+            y = drawAppHelpBadge(x, y, "EASD", "move core / cube");
+            y = drawAppHelpKey(x, y, 'm', "cycle pattern");
+            y = drawAppHelpKey(x, y, 'c', "change color");
+            y = drawAppHelpBadge(x, y, "-=", "animation speed");
+            y = drawAppHelpKey(x, y, 'r', "reverse");
+            (void)drawAppHelpBadge(x, y, "SPC", "pulse");
             break;
         case GameMode::CURVES:
-            drawHelpLine(20, "1-9", "select curve");
-            drawHelpLine(34, "-=", "amplitude a");
-            drawHelpLine(48, ",.", "frequency b");
-            drawHelpLine(62, "QE", "phase p");
-            drawHelpLine(76, "SPC", "toggle animate");
-            drawHelpLine(90, "R", "reset params");
+            y = drawAppHelpBadge(x, y, "1-9", "select curve");
+            y = drawAppHelpBadge(x, y, "-=", "amplitude a");
+            y = drawAppHelpBadge(x, y, ",.", "frequency b");
+            y = drawAppHelpBadge(x, y, "QE", "phase p");
+            y = drawAppHelpBadge(x, y, "SPC", "toggle animate");
+            (void)drawAppHelpKey(x, y, 'r', "reset params");
             break;
         case GameMode::MINESWEEPER:
-            drawHelpLine(20, ";,./", "move cursor, hold to repeat");
-            drawHelpLine(34, "SPC ]", "dig / chord on a number");
-            drawHelpLine(48, "F [", "toggle flag");
-            drawHelpLine(62, "I", "IMU tilt cursor, recenters");
-            drawHelpLine(76, "1-3", "level, R new game");
-            drawHelpLine(90, "B", "records: best time, streak");
-            drawHelpLine(104, "", "First dig is always safe");
+            y = drawAppHelpBadge(x, y, ";,./", "move cursor, hold repeat");
+            y = drawAppHelpBadge(x, y, "SPC ]", "dig / chord on number");
+            y = drawAppHelpBadge(x, y, "F [", "toggle flag");
+            y = drawAppHelpKey(x, y, 'i', "IMU tilt cursor");
+            y = drawAppHelpBadge(x, y, "1-3", "level, R new game");
+            y = drawAppHelpKey(x, y, 'b', "records best / streak");
+            (void)drawAppHelpText(x, y, "First dig is always safe");
             break;
         case GameMode::SNAKE:
-            drawHelpLine(20, ";,./", "steer, EASD also works");
-            drawHelpLine(34, "SPC", "start / pause / replay");
-            drawHelpLine(48, "I", "IMU tilt steer, recenters");
-            drawHelpLine(62, "M", "wall or wrap mode");
-            drawHelpLine(76, "-=", "speed level 1 - 5");
-            drawHelpLine(90, "R", "new game");
-            drawHelpLine(104, "", "Gold fruit is worth 5");
+            y = drawAppHelpBadge(x, y, ";,./", "steer, EASD also works");
+            y = drawAppHelpBadge(x, y, "SPC", "start / pause / replay");
+            y = drawAppHelpKey(x, y, 'i', "IMU tilt steer");
+            y = drawAppHelpKey(x, y, 'm', "wall or wrap mode");
+            y = drawAppHelpBadge(x, y, "-=", "speed level 1 - 5");
+            y = drawAppHelpKey(x, y, 'r', "new game");
+            (void)drawAppHelpText(x, y, "Gold fruit is worth 5");
             break;
         case GameMode::LIFE:
-            drawHelpLine(20, "SPC", "run / pause");
-            drawHelpLine(34, "N", "single step");
-            drawHelpLine(48, "R", "random soup, C clear");
-            drawHelpLine(62, "1-6", "glider gun pulsar lwss...");
-            drawHelpLine(76, ";,./", "move cursor, ENT toggle");
-            drawHelpLine(90, "-=", "speed 1 - 5");
-            drawHelpLine(104, "", "Edges wrap around");
+            y = drawAppHelpBadge(x, y, "SPC", "run / pause");
+            y = drawAppHelpKey(x, y, 'n', "single step");
+            y = drawAppHelpKey(x, y, 'r', "random soup, C clear");
+            y = drawAppHelpBadge(x, y, "1-6", "glider gun pulsar...");
+            y = drawAppHelpBadge(x, y, ";,./", "move, ENT toggle");
+            y = drawAppHelpBadge(x, y, "-=", "speed 1 - 5");
+            (void)drawAppHelpText(x, y, "Edges wrap around");
             break;
         case GameMode::MATRIX_RAIN:
-            drawHelpLine(20, "SPC", "pulse burst");
-            drawHelpLine(34, "-=", "fall speed 1 - 5");
-            drawHelpLine(48, "R", "reshuffle columns");
-            drawHelpLine(62, "", "Matrix-style code rain");
+            y = drawAppHelpBadge(x, y, "SPC", "pulse burst");
+            y = drawAppHelpBadge(x, y, "-=", "fall speed 1 - 5");
+            y = drawAppHelpKey(x, y, 'r', "reshuffle columns");
+            (void)drawAppHelpText(x, y, "Matrix-style code rain");
             break;
         case GameMode::BEZIER_WAVE:
-            drawHelpLine(20, "SPC", "amplitude pulse");
-            drawHelpLine(34, "-=", "wave speed 1 - 5");
-            drawHelpLine(48, "C", "cycle color theme");
-            drawHelpLine(62, "R", "reset phase");
-            drawHelpLine(76, "", "Layered bezier silk waves");
+            y = drawAppHelpBadge(x, y, "SPC", "amplitude pulse");
+            y = drawAppHelpBadge(x, y, "-=", "wave speed 1 - 5");
+            y = drawAppHelpKey(x, y, 'c', "cycle color theme");
+            y = drawAppHelpKey(x, y, 'r', "reset phase");
+            (void)drawAppHelpText(x, y, "Layered bezier silk waves");
             break;
         case GameMode::PARTICLE_CLOCK:
-            drawHelpLine(20, "SPC", "reshuffle morph");
-            drawHelpLine(34, "M", "toggle HH:MM / HH:MM:SS");
-            drawHelpLine(48, "R", "reshuffle morph");
-            drawHelpLine(62, "", "Particles form the clock");
+            y = drawAppHelpBadge(x, y, "SPC", "reshuffle morph");
+            y = drawAppHelpKey(x, y, 'm', "toggle HH:MM / HH:MM:SS");
+            y = drawAppHelpKey(x, y, 'r', "reshuffle morph");
+            (void)drawAppHelpText(x, y, "Particles form the clock");
             break;
         case GameMode::LISSAJOUS:
-            drawHelpLine(20, "SPC", "phase pulse");
-            drawHelpLine(34, "-=", "anim speed 1 - 5");
-            drawHelpLine(48, "C", "cycle color theme");
-            drawHelpLine(62, "R", "reset frequencies");
-            drawHelpLine(76, "", "Lissajous a:b curves");
+            y = drawAppHelpBadge(x, y, "SPC", "phase pulse");
+            y = drawAppHelpBadge(x, y, "-=", "anim speed 1 - 5");
+            y = drawAppHelpKey(x, y, 'c', "cycle color theme");
+            y = drawAppHelpKey(x, y, 'r', "reset frequencies");
+            (void)drawAppHelpText(x, y, "Lissajous a:b curves");
             break;
         default:
-            drawHelpLine(20, "1-8", "enter game on this page");
-            drawHelpLine(34, "[]", "flip hub page");
-            drawHelpLine(48, "", "P1 Coin Chaos Wheel Dice");
-            drawHelpLine(62, "", "   Phys Neon Curves Mines");
-            drawHelpLine(76, "", "P2 Snake Life Matrix Wave");
-            drawHelpLine(90, "", "   PClock Lissa");
-            drawHelpLine(104, "H", "open help inside a game");
+            y = drawAppHelpBadge(x, y, "1-8", "enter game on this page");
+            y = drawAppHelpBadge(x, y, "[]", "flip hub page");
+            y = drawAppHelpLabelText(x, y, "P1", APP_COLOR_LABEL, " Coin Chaos Wheel Dice");
+            y = drawAppHelpText(x, y, "   Phys Neon Curves Mines");
+            y = drawAppHelpLabelText(x, y, "P2", APP_COLOR_OK, " Snake Life Matrix Wave");
+            y = drawAppHelpText(x, y, "   PClock Lissa");
+            (void)drawAppHelpKey(x, y, 'h', "open help inside a game");
             break;
     }
-    if (g_mode != GameMode::HUB) {
-        drawHelpLine(118, "ESC", "back / H close");
-    } else {
-        drawHelpLine(118, "H", "close help");
-    }
+    // ESC 全局关 Help；底栏仅 h close
+    drawHelpHintRight("close");
 }
 
 static bool isExternalMode(const GameMode mode) {
@@ -1492,6 +1482,20 @@ bool handleGamesBack() {
         return false;
     }
     selectMode(GameMode::HUB);
+    return true;
+}
+
+// 关闭 Help 并重绘当前界面
+bool closeGamesHelp() {
+    if (!g_help) {
+        return false;
+    }
+    g_help = false;
+    if (g_mode == GameMode::HUB) {
+        showGamesHubScreen();
+    } else {
+        drawCurrent();
+    }
     return true;
 }
 

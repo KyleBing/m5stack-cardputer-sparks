@@ -887,65 +887,18 @@ static void drawChargeIndicator(const uint32_t now) {
     diceCanvas.print(percent);
 }
 
-static int drawHelpColHeader(const int x, const int y, const int w, const char* title) {
-    M5Cardputer.Display.fillRect(x, y, w, 11, APP_COLOR_LABEL);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(BLACK, APP_COLOR_LABEL);
-    M5Cardputer.Display.setCursor(x + 2, y + 1);
-    M5Cardputer.Display.print(title);
-    return y + 13;
-}
-
-static int drawHelpKey(const int x, const int y, const char key, const char* text) {
-    const int cx = x + drawKeyBadge(x, y, key, 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(text);
-    return y + 11;
-}
-
-static int drawHelpBadge(const int x, const int y, const char* badge, const char* text) {
-    const int cx = x + drawTextBadge(x, y, badge, 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(text);
-    return y + 11;
-}
-
-static int drawHelpText(const int x, const int y, const char* text) {
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(x, y);
-    M5Cardputer.Display.print(text);
-    return y + 11;
-}
-
+// Help：Time 风格单栏
 static void drawHelpPage() {
-    beginAppScreen("Help");
-    constexpr int col_gap = 4;
-    const int screen_w = M5Cardputer.Display.width();
-    const int col_w = (screen_w - col_gap) / 2;
-    const int manual_x = col_w + col_gap;
-    const int col_y = APP_CONTENT_Y_NO_TAP_TO_HEADER;
-    M5Cardputer.Display.drawFastVLine(col_w + col_gap / 2, col_y,
-                                     M5Cardputer.Display.height() - col_y, DARKGREY);
-
-    int y = drawHelpColHeader(0, col_y, col_w, "keymap");
-    y = drawHelpBadge(2, y, "-=", "dice - / +");
-    y = drawHelpBadge(2, y, "SPC", "hold = power");
-    y = drawHelpKey(2, y, 'h', "help / close");
-    y = drawHelpBadge(2, y, "IMU", "shake = toss");
-
-    y = drawHelpColHeader(manual_x, col_y, screen_w - manual_x, "manual");
-    y = drawHelpText(manual_x + 2, y, "Felt tabletop");
-    y = drawHelpText(manual_x + 2, y, "Planar roll + bounce");
-    y = drawHelpText(manual_x + 2, y, "No vertical stack");
-    y = drawHelpText(manual_x + 2, y, "Final: face up");
-
+    int y = drawAppHelpBegin("Dice");
+    constexpr int x = APP_HELP_CONTENT_X;
+    y = drawAppHelpBadge(x, y, "-=", "dice - / +");
+    y = drawAppHelpBadge(x, y, "SPC", "hold = power");
+    y = drawAppHelpKey(x, y, 'h', "help / close");
+    y = drawAppHelpBadge(x, y, "IMU", "shake = toss");
+    y = drawAppHelpText(x, y, "Felt tabletop");
+    y = drawAppHelpText(x, y, "Planar roll + bounce");
+    y = drawAppHelpText(x, y, "No vertical stack; face up");
     drawHelpHintRight("close");
-    updateAppHeaderStatus();
 }
 
 static bool ensureCanvas() {
@@ -1030,6 +983,20 @@ void leaveDiceApp() {
 
 bool isDiceHelpVisible() {
     return g_help;
+}
+
+bool closeDiceHelp() {
+    // Help 未打开则忽略
+    if (!g_help) {
+        return false;
+    }
+    g_help = false;
+    clearAppHeaderStatusRefresh(); // 回到全屏 canvas
+    M5Cardputer.Display.clear();
+    if (diceCanvasOk) {
+        diceCanvas.pushSprite(0, 0);
+    }
+    return true;
 }
 
 void updateDiceApp() {
@@ -1157,16 +1124,12 @@ void updateDiceApp() {
 void handleDiceApp(const Keyboard_Class::KeysState& status) {
     for (char c : status.word) {
         if (c == 'h' || c == 'H') {
-            g_help = !g_help;
             if (g_help) {
+                closeDiceHelp();
+            } else {
+                g_help = true;
                 g_space_held = false;
                 drawHelpPage();
-            } else {
-                clearAppHeaderStatusRefresh(); // 回到全屏 canvas
-                M5Cardputer.Display.clear();
-                if (diceCanvasOk) {
-                    diceCanvas.pushSprite(0, 0);
-                }
             }
             return;
         }

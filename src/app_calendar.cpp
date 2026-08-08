@@ -140,29 +140,17 @@ static void beginCalHeader() {
     beginAppScreen(title);
 }
 
-static void drawCalHelpLine(const int x, const int y, const char key, const char* text) {
-    int cx = x;
-    cx += drawKeyBadge(cx, y, key, 1);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(cx, y);
-    M5Cardputer.Display.print(text);
-}
-
+// Help：Time 风格单栏
 static void drawCalHelp() {
-    beginCalHeader();
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-    M5Cardputer.Display.setCursor(CAL_PAD_X, APP_CONTENT_INSET_Y);
-    M5Cardputer.Display.print("HELP");
-
-    const int y0 = APP_CONTENT_INSET_Y + 14;
-    drawCalHelpLine(CAL_PAD_X, y0, ',', "prev month");
-    drawCalHelpLine(CAL_PAD_X, y0 + 12, '.', "next month");
-    drawCalHelpLine(CAL_PAD_X, y0 + 24, '-', "prev year");
-    drawCalHelpLine(CAL_PAD_X, y0 + 36, '=', "next year");
-    drawCalHelpLine(CAL_PAD_X, y0 + 48, 't', "jump to today");
-    drawCalHelpLine(CAL_PAD_X, y0 + 60, 'h', "close help");
+    int y = drawAppHelpBegin("Calendar");
+    constexpr int x = APP_HELP_CONTENT_X;
+    y = drawAppHelpKey(x, y, ',', "prev month");
+    y = drawAppHelpKey(x, y, '.', "next month");
+    y = drawAppHelpKey(x, y, '-', "prev year");
+    y = drawAppHelpKey(x, y, '=', "next year");
+    y = drawAppHelpKey(x, y, 't', "jump to today");
+    y = drawAppHelpKey(x, y, 'h', "close help");
+    drawHelpHintRight("close");
 }
 
 // 仅画内容区网格（header 已是年月）
@@ -285,12 +273,21 @@ void updateCalendarApp() {
     }
 }
 
+bool closeCalendarHelp() {
+    // Help 未打开则忽略
+    if (g_mode != CalUiMode::Help) {
+        return false;
+    }
+    g_mode = CalUiMode::Month;
+    redraw();
+    return true;
+}
+
 void handleCalendarApp(const Keyboard_Class::KeysState& status) {
     if (g_mode == CalUiMode::Help) {
         for (const char c : status.word) {
             if (c == 'h' || c == 'H') {
-                g_mode = CalUiMode::Month;
-                redraw();
+                closeCalendarHelp();
                 return;
             }
         }

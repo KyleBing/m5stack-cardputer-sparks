@@ -1,5 +1,6 @@
 #pragma once
 
+#include "M5Cardputer.h"
 #include <WString.h>
 
 // 启动 Web 配网（非阻塞，由 updateWebApp 推进）
@@ -30,4 +31,6 @@ bool webAppSuppressesHeader();
 void drawWebApp();
 void enterWebApp();
 void leaveWebApp();
-void handleWebApp(const String& key);
+void handleWebApp(const Keyboard_Class::KeysState& status);
+// Help 打开时 ESC/BtnGO 关闭 Help（等同按 h），不回主菜单
+bool closeWebHelp();

@@ -50,6 +50,8 @@ static bool g_force_ap_mode = false;
 static bool g_ui_show_ap = false; // 连接中 / Ready 时 UI 走 AP 还是 LAN
 static bool g_web_screen_ready = false;
 static bool g_web_help_visible = false;
+static int g_web_help_page = 0;
+static constexpr int WEB_HELP_PAGES = 2;
 static bool g_web_ui_active = false; // 在 Config 界面内：禁止刷系统 header
 
 static const char* DEFAULT_CONFIG = R"({
@@ -3008,61 +3010,25 @@ static void drawWebLanLayout(const bool active, const bool show_ip) {
     }
 }
 
-// Help：分区小标题（无色块栏，对齐 Keyboard）
-static int webHelpSection(const int x, const int y, const char* title) {
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-    M5Cardputer.Display.setCursor(x, y);
-    M5Cardputer.Display.print(title);
-    return y + 10;
-}
-
-// 徽章后打印说明，并恢复提示色
-static void webHelpPrintAfterBadge(int& x, const int y, const char* text) {
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(x, y + 1);
-    M5Cardputer.Display.print(text);
-    x = M5Cardputer.Display.getCursorX();
-}
-
-static int webHelpRowKey(const int x0, const int y, const char key, const char* text) {
-    int x = x0;
-    x += drawKeyBadge(x, y, key, 1);
-    webHelpPrintAfterBadge(x, y, text);
-    return y + 11;
-}
-
-static int webHelpRowText(const int x0, const int y, const char* text) {
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(x0, y + 1);
-    M5Cardputer.Display.print(text);
-    return y + 11;
-}
-
-// Help：无 header；单列流式，风格对齐 Keyboard
+// Help：键位 / 说明分两页
 static void drawWebHelpPage() {
-    M5Cardputer.Display.fillScreen(BLACK);
-
-    constexpr int x0 = 4;
-    int y = 2;
-
-    y = webHelpSection(x0, y, "Keys");
-    y = webHelpRowKey(x0, y, 'a', " switch to AP");
-    y = webHelpRowKey(x0, y, 'l', " retry LAN");
-    y = webHelpRowKey(x0, y, 'h', " help / close");
-    y += 2;
-
-    y = webHelpSection(x0, y, "Manual");
-    y = webHelpRowText(x0, y, "browser config on LAN/AP");
-    y = webHelpRowText(x0, y, "LAN uses saved WiFi");
-    y = webHelpRowText(x0, y, "AP on LAN timeout / a");
-    y = webHelpRowText(x0, y, "edit WiFi / devices / Cursor");
-    y = webHelpRowText(x0, y, "save to config.json");
-    y = webHelpRowText(x0, y, "Fn+s any screen -> /shots");
-
-    drawHelpHintRight("close");
+    int y = drawAppHelpBegin("Web");
+    constexpr int x = APP_HELP_CONTENT_X;
+    if (g_web_help_page == 0) {
+        y = drawAppHelpKey(x, y, 'a', "switch to AP");
+        y = drawAppHelpKey(x, y, 'l', "retry LAN");
+        y = drawAppHelpKey(x, y, 'h', "help / close");
+        y = drawAppHelpText(x, y, "browser config on LAN/AP");
+        y = drawAppHelpText(x, y, "LAN uses saved WiFi");
+        (void)drawAppHelpText(x, y, "AP on LAN timeout / a");
+    } else {
+        y = drawAppHelpTextColored(x, y, "Browser", APP_COLOR_LABEL);
+        y = drawAppHelpText(x, y, "edit WiFi / devices / Cursor");
+        y = drawAppHelpText(x, y, "save to config.json");
+        y = drawAppHelpLabelText(x, y, "Fn+s", APP_COLOR_OK, " any screen -> /shots");
+        (void)drawAppHelpText(x, y, "open URL shown on Ready");
+    }
+    drawAppHelpFooter(g_web_help_page, WEB_HELP_PAGES);
 }
 
 void drawWebApp() {
@@ -3086,28 +3052,52 @@ void drawWebApp() {
     }
 }
 
-void handleWebApp(const String& key) {
-    if (key == "h") {
-        g_web_help_visible = !g_web_help_visible;
-        if (!g_web_help_visible) {
-            g_web_screen_ready = false;
+bool closeWebHelp() {
+    // Help 未打开则忽略
+    if (!g_web_help_visible) {
+        return false;
+    }
+    g_web_help_visible = false;
+    g_web_screen_ready = false;
+    drawWebApp();
+    return true;
+}
+
+void handleWebApp(const Keyboard_Class::KeysState& status) {
+    for (const char c : status.word) {
+        if (c == 'h' || c == 'H') {
+            if (g_web_help_visible) {
+                closeWebHelp();
+            } else {
+                g_web_help_visible = true;
+                g_web_help_page = 0;
+                drawWebApp();
+            }
+            return;
         }
-        drawWebApp();
-        return;
     }
     if (g_web_help_visible) {
+        const int delta = getHelpNavDelta(status);
+        if (delta != 0) {
+            g_web_help_page = applyHelpPageDelta(g_web_help_page, WEB_HELP_PAGES, delta);
+            drawWebApp();
+        }
         return;
     }
-    if (key == "a") {
-        beginWebStartup(true);
-        g_web_screen_ready = false;
-        drawWebApp();
-        return;
-    }
-    if (key == "l" && g_startup_phase == WebStartupPhase::READY && !isConfigWebStaMode()) {
-        beginWebStartup(false);
-        g_web_screen_ready = false;
-        drawWebApp();
+    for (const char c : status.word) {
+        if (c == 'a' || c == 'A') {
+            beginWebStartup(true);
+            g_web_screen_ready = false;
+            drawWebApp();
+            return;
+        }
+        if ((c == 'l' || c == 'L') && g_startup_phase == WebStartupPhase::READY &&
+            !isConfigWebStaMode()) {
+            beginWebStartup(false);
+            g_web_screen_ready = false;
+            drawWebApp();
+            return;
+        }
     }
 }
 

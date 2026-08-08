@@ -10,5 +10,7 @@ void handleGamesApp(const Keyboard_Class::KeysState& status);
 // 子游戏中返回 Games 顶层；已在顶层时返回 false 交给主菜单处理。
 bool handleGamesBack();
 bool isGamesHelpVisible();
+// Help 可见时关闭并重绘；否则返回 false
+bool closeGamesHelp();
 // 每帧轮询 BtnA（wasPressed / 蓄力 isPressed 在 update 内）
 void pollGamesBtnA();
