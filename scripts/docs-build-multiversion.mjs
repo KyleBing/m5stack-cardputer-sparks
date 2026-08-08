@@ -125,15 +125,22 @@ function skipString(src, i) {
   return i
 }
 
-/** 提取所有 `sidebar: [...]` 的数组字面量（按出现顺序） */
+/**
+ * 提取所有 sidebar 数组字面量（按出现顺序）。
+ * 兼容 `sidebar: [...]` 与 `sidebar: ARCHIVE_SIDEBARS?.root ?? [...]`。
+ */
 function extractSidebarLiterals(src) {
   const found = []
   let searchFrom = 0
   while (searchFrom < src.length) {
-    const idx = src.slice(searchFrom).search(/\bsidebar\s*:\s*\[/)
+    // 勿匹配 sidebarMenuLabel；允许 ?? 等表达式后再接数组
+    const idx = src.slice(searchFrom).search(/\bsidebar\s*:/)
     if (idx < 0) break
     const abs = searchFrom + idx
-    const bracketAt = src.indexOf('[', abs)
+    const afterColon = src.indexOf(':', abs) + 1
+    const bracketAt = src.indexOf('[', afterColon)
+    if (bracketAt < 0) break
+
     let i = bracketAt
     let depth = 0
     while (i < src.length) {
