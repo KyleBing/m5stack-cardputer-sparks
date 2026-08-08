@@ -60,15 +60,11 @@ static int getAppStatusRightX(const int screen_w) {
 }
 
 // 状态图标区总宽（仅在已放置图标之间插入 APP_HEADER_ICON_GAP）
-// 顺序（右→左）：battery? / wifi / ble（设备 indicator 在左侧标题旁）
-static int getHeaderStatusWidth(const bool include_battery, const bool wifi, const bool ble,
-                                const bool charging) {
+// 顺序（右→左）：battery? / ble（WiFi 信号只在 WiFi 列表里画，不进 header）
+static int getHeaderStatusWidth(const bool include_battery, const bool ble, const bool charging) {
     int w = 0;
     if (include_battery) {
         w += getIconBatteryDisplayWidth(charging);
-    }
-    if (wifi) {
-        w += (w > 0 ? APP_HEADER_ICON_GAP : 0) + ICON_WIFI_W;
     }
     if (ble) {
         w += (w > 0 ? APP_HEADER_ICON_GAP : 0) + ICON_BLE_W;
@@ -77,14 +73,13 @@ static int getHeaderStatusWidth(const bool include_battery, const bool wifi, con
 }
 
 // 计算状态图标区最左 x（与 drawHeaderStatusIcons 布局一致）
-static int headerStatusLeftX(const int status_right, const bool include_battery, const bool wifi,
-                             const bool ble, const bool charging) {
-    return status_right - getHeaderStatusWidth(include_battery, wifi, ble, charging);
+static int headerStatusLeftX(const int status_right, const bool include_battery, const bool ble,
+                             const bool charging) {
+    return status_right - getHeaderStatusWidth(include_battery, ble, charging);
 }
 
 // 从右向左绘制连接状态图标，在 header 内垂直居中
 static int drawHeaderStatusIcons(const int right_x, const bool include_battery) {
-    const bool wifi = isWifiStaConnected();
     const bool ble = isBleStackReady();
     const bool charging = isBatteryCharging();
     const int body_h = getIconBatteryBodyHeight();
@@ -95,11 +90,6 @@ static int drawHeaderStatusIcons(const int right_x, const bool include_battery) 
         x -= getIconBatteryDisplayWidth(charging);
         drawIconBattery(x, headerStatusIconY(body_h), M5Cardputer.Power.getBatteryLevel(),
                         charging);
-        placed = true;
-    }
-    if (wifi) {
-        x -= (placed ? APP_HEADER_ICON_GAP : 0) + ICON_WIFI_W;
-        drawIconWifi(x, headerStatusIconY(ICON_WIFI_H), getWifiStaRssi(), WHITE);
         placed = true;
     }
     if (ble) {
@@ -135,11 +125,10 @@ static void drawAppHeaderCore(const char* title, const char* accent, const uint1
     M5Cardputer.Display.fillRect(0, 0, screen_w, APP_HEADER_H, BLACK);
 
     const int status_right = getAppStatusRightX(screen_w);
-    const bool wifi = isWifiStaConnected();
     const bool ble = isBleStackReady();
     const bool charging = isBatteryCharging();
     const int status_left =
-        headerStatusLeftX(status_right, s_app_header_include_battery, wifi, ble, charging);
+        headerStatusLeftX(status_right, s_app_header_include_battery, ble, charging);
 
     // 左上角：设备 indicator，再画设备名
     constexpr int left_pad = 4;
@@ -269,10 +258,9 @@ void updateMenuHeaderStatus(const int page_count) {
     static int prev_clear_left = -1;
     const int screen_w = M5Cardputer.Display.width();
     const int status_right = getMenuStatusRightX(screen_w, page_count);
-    const bool wifi = isWifiStaConnected();
     const bool ble = isBleStackReady();
     const bool charging = isBatteryCharging();
-    const int left_x = headerStatusLeftX(status_right, true, wifi, ble, charging);
+    const int left_x = headerStatusLeftX(status_right, true, ble, charging);
     int clear_left = left_x - HEADER_STATUS_CLEAR_PAD;
     if (clear_left < 0) {
         clear_left = 0;
@@ -311,11 +299,10 @@ void updateAppHeaderStatus() {
     static int prev_clear_left = -1;
     const int screen_w = M5Cardputer.Display.width();
     const int status_right = getAppStatusRightX(screen_w);
-    const bool wifi = isWifiStaConnected();
     const bool ble = isBleStackReady();
     const bool charging = isBatteryCharging();
     const int left_x =
-        headerStatusLeftX(status_right, s_app_header_include_battery, wifi, ble, charging);
+        headerStatusLeftX(status_right, s_app_header_include_battery, ble, charging);
     int clear_left = left_x - HEADER_STATUS_CLEAR_PAD;
     if (clear_left < 0) {
         clear_left = 0;

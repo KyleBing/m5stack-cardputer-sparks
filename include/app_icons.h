@@ -35,7 +35,7 @@ static constexpr int ICON_SIGNAL_H = 8;
 int signalLevelFromRssi(int rssi);
 void drawSignalBars(int x, int y, int rssi, uint16_t color = 0xFFFF);
 
-// ===== WiFi 扇形圆图标（header） =====
+// ===== WiFi 扇形圆图标（列表 RSSI） =====
 static constexpr int WIFI_INNER_SIDE = 2;
 static constexpr int WIFI_RING_GAP = 2;  // 弧间距（不含线宽）
 static constexpr int WIFI_RING_COUNT = 3;

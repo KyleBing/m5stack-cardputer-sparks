@@ -142,7 +142,7 @@ void drawSignalBars(const int x, const int y, const int rssi, const uint16_t col
     }
 }
 
-// ===== WiFi 扇形圆图标（header） =====
+// ===== WiFi 扇形圆图标（列表 RSSI） =====
 
 // 左下锚点为圆心，绘制右上象限 1/4 圆弧
 static void drawWifiQuarterArc(const int cx, const int cy, const int radius,
