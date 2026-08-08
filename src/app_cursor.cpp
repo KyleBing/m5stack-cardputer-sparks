@@ -1161,7 +1161,7 @@ static bool fetchCursorAuthPeriod() {
   return true;
 }
 
-// 绘制横向进度条（仅边框，空白不填底色）
+// 绘制横向进度条：已填充全高；未填充完整边框
 static void drawPctBar(const int x, const int y, const int w, const int h, const float pct,
                        const uint16_t color) {
   if (w <= 0 || h <= 0) {
@@ -1173,11 +1173,7 @@ static void drawPctBar(const int x, const int y, const int w, const int h, const
   } else if (clamped > 100.0f) {
     clamped = 100.0f;
   }
-  const int fill_w = static_cast<int>(w * (clamped / 100.0f));
-  if (fill_w > 0) {
-    M5Cardputer.Display.fillRect(x, y, fill_w, h, color);
-  }
-  M5Cardputer.Display.drawRect(x, y, w, h, DARKGREY);
+  drawPercentBar(x, y, w, h, static_cast<int>(clamped + 0.5f), color, DARKGREY);
 }
 
 static constexpr int CURSOR_BAR_LABEL_PAD = 3;
@@ -1248,16 +1244,17 @@ static void drawDailyBars(const int x, const int y, const int w, const int bar_h
     cursorBarLayout(x, w, days, gap, i, bar_x, bar_w);
     const bool is_current_hour = days == 24 && i == current_hour;
 
-    if (daily_cents != nullptr) {
-      const int fill_h = static_cast<int>(bar_h * (daily_cents[i] / max_val));
-      const int by = y + bar_h - fill_h;
-      const uint16_t color =
-          (is_current_hour || (days != 24 && i == days - 1)) ? APP_COLOR_OK : CYAN;
-      if (fill_h > 0) {
-        M5Cardputer.Display.fillRect(bar_x, by, bar_w, fill_h, color);
+    int pct = 0;
+    uint16_t color = CYAN;
+    if (daily_cents != nullptr && max_val > 0.0f) {
+      pct = static_cast<int>(100.0f * (daily_cents[i] / max_val) + 0.5f);
+      if (pct > 100) {
+        pct = 100;
       }
+      color = (is_current_hour || (days != 24 && i == days - 1)) ? APP_COLOR_OK : CYAN;
     }
-    M5Cardputer.Display.drawRect(bar_x, y, bar_w, bar_h, CURSOR_BAR_BORDER);
+    // 已占用全宽实心；未占用完整边框
+    drawPercentBarV(bar_x, y, bar_w, bar_h, pct, color, CURSOR_BAR_BORDER);
   }
 
   if (!draw_labels) {

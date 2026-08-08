@@ -269,6 +269,51 @@ void drawHelpHintRight(const char* help_label, const int y_offset) {
 }
 
 // 提示小字：',' 左箭头，'.' 右箭头
+// 横向进度条：已占用全高实心无边框；未占用完整边框（含左右）
+void drawPercentBar(const int x, const int y, const int w, const int h, const int percent,
+                    const uint16_t fill_color, const uint16_t border_color,
+                    const uint16_t empty_bg) {
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    const int pct = constrain(percent, 0, 100);
+    const int fill_w = w * pct / 100;
+    if (fill_w > 0) {
+        M5Cardputer.Display.fillRect(x, y, fill_w, h, fill_color);
+    }
+    const int empty_w = w - fill_w;
+    if (empty_w <= 0) {
+        return;
+    }
+    const int empty_x = x + fill_w;
+    if (empty_w > 2 && h > 2) {
+        M5Cardputer.Display.fillRect(empty_x + 1, y + 1, empty_w - 2, h - 2, empty_bg);
+    }
+    M5Cardputer.Display.drawRect(empty_x, y, empty_w, h, border_color);
+}
+
+// 纵向进度条：自下而上全宽实心；未占用完整边框（含上下）
+void drawPercentBarV(const int x, const int y, const int w, const int h, const int percent,
+                     const uint16_t fill_color, const uint16_t border_color,
+                     const uint16_t empty_bg) {
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    const int pct = constrain(percent, 0, 100);
+    const int fill_h = h * pct / 100;
+    if (fill_h > 0) {
+        M5Cardputer.Display.fillRect(x, y + h - fill_h, w, fill_h, fill_color);
+    }
+    const int empty_h = h - fill_h;
+    if (empty_h <= 0) {
+        return;
+    }
+    if (w > 2 && empty_h > 2) {
+        M5Cardputer.Display.fillRect(x + 1, y + 1, w - 2, empty_h - 2, empty_bg);
+    }
+    M5Cardputer.Display.drawRect(x, y, w, empty_h, border_color);
+}
+
 void drawHintText(const int x, const int y, const char* text, const int text_size) {
     const int size = (text_size == 2) ? 2 : 1;
     M5Cardputer.Display.setTextSize(size);

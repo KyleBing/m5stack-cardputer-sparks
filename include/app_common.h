@@ -82,6 +82,14 @@ int applyHelpPageDelta(int page, int page_count, int delta);
 // 提示小字：',' 左箭头，'.' 右箭头
 void drawHintText(int x, int y, const char* text, int text_size = 1);
 
+// 横向进度条：已填充全高实心无边框；未填充完整边框（含左右）
+void drawPercentBar(int x, int y, int w, int h, int percent, uint16_t fill_color,
+                    uint16_t border_color = APP_COLOR_MUTED, uint16_t empty_bg = BLACK);
+
+// 纵向进度条：自下而上填充；未填充完整边框（含上下）
+void drawPercentBarV(int x, int y, int w, int h, int percent, uint16_t fill_color,
+                     uint16_t border_color = APP_COLOR_MUTED, uint16_t empty_bg = BLACK);
+
 // 点阵风格文字：Font0 1x 渲染后再按 scale 画方块，方块间留 1px 缝
 // 返回绘制占用宽高（scale<2 时退回普通 setTextSize）
 void drawDotText(const char* text, int x, int y, int scale, uint16_t color);

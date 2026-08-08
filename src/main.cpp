@@ -1448,13 +1448,9 @@ static void settingsEnsureScroll(int& scroll, const int selected, const int coun
 
 // fill_color：未选中用 teal，右侧选中黄底时用黑色
 static void drawSettingsBrightBar(const int x, const int y, const int w, const int h,
-                                  const int percent, const uint16_t fill_color) {
-    const int pct = constrain(percent, 0, 100);
-    M5Cardputer.Display.drawRect(x, y, w, h, APP_COLOR_MUTED);
-    const int fill_w = (w - 2) * pct / 100;
-    if (fill_w > 0) {
-        M5Cardputer.Display.fillRect(x + 1, y + 1, fill_w, h - 2, fill_color);
-    }
+                                  const int percent, const uint16_t fill_color,
+                                  const uint16_t empty_bg) {
+    drawPercentBar(x, y, w, h, percent, fill_color, APP_COLOR_MUTED, empty_bg);
 }
 
 // 选中行：selected 时用 sel_bg；否则 label 用 label_color，底色 bg；text_pad_x 为文字左边距
@@ -1546,7 +1542,8 @@ static void drawSettingsDetailLayer(const int content_x, const int content_y, co
         const int bar_y = y + SETTINGS_ROW_H;
         const int bar_w = content_w - M5Cardputer.Display.textWidth(pct_buf) - 10;
         drawSettingsBrightBar(content_x + 2, bar_y, bar_w, bar_h, pct,
-                              selected ? BLACK : settingsAccentColor());
+                              selected ? BLACK : settingsAccentColor(),
+                              selected ? APP_COLOR_MENU_KEY : bg);
         M5Cardputer.Display.setTextColor(selected ? BLACK : APP_COLOR_VALUE,
                                          selected ? APP_COLOR_MENU_KEY : bg);
         M5Cardputer.Display.setCursor(content_x + 2 + bar_w + 4, bar_y - 1);

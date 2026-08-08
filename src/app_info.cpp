@@ -308,7 +308,7 @@ static int drawMemBarRow(const int x, const int y, const int w, const char* labe
     const int bar_y = y + INFO_LINE_H;
     if (shell || total == 0) {
         drawInfoLineAt(x, y, label, shell ? "--" : "n/a", INFO_BODY_SIZE);
-        M5Cardputer.Display.drawRect(x, bar_y, w, INFO_BAR_H, APP_COLOR_MUTED);
+        drawPercentBar(x, bar_y, w, INFO_BAR_H, 0, APP_COLOR_MUTED);
         return bar_y + INFO_BAR_H + INFO_BAR_GAP;
     }
 
@@ -322,12 +322,7 @@ static int drawMemBarRow(const int x, const int y, const int w, const char* labe
 
     drawInfoLineAt(x, y, label, right, INFO_BODY_SIZE);
 
-    M5Cardputer.Display.drawRect(x, bar_y, w, INFO_BAR_H, APP_COLOR_MUTED);
-    const int fill_w = (w - 2) * pct / 100;
-    if (fill_w > 0) {
-        M5Cardputer.Display.fillRect(x + 1, bar_y + 1, fill_w, INFO_BAR_H - 2,
-                                     memUsedBarColor(pct));
-    }
+    drawPercentBar(x, bar_y, w, INFO_BAR_H, pct, memUsedBarColor(pct));
     return bar_y + INFO_BAR_H + INFO_BAR_GAP;
 }
 
@@ -340,7 +335,7 @@ static int drawStorageBarRow(const int x, const int y, const int w, const char* 
     const int bar_y = y + INFO_LINE_H;
     if (shell || total == 0) {
         drawInfoLineAt(x, y, label, shell ? "--" : "n/a", INFO_BODY_SIZE);
-        M5Cardputer.Display.drawRect(x, bar_y, w, INFO_BAR_H, APP_COLOR_MUTED);
+        drawPercentBar(x, bar_y, w, INFO_BAR_H, 0, APP_COLOR_MUTED);
         return bar_y + INFO_BAR_H + INFO_BAR_GAP;
     }
 
@@ -354,12 +349,7 @@ static int drawStorageBarRow(const int x, const int y, const int w, const char* 
 
     drawInfoLineAt(x, y, label, right, INFO_BODY_SIZE);
 
-    M5Cardputer.Display.drawRect(x, bar_y, w, INFO_BAR_H, APP_COLOR_MUTED);
-    const int fill_w = (w - 2) * pct / 100;
-    if (fill_w > 0) {
-        M5Cardputer.Display.fillRect(x + 1, bar_y + 1, fill_w, INFO_BAR_H - 2,
-                                     memUsedBarColor(pct));
-    }
+    drawPercentBar(x, bar_y, w, INFO_BAR_H, pct, memUsedBarColor(pct));
     return bar_y + INFO_BAR_H + INFO_BAR_GAP;
 }
 

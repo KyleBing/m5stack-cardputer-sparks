@@ -446,17 +446,16 @@ static void batDrawChart(const int x, const int y, const int w, const int bar_h)
         int bar_x = 0;
         int bar_w = 0;
         batBarLayout(x, w, n, BAT_CHART_GAP, i, bar_x, bar_w);
-        M5Cardputer.Display.drawRect(bar_x, y, bar_w, bar_h, BAT_BAR_BORDER);
         if (!g_chart_valid[i] || g_chart_levels[i] == 0) {
-            // 无数据 / 0%：仅框
+            // 无数据 / 0%：空框
+            drawPercentBarV(bar_x, y, bar_w, bar_h, 0, APP_COLOR_WARN, BAT_BAR_BORDER);
             if (g_chart_valid[i] && g_chart_levels[i] == 0) {
                 // 0% 画 1px 提示
-                M5Cardputer.Display.drawFastHLine(bar_x + 1, y + bar_h - 1, bar_w - 2, APP_COLOR_WARN);
+                M5Cardputer.Display.drawFastHLine(bar_x + 1, y + bar_h - 1, max(0, bar_w - 2),
+                                                 APP_COLOR_WARN);
             }
             continue;
         }
-        const int fill_h = (bar_h * g_chart_levels[i]) / 100;
-        const int by = y + bar_h - fill_h;
         const uint8_t flags = g_chart_flags[i];
         uint16_t color = CYAN;
         if (i == n - 1) {
@@ -468,9 +467,7 @@ static void batDrawChart(const int x, const int y, const int w, const int bar_h)
             // 旧版只有插值标志的记录继续按浅睡颜色显示。
             color = BAT_COLOR_LIGHT_SLEEP;
         }
-        if (fill_h > 0) {
-            M5Cardputer.Display.fillRect(bar_x, by, bar_w, fill_h, color);
-        }
+        drawPercentBarV(bar_x, y, bar_w, bar_h, g_chart_levels[i], color, BAT_BAR_BORDER);
     }
 
     // 小时刻度：0 / 6 / 12 / 18 / 24（相对窗口）

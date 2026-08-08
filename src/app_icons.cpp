@@ -133,6 +133,7 @@ void drawSignalBars(const int x, const int y, const int rssi, const uint16_t col
         const int bx = x + i * (BAR_W + BAR_GAP);
         const int h = HEIGHTS[i];
         const int by = base_y - h;
+        // 有信号全高实心；无信号完整边框
         if (i < level) {
             M5Cardputer.Display.fillRect(bx, by, BAR_W, h, color);
         } else {

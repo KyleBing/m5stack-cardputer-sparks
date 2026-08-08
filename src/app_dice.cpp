@@ -877,9 +877,19 @@ static void drawChargeIndicator(const uint32_t now) {
     diceCanvas.setTextColor(19);
     diceCanvas.setCursor(panel_x + 5, panel_y + 3);
     diceCanvas.print("POWER");
-    diceCanvas.drawRect(bar_x, bar_y, bar_w, 6, 18);
-    diceCanvas.fillRect(bar_x + 1, bar_y + 1,
-                        static_cast<int>((bar_w - 2) * charge), 4, 19);
+    // 已填充全高；未填充完整边框（画布色板索引）
+    const int fill_w = static_cast<int>(bar_w * charge);
+    if (fill_w > 0) {
+        diceCanvas.fillRect(bar_x, bar_y, fill_w, 6, 19);
+    }
+    const int empty_w = bar_w - fill_w;
+    if (empty_w > 0) {
+        const int empty_x = bar_x + fill_w;
+        if (empty_w > 2) {
+            diceCanvas.fillRect(empty_x + 1, bar_y + 1, empty_w - 2, 4, 16);
+        }
+        diceCanvas.drawRect(empty_x, bar_y, empty_w, 6, 18);
+    }
 
     char percent[6];
     snprintf(percent, sizeof(percent), "%3d%%", static_cast<int>(charge * 100.0f));

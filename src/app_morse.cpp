@@ -137,15 +137,16 @@ static void drawMorseSignal() {
         previous_y = py;
     }
 
-    M5Cardputer.Display.drawRect(x, MORSE_SIGNAL_Y + MORSE_SIGNAL_H + 3, w, 4, APP_COLOR_MUTED);
+    // 符号时长进度：已走完全高；未走完完整边框
+    const int bar_y = MORSE_SIGNAL_Y + MORSE_SIGNAL_H + 3;
+    constexpr int bar_h = 4;
+    int pct = 0;
     if (tone_on && g_tone_duration_ms > 0) {
         const uint32_t elapsed = millis() - g_tone_started_ms;
         const uint32_t shown = elapsed < g_tone_duration_ms ? elapsed : g_tone_duration_ms;
-        const int progress =
-            static_cast<int>(static_cast<uint64_t>(w - 2) * shown / g_tone_duration_ms);
-        M5Cardputer.Display.fillRect(x + 1, MORSE_SIGNAL_Y + MORSE_SIGNAL_H + 4, progress, 2,
-                                    APP_COLOR_OK);
+        pct = static_cast<int>(static_cast<uint64_t>(shown) * 100ull / g_tone_duration_ms);
     }
+    drawPercentBar(x, bar_y, w, bar_h, pct, APP_COLOR_OK);
 }
 
 static void drawMorseApp(const bool full_init) {

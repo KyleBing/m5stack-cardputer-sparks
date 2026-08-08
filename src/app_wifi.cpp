@@ -621,21 +621,25 @@ static int wifiConnectTrackY() {
     return wifiConnectLabelY() + 12;
 }
 
-// 进度条内部：来回滑动的高亮段（仅重绘轨道内部，避免整屏闪烁）
+// 进度条内部：来回滑动的高亮段（仅重绘轨道，避免整屏闪烁）
 static void drawWifiConnectProgress() {
     const int card_x = wifiCardX();
     const int card_w = wifiCardW();
     const int track_y = wifiConnectTrackY();
-    M5Cardputer.Display.fillRect(card_x + 1, track_y + 1, card_w - 2, WIFI_PROGRESS_H - 2,
-                                 wifiCardBg());
+    const uint16_t accent = wifiCardAccentGold();
+    const uint16_t bg = wifiCardBg();
 
-    const int travel = card_w - 2 - WIFI_PROGRESS_SEG_W;
+    // 未占用整框边框；滑块全高盖住边框
+    M5Cardputer.Display.fillRect(card_x, track_y, card_w, WIFI_PROGRESS_H, bg);
+    M5Cardputer.Display.drawRect(card_x, track_y, card_w, WIFI_PROGRESS_H, accent);
+
+    const int travel = max(0, card_w - 2 - WIFI_PROGRESS_SEG_W);
     int pos = travel > 0 ? wifiConnectAnimPos % (travel * 2) : 0;
     if (pos > travel) {
         pos = travel * 2 - pos; // 折返
     }
-    M5Cardputer.Display.fillRect(card_x + 1 + pos, track_y + 1, WIFI_PROGRESS_SEG_W,
-                                 WIFI_PROGRESS_H - 2, wifiCardAccentGold());
+    M5Cardputer.Display.fillRect(card_x + 1 + pos, track_y, WIFI_PROGRESS_SEG_W, WIFI_PROGRESS_H,
+                                 accent);
 }
 
 // 剩余秒数（右上角），仅重绘自身区域
@@ -692,7 +696,6 @@ static void drawWifiConnectingScreen() {
     M5Cardputer.Display.print("connecting");
 
     const int track_y = wifiConnectTrackY();
-    M5Cardputer.Display.drawRect(card_x, track_y, card_w, WIFI_PROGRESS_H, wifiCardAccentGold());
     drawWifiConnectProgress();
     drawWifiConnectCountdown();
 

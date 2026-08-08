@@ -343,14 +343,8 @@ void mijiaFormatGridStatusTag(const MijiaUiState& ui, MijiaGridStatusTag& tag) {
 
 void drawMijiaPercentBar(const int x, const int y, const int w, const int h, const int percent,
                          const uint16_t fill_color) {
-    const int clamped = constrain(percent, 0, 100);
-    const int inner_w = w - 2;
-
-    M5Cardputer.Display.drawRect(x, y, w, h, APP_COLOR_MUTED);
-    const int fill_w = inner_w * clamped / 100;
-    if (fill_w > 0) {
-        M5Cardputer.Display.fillRect(x + 1, y + 1, fill_w, h - 2, fill_color);
-    }
+    // 已填充全高无边框；未填充完整边框（含左右）
+    drawPercentBar(x, y, w, h, percent, fill_color);
 }
 
 // 进度条内置等距刻度线
@@ -358,15 +352,14 @@ void drawMijiaScaledPercentBar(const int x, const int y, const int w, const int 
                                const int percent, const uint16_t fill_color,
                                const int tick_count) {
     drawMijiaPercentBar(x, y, w, h, percent, fill_color);
-    if (tick_count < 2 || h < 6) {
+    if (tick_count < 2 || h < 6 || w < 2) {
         return;
     }
 
-    const int inner_w = w - 2;
     const int tick_y0 = y + 2;
     const int tick_h = h - 4;
     for (int i = 0; i < tick_count; i++) {
-        const int tx = x + 1 + inner_w * i / (tick_count - 1);
+        const int tx = x + w * i / (tick_count - 1);
         M5Cardputer.Display.drawFastVLine(tx, tick_y0, tick_h, APP_COLOR_MUTED);
     }
 }
@@ -380,11 +373,11 @@ void drawMijiaLevelSegments(const int x, const int y, const int w, const int h, 
     const int seg_w = (w - gap * (max_level - 1)) / max_level;
     int sx = x;
     for (int i = 1; i <= max_level; i++) {
-        // 直角分段条（不用圆角）
+        // 已点亮全高实心；未点亮完整边框
         if (i <= level) {
             M5Cardputer.Display.fillRect(sx, y, seg_w, h, fill_color);
         } else {
-            M5Cardputer.Display.drawRect(sx, y, seg_w, h, APP_COLOR_MUTED);
+            drawPercentBar(sx, y, seg_w, h, 0, fill_color);
         }
         sx += seg_w + gap;
     }
@@ -791,31 +784,34 @@ static uint16_t mijiaHueToColor565(const int hue) {
     return M5Cardputer.Display.color565(r, g, b);
 }
 
-// 色温进度条：背景随当前冷暖度变色，白色填充标示档位
+// 色温进度条：白色档位全高；其余段色温色 + 完整边框
 static void drawMijiaColorTempPercentBar(const int x, const int y, const int w, const int h,
                                          const int percent, const int kelvin, const int min_k,
                                          const int max_k) {
     const int clamped = constrain(percent, 0, 100);
-    const int inner_w = w - 2;
     const uint16_t bg = mijiaKelvinToColor565(kelvin, min_k, max_k);
-
-    M5Cardputer.Display.drawRect(x, y, w, h, APP_COLOR_MUTED);
-    M5Cardputer.Display.fillRect(x + 1, y + 1, inner_w, h - 2, bg);
-
-    const int fill_w = max(2, inner_w * clamped / 100);
-    if (clamped > 0) {
-        M5Cardputer.Display.fillRect(x + 1, y + 1, fill_w, h - 2, WHITE);
+    const int fill_w = clamped > 0 ? max(2, w * clamped / 100) : 0;
+    if (fill_w > 0) {
+        M5Cardputer.Display.fillRect(x, y, fill_w, h, WHITE);
+    }
+    const int empty_w = w - fill_w;
+    if (empty_w > 0) {
+        const int empty_x = x + fill_w;
+        if (empty_w > 2 && h > 2) {
+            M5Cardputer.Display.fillRect(empty_x + 1, y + 1, empty_w - 2, h - 2, bg);
+        }
+        M5Cardputer.Display.drawRect(empty_x, y, empty_w, h, APP_COLOR_MUTED);
     }
 }
 
-// 色相彩虹条：底色为光谱，白色竖条标示当前 hue
+// 色相彩虹条：光谱填中间，完整边框；白色竖条标示 hue
 static void drawMijiaHuePercentBar(const int x, const int y, const int w, const int h,
                                    const int hue) {
     const int inner_w = max(1, w - 2);
     const int inner_h = max(1, h - 2);
     M5Cardputer.Display.drawRect(x, y, w, h, APP_COLOR_MUTED);
     for (int i = 0; i < inner_w; i++) {
-        const int hh = i * 360 / inner_w;
+        const int hh = i * 360 / max(1, inner_w);
         M5Cardputer.Display.drawFastVLine(x + 1 + i, y + 1, inner_h, mijiaHueToColor565(hh));
     }
     const int marker_x = x + 1 + constrain(hue, 0, 359) * (inner_w - 1) / 359;
