@@ -21,7 +21,7 @@ Transmit IR via GPIO44 for **TV** and **AC** remotes. Default category and brand
 
 ![infrared-ac-mi](/shots/app_ir_ac_mi.png)
 ![infrared-ac-gree](/shots/app_ir_ac_gree.png)
-![infrared-ac-help](/shots/app_ir_ac_help.png)
+![infrared-ac-help](/shots/app_ir_help.png)
 
 </div>
 

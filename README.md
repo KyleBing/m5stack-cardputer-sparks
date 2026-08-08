@@ -1,16 +1,16 @@
-
 # <img src="/design/logo_no_padding.png" width="50px"> Sparks
 
 **中文** | [English](./README.en.md)
 
-为 Cardputer-ADV 制作的个人固件，主要功能是米家设备控制、cursor 信息查看。
+为 Cardputer-ADV 制作的个人固件（**v1.10**），主要功能是米家设备控制、红外 / 空调自动化、Cursor 信息查看。
 
 _该固件内容为全英文，英文缩写比较多，所以需要有良好的英语基础才能比较方便的使用。_
 
 
 <img alt="2026-07-17  cardputer adv-24-2000x2000" src="https://github.com/user-attachments/assets/2e922a2a-303a-48e4-aa7e-3d736752aa22" />
 
-<img alt="screenshots" src="https://github.com/user-attachments/assets/ab6fb8e1-0ffd-47ab-9a44-d97fbf7b8de9" />
+
+<img width="1774" height="2591" alt="screenshots v1 10" src="https://github.com/user-attachments/assets/c3c07475-57c3-471c-a2ab-6f1c4f39d3f7" />
 
 
 ## 一、功能说明
@@ -18,23 +18,23 @@ _该固件内容为全英文，英文缩写比较多，所以需要有良好的�
 
 | App | 英文名 | 快捷按键 | 功能 |
 |-----|--------|----------|------|
-| 米家 | Mijia | `m` | 设备状态查看、控制 |
-| 时钟 | Time | `t` | 开机时间，实时时间，秒表，倒计时 |
-| Cursor | Cursor Dashboard | `c` | Cursor 信息查看，TOKEN 余量，使用概况（24h,7d,30d） |
-| 红外 | Infrared | `x` | 电视、空调红外遥控，适配主流品牌 |
-| 麦克风 | Mic | `r` | 测试，波型查看 |
-| IMU | IMU | `g` | BMI270 6轴参数查看 |
+| 米家 | Mijia | `m` | 设备状态查看、控制，支持热键快速切换 |
+| AP/LAN | Config | `u` | Web 配置服务，针对 `config.json` 的修改 |
 | WiFi | WiFi | `w` | WiFi 设置，支持多组配置选择 |
-| AP/LAN | Config | `u` | Web 配置服务，针对 config.json 的修改 |
-| 系统配置 | Options | `o` | 屏幕、音量，首选项配置 |
-| 图标查看 | Icons | `a` | 固件内的图标查看 |
-| 字体 | Font | `f` | 预览系统自带字体 |
+| 时钟 | Time | `t` | 开机时间、实时时钟、秒表、倒计时（全屏） |
 | 休眠 | Sleep | `s` | 不关机的状态下，浅睡、深睡 |
+| 系统配置 | Options | `o` | 屏幕、音量、时钟、日历、红外等首选项 |
+| 系统信息 | Info | `i` | 内存、存储、芯片、固件、网络、运行信息 |
+| 电池 | Battery | `p` | 实时电量与过去 12 小时电量曲线 |
+| Cursor | Cursor Dashboard | `c` | Cursor 信息查看，TOKEN 余量，使用概况（24h / 7d / 30d） |
+| 日历 | Calendar | `a` | 单月日历，翻月 / 翻年，今日高亮 |
+| 版本 | Version | `v` | 固件版本与关于页 |
 | 摩斯密码 | Morse | `j` | 按键出摩斯码音频 |
+| 红外 | Infrared | `x` | 电视、空调红外遥控，适配主流品牌 |
+| 空调自动化 | AC Auto | `n` | BLE 温湿度触发红外开关空调 |
 | 键盘 | HID Keyboard | `k` | 蓝牙、USB 键盘 |
-| LED | RGB LED | `l` | ESP-32 板载 LED 测试 |
-| 蓝牙 | BLE | `b` | 附近蓝牙设备列表查看 |
-| 屏幕 | Display | `d` | 屏幕测试，多背景色，线条，方块 |
+| 小游戏 | Mini Games | `g` | 扫雷、贪吃蛇、生命游戏、粒子时钟等 14 项 |
+| 硬件测试 | Hardware Test | `h` | Display / IMU / Font / Icons / LED / BLE / I2C / Mic |
 
 
 ## 二、文档
@@ -42,6 +42,7 @@ _该固件内容为全英文，英文缩写比较多，所以需要有良好的�
 
 - 中文：[在线文档](https://kylebing.github.io/m5stack-cardputer-sparks/)
 - English: [Docs](https://kylebing.github.io/m5stack-cardputer-sparks/en/)
+
 
 ## 三、固件刷写
 参见： [release 页面](https://github.com/KyleBing/m5stack-cardputer-sparks/releases)
@@ -60,4 +61,3 @@ _该固件内容为全英文，英文缩写比较多，所以需要有良好的�
 像 Cardputer 这种基于 ESP32 的工具，固件就是一套非常死的固定程序，启动速度就会很快，这一点我非常喜欢。要比安卓、linux 启动都要快，很爽。我这个固件也专门对此作了优化，开机时间就在 1 秒。
 
 非常喜欢用它来控制家里的米家设备，替换傻傻的小爱同学。
-

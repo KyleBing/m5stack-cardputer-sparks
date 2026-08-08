@@ -2,14 +2,17 @@
 
 [中文](./README.md) | **English**
 
-Personal firmware for Cardputer-ADV, focused on Mi Home device control and Cursor usage info.
+Personal firmware for Cardputer-ADV (**v1.10**), focused on Mi Home control, IR / AC automation, and Cursor usage info.
 
 _The firmware UI is entirely in English, with many abbreviations — a solid English foundation helps a lot._
 
 
 <img alt="2026-07-17  cardputer adv-24-2000x2000" src="https://github.com/user-attachments/assets/2e922a2a-303a-48e4-aa7e-3d736752aa22" />
 
-<img alt="screenshots" src="https://github.com/user-attachments/assets/ab6fb8e1-0ffd-47ab-9a44-d97fbf7b8de9" />
+<img width="1774" height="2591" alt="screenshots v1 10" src="https://github.com/user-attachments/assets/c3c07475-57c3-471c-a2ab-6f1c4f39d3f7" />
+
+
+
 
 ## 1. Features
 
@@ -17,23 +20,23 @@ Built on M5Stack libraries. Available apps:
 
 | App | Name | Shortcut | Description |
 |-----|------|----------|-------------|
-| Mijia | Mijia | `m` | Device status & control |
-| Time | Time | `t` | Boot time, clock, stopwatch, countdown |
-| Cursor | Cursor Dashboard | `c` | Cursor info, token balance, usage (24h / 7d / 30d) |
-| Infrared | Infrared | `x` | TV & AC IR remote for major brands |
-| Mic | Mic | `r` | Mic test & waveform view |
-| IMU | IMU | `g` | BMI270 6-axis sensor readout |
-| WiFi | WiFi | `w` | WiFi setup with multiple saved profiles |
+| Mijia | Mijia | `m` | Device status & control, with hotkey quick switch |
 | AP/LAN | Config | `u` | Web config server for editing `config.json` |
-| Options | Options | `o` | Display, volume, preferences |
-| Icons | Icons | `a` | Browse firmware icons |
-| Font | Font | `f` | Preview built-in system fonts |
+| WiFi | WiFi | `w` | WiFi setup with multiple saved profiles |
+| Time | Time | `t` | Uptime, clock, stopwatch, countdown (fullscreen) |
 | Sleep | Sleep | `s` | Light / deep sleep without powering off |
+| Options | Options | `o` | Display, sound, clock, calendar, infrared prefs |
+| Info | Info | `i` | Memory, storage, chip, firmware, network, runtime |
+| Battery | Battery | `p` | Live battery level & 12h history chart |
+| Cursor | Cursor Dashboard | `c` | Cursor info, token balance, usage (24h / 7d / 30d) |
+| Calendar | Calendar | `a` | Month grid, browse months / years, today highlight |
+| Version | Version | `v` | Firmware version & about |
 | Morse | Morse | `j` | Keypress Morse code audio |
+| Infrared | Infrared | `x` | TV & AC IR remote for major brands |
+| AC Auto | AC Auto | `n` | BLE thermo/hygro → IR AC on/off automation |
 | Keyboard | HID Keyboard | `k` | Bluetooth & USB keyboard |
-| LED | RGB LED | `l` | Onboard ESP32 LED test |
-| BLE | BLE | `b` | Nearby Bluetooth device list |
-| Display | Display | `d` | Screen test: backgrounds, lines, rectangles |
+| Mini Games | Mini Games | `g` | Minesweeper, Snake, Life, particle clock, and more (14) |
+| Hardware Test | Hardware Test | `h` | Display / IMU / Font / Icons / LED / BLE / I2C / Mic |
 
 
 ## 2. Documentation

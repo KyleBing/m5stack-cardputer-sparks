@@ -34,10 +34,6 @@ pageClass: shots-page
 <figcaption>app_ir_ac_gree.png</figcaption>
 </figure>
 <figure class="shot-item">
-<img src="/shots/app_ir_ac_help.png" alt="app_ir_ac_help.png" />
-<figcaption>app_ir_ac_help.png</figcaption>
-</figure>
-<figure class="shot-item">
 <img src="/shots/app_ir_ac_mi.png" alt="app_ir_ac_mi.png" />
 <figcaption>app_ir_ac_mi.png</figcaption>
 </figure>
@@ -49,7 +45,6 @@ pageClass: shots-page
 <img src="/shots/app_ir_tv_sony.png" alt="app_ir_tv_sony.png" />
 <figcaption>app_ir_tv_sony.png</figcaption>
 </figure>
-
 
 <figure class="shot-item">
 <img src="/shots/app_acauto_config.png" alt="app_acauto_config.png" />
@@ -88,18 +83,6 @@ pageClass: shots-page
 <figure class="shot-item">
 <img src="/shots/app_calendar.png" alt="app_calendar.png" />
 <figcaption>app_calendar.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_config_001.png" alt="app_config_001.png" />
-<figcaption>app_config_001.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_config_002.png" alt="app_config_002.png" />
-<figcaption>app_config_002.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_config_003.png" alt="app_config_003.png" />
-<figcaption>app_config_003.png</figcaption>
 </figure>
 <figure class="shot-item">
 <img src="/shots/app_config_ap.png" alt="app_config_ap.png" />
@@ -265,10 +248,6 @@ pageClass: shots-page
 <figcaption>app_imu.png</figcaption>
 </figure>
 <figure class="shot-item">
-<img src="/shots/app_info_001.png" alt="app_info_001.png" />
-<figcaption>app_info_001.png</figcaption>
-</figure>
-<figure class="shot-item">
 <img src="/shots/app_info_002.png" alt="app_info_002.png" />
 <figcaption>app_info_002.png</figcaption>
 </figure>
@@ -318,7 +297,6 @@ pageClass: shots-page
 <figcaption>app_led_001.png</figcaption>
 </figure>
 
-
 <figure class="shot-item">
 <img src="/shots/app_mic_001.png" alt="app_mic_001.png" />
 <figcaption>app_mic_001.png</figcaption>
@@ -354,14 +332,6 @@ pageClass: shots-page
 <figure class="shot-item">
 <img src="/shots/app_options_sound.png" alt="app_options_sound.png" />
 <figcaption>app_options_sound.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_sleep_001.png" alt="app_sleep_001.png" />
-<figcaption>app_sleep_001.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_sleep_002.png" alt="app_sleep_002.png" />
-<figcaption>app_sleep_002.png</figcaption>
 </figure>
 <figure class="shot-item">
 <img src="/shots/app_sleep_deep.png" alt="app_sleep_deep.png" />
@@ -414,10 +384,6 @@ pageClass: shots-page
 <figure class="shot-item">
 <img src="/shots/app_wifi_scanner.png" alt="app_wifi_scanner.png" />
 <figcaption>app_wifi_scanner.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hardware.png" alt="app_hardware.png" />
-<figcaption>app_hardware.png</figcaption>
 </figure>
 <figure class="shot-item">
 <img src="/shots/app_hardware_001.png" alt="app_hardware_001.png" />

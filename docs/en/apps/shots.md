@@ -54,18 +54,6 @@ Device captures (`Fn+s`), sorted by filename.
 <figcaption>app_calendar.png</figcaption>
 </figure>
 <figure class="shot-item">
-<img src="/shots/app_config_001.png" alt="app_config_001.png" />
-<figcaption>app_config_001.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_config_002.png" alt="app_config_002.png" />
-<figcaption>app_config_002.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_config_003.png" alt="app_config_003.png" />
-<figcaption>app_config_003.png</figcaption>
-</figure>
-<figure class="shot-item">
 <img src="/shots/app_config_ap.png" alt="app_config_ap.png" />
 <figcaption>app_config_ap.png</figcaption>
 </figure>
@@ -290,10 +278,6 @@ Device captures (`Fn+s`), sorted by filename.
 <figcaption>app_games_wheel_spinning.png</figcaption>
 </figure>
 <figure class="shot-item">
-<img src="/shots/app_hardware.png" alt="app_hardware.png" />
-<figcaption>app_hardware.png</figcaption>
-</figure>
-<figure class="shot-item">
 <img src="/shots/app_hardware_001.png" alt="app_hardware_001.png" />
 <figcaption>app_hardware_001.png</figcaption>
 </figure>
@@ -382,10 +366,6 @@ Device captures (`Fn+s`), sorted by filename.
 <figcaption>app_imu.png</figcaption>
 </figure>
 <figure class="shot-item">
-<img src="/shots/app_info_001.png" alt="app_info_001.png" />
-<figcaption>app_info_001.png</figcaption>
-</figure>
-<figure class="shot-item">
 <img src="/shots/app_info_002.png" alt="app_info_002.png" />
 <figcaption>app_info_002.png</figcaption>
 </figure>
@@ -432,10 +412,6 @@ Device captures (`Fn+s`), sorted by filename.
 <figure class="shot-item">
 <img src="/shots/app_ir_ac_gree.png" alt="app_ir_ac_gree.png" />
 <figcaption>app_ir_ac_gree.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_ir_ac_help.png" alt="app_ir_ac_help.png" />
-<figcaption>app_ir_ac_help.png</figcaption>
 </figure>
 <figure class="shot-item">
 <img src="/shots/app_ir_ac_mi.png" alt="app_ir_ac_mi.png" />
@@ -489,14 +465,6 @@ Device captures (`Fn+s`), sorted by filename.
 <figure class="shot-item">
 <img src="/shots/app_options_sound.png" alt="app_options_sound.png" />
 <figcaption>app_options_sound.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_sleep_001.png" alt="app_sleep_001.png" />
-<figcaption>app_sleep_001.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_sleep_002.png" alt="app_sleep_002.png" />
-<figcaption>app_sleep_002.png</figcaption>
 </figure>
 <figure class="shot-item">
 <img src="/shots/app_sleep_deep.png" alt="app_sleep_deep.png" />

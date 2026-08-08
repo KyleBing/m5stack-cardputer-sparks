@@ -22,10 +22,10 @@ app_{app}_{子功能}.png
 - app_mijia_001.png（详情）
 - app_mijia_info.png（设备信息）
 - app_mijia_th_work.png / app_mijia_quick_panel.png
-- app_acauto_001.png / app_acauto_002.png / app_acauto_config.png
+- app_acauto_main.png / app_acauto_config.png
 
 ### Config / WiFi / Battery / Cursor
-- app_config_lan.png / app_config_ap.png / app_config_003.png（Help）
+- app_config_lan.png / app_config_ap.png / app_config_help.png
 - app_wifi_saved.png / app_wifi_scanner.png / app_wifi_input_password.png
 - app_battery_001.png
 - app_cursor_summary.png / app_cursor_last.png
@@ -45,7 +45,7 @@ app_{app}_{子功能}.png
 
 ### HID / IR
 - app_hidkeyboard_main.png / app_hidkeyboard_usb_mode.png / app_hidkeyboard_mouse_mode.png
-- app_hidkeyboard_pair_list.png / app_hidkeyboard_001.png / app_hidkeyboard_specailkey.png
+- app_hidkeyboard_pair_list.png / app_hidkeyboard_specailkey.png
 - app_ir_tv_sony.png / app_ir_tv_lg.png
 - app_ir_ac_mi.png / app_ir_ac_gree.png / app_ir_ac_help.png
 
@@ -67,7 +67,7 @@ app_{app}_{子功能}.png
 
 ### Hardware Test / 硬件调试
 - app_hardware_001.png / app_hardware_002.png（选择页）
-- app_hardware.png（IMU BMI270）
+- app_imu.png（IMU BMI270）
 - app_hardware_font_01.png … app_hardware_font_04.png
 - app_hardware_icon_01.png / app_hardware_icon_02.png
 - app_hardware_led.png
