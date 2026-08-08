@@ -47,6 +47,14 @@ pageClass: shots-page
 </figure>
 
 <figure class="shot-item">
+<img src="/shots/app_acauto_main.png" alt="app_acauto_main.png" />
+<figcaption>app_acauto_main.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_acauto_running.png" alt="app_acauto_running.png" />
+<figcaption>app_acauto_running.png</figcaption>
+</figure>
+<figure class="shot-item">
 <img src="/shots/app_acauto_config.png" alt="app_acauto_config.png" />
 <figcaption>app_acauto_config.png</figcaption>
 </figure>
@@ -310,8 +318,36 @@ pageClass: shots-page
 <figcaption>app_mijia_001.png</figcaption>
 </figure>
 <figure class="shot-item">
+<img src="/shots/app_mijia_ble_switch.png" alt="app_mijia_ble_switch.png" />
+<figcaption>app_mijia_ble_switch.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_mijia_desklamp.png" alt="app_mijia_desklamp.png" />
+<figcaption>app_mijia_desklamp.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_mijia_fan.png" alt="app_mijia_fan.png" />
+<figcaption>app_mijia_fan.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_mijia_fryer.png" alt="app_mijia_fryer.png" />
+<figcaption>app_mijia_fryer.png</figcaption>
+</figure>
+<figure class="shot-item">
 <img src="/shots/app_mijia_info.png" alt="app_mijia_info.png" />
 <figcaption>app_mijia_info.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_mijia_masterroom_off.png" alt="app_mijia_masterroom_off.png" />
+<figcaption>app_mijia_masterroom_off.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_mijia_masterroom_on.png" alt="app_mijia_masterroom_on.png" />
+<figcaption>app_mijia_masterroom_on.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_mijia_outside.png" alt="app_mijia_outside.png" />
+<figcaption>app_mijia_outside.png</figcaption>
 </figure>
 <figure class="shot-item">
 <img src="/shots/app_mijia_quick_panel.png" alt="app_mijia_quick_panel.png" />

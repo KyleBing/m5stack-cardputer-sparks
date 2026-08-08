@@ -31,6 +31,27 @@ Local miIO (LAN) and BLE Mijia device control: detail, list, grid, groups, and d
 
 </div>
 
+**Lights (brightness / CT / hue)**
+
+<div class="shot-row">
+
+![mijia-masterroom-on](/shots/app_mijia_masterroom_on.png)
+![mijia-masterroom-off](/shots/app_mijia_masterroom_off.png)
+![mijia-outside](/shots/app_mijia_outside.png)
+![mijia-desklamp](/shots/app_mijia_desklamp.png)
+
+</div>
+
+**Fan / air fryer / plug**
+
+<div class="shot-row">
+
+![mijia-fan](/shots/app_mijia_fan.png)
+![mijia-fryer](/shots/app_mijia_fryer.png)
+![mijia-ble-switch](/shots/app_mijia_ble_switch.png)
+
+</div>
+
 ## Shortcuts
 
 ### Common

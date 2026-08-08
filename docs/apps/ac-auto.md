@@ -9,6 +9,7 @@
 <div class="shot-row">
 
 ![acauto-main](/shots/app_acauto_main.png)
+![acauto-running](/shots/app_acauto_running.png)
 ![acauto-config](/shots/app_acauto_config.png)
 
 </div>

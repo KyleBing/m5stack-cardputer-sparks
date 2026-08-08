@@ -31,6 +31,27 @@
 
 </div>
 
+**灯（亮度 / 色温 / 色相）**
+
+<div class="shot-row">
+
+![mijia-masterroom-on](/shots/app_mijia_masterroom_on.png)
+![mijia-masterroom-off](/shots/app_mijia_masterroom_off.png)
+![mijia-outside](/shots/app_mijia_outside.png)
+![mijia-desklamp](/shots/app_mijia_desklamp.png)
+
+</div>
+
+**风扇 / 空气炸锅 / 插座**
+
+<div class="shot-row">
+
+![mijia-fan](/shots/app_mijia_fan.png)
+![mijia-fryer](/shots/app_mijia_fryer.png)
+![mijia-ble-switch](/shots/app_mijia_ble_switch.png)
+
+</div>
+
 ## 快捷键
 
 ### 公共
