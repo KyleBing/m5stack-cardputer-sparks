@@ -23,7 +23,6 @@ No header on the main input screen. Left pill column shows Fn / Aa / Opt / Ctrl 
 <div class="shot-row">
 
 ![hid-hosts](/shots/app_hidkeyboard_pair_list.png)
-![hid-001](/shots/app_hidkeyboard_001.png)
 ![hid-special](/shots/app_hidkeyboard_specailkey.png)
 
 </div>

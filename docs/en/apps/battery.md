@@ -8,7 +8,7 @@ Shows live charge level and roughly **1 hour** of battery history (including sle
 
 <div class="shot-row">
 
-![battery](/shots/app_battery.png)
+![battery](/shots/app_battery_001.png)
 
 </div>
 

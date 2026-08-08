@@ -8,8 +8,8 @@
 
 <div class="shot-row">
 
-![acauto-001](/shots/app_acauto_001.png)
-![acauto-002](/shots/app_acauto_002.png)
+![acauto-main](/shots/app_acauto_main.png)
+![acauto-config](/shots/app_acauto_config.png)
 
 </div>
 

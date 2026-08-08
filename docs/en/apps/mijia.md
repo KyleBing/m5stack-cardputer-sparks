@@ -14,6 +14,14 @@ Local miIO (LAN) and BLE Mijia device control: detail, list, grid, groups, and d
 
 </div>
 
+**Device info (`i`)**
+
+<div class="shot-row">
+
+![mijia-info](/shots/app_mijia_info.png)
+
+</div>
+
 **HT working / Quick panel**
 
 <div class="shot-row">
@@ -32,7 +40,8 @@ Local miIO (LAN) and BLE Mijia device control: detail, list, grid, groups, and d
 | `ESC` / `GO` | Back to main menu |
 | `h` | Open / close Help |
 | `o` | On |
-| `i` | Off |
+| `f` | Off |
+| `i` | Device info |
 | `t` / **BtnGO** | Toggle |
 | `r` | Refresh status (BLE scan for sensors) |
 | `q` | Quick-select keymap (keyboard occupancy) |
@@ -60,14 +69,14 @@ Bottom tip example: page `pN/M` · arrow page · `l` · `g`
 | Arrow keys | Move selection |
 | `[` `]` | Page |
 | `1`–`9` | Select cell directly |
-| `o` / `i` / `t` / BtnGO | On / off / toggle |
+| `o` / `f` / `t` / BtnGO | On / off / toggle |
 
 ### Group
 
 | Key | Action |
 |------|------|
 | `,` `.` | Switch group |
-| `o` / `i` / `t` | Group on / off / toggle |
+| `o` / `f` / `t` | Group on / off / toggle |
 | `-` `=` / `1` `0` | If all members are lights: brightness / presets |
 | `r` | Refresh |
 | `[` `]` | Page group members |

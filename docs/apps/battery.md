@@ -8,7 +8,7 @@
 
 <div class="shot-row">
 
-![battery](/shots/app_battery.png)
+![battery](/shots/app_battery_001.png)
 
 </div>
 

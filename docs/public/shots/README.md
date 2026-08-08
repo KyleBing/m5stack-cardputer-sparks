@@ -20,13 +20,14 @@ app_{app}_{子功能}.png
 
 ### Mijia / AC Auto
 - app_mijia_001.png（详情）
+- app_mijia_info.png（设备信息）
 - app_mijia_th_work.png / app_mijia_quick_panel.png
-- app_acauto_001.png / app_acauto_002.png
+- app_acauto_001.png / app_acauto_002.png / app_acauto_config.png
 
 ### Config / WiFi / Battery / Cursor
-- app_config_001.png（LAN）/ app_config_002.png（AP）/ app_config_003.png（Help）
+- app_config_lan.png / app_config_ap.png / app_config_003.png（Help）
 - app_wifi_saved.png / app_wifi_scanner.png / app_wifi_input_password.png
-- app_battery.png
+- app_battery_001.png
 - app_cursor_summary.png / app_cursor_last.png
 - app_cursor_7d.png / app_cursor_24d.png / app_cursor_30d.png
 
@@ -38,7 +39,7 @@ app_{app}_{子功能}.png
 - app_info_chip.png / app_info_firmware.png / app_info_network.png / app_info_runtime.png
 - app_version_v1.10.png
 - app_calendar.png
-- app_sleep_001.png（Light）/ app_sleep_002.png（Deep）
+- app_sleep_light.png / app_sleep_deep.png
 - app_morse_001.png
 - app_mic_001.png / app_mic_002.png
 

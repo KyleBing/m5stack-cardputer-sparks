@@ -8,8 +8,8 @@ Uses a Mijia BLE temperature/humidity sensor to auto-send IR power-on / power-of
 
 <div class="shot-row">
 
-![acauto-001](/shots/app_acauto_001.png)
-![acauto-002](/shots/app_acauto_002.png)
+![acauto-main](/shots/app_acauto_main.png)
+![acauto-config](/shots/app_acauto_config.png)
 
 </div>
 

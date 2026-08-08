@@ -12,9 +12,9 @@
 
 <div class="shot-row">
 
-![config-lan](/shots/app_config_001.png)
-![config-ap](/shots/app_config_002.png)
-![config-help](/shots/app_config_003.png)
+![config-lan](/shots/app_config_lan.png)
+![config-ap](/shots/app_config_ap.png)
+![config-help](/shots/app_config_help.png)
 
 </div>
 

@@ -17,6 +17,19 @@ pageClass: shots-page
 <div class="shot-gallery">
 
 <figure class="shot-item">
+<img src="/shots/app_menu_001.png" alt="app_menu_001.png" />
+<figcaption>app_menu_001.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_menu_002.png" alt="app_menu_002.png" />
+<figcaption>app_menu_002.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_menu_003.png" alt="app_menu_003.png" />
+<figcaption>app_menu_003.png</figcaption>
+</figure>
+
+<figure class="shot-item">
 <img src="/shots/app_ir_ac_gree.png" alt="app_ir_ac_gree.png" />
 <figcaption>app_ir_ac_gree.png</figcaption>
 </figure>
@@ -36,24 +49,21 @@ pageClass: shots-page
 <img src="/shots/app_ir_tv_sony.png" alt="app_ir_tv_sony.png" />
 <figcaption>app_ir_tv_sony.png</figcaption>
 </figure>
+
+
 <figure class="shot-item">
-<img src="/shots/app_acauto_001.png" alt="app_acauto_001.png" />
-<figcaption>app_acauto_001.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_acauto_002.png" alt="app_acauto_002.png" />
-<figcaption>app_acauto_002.png</figcaption>
+<img src="/shots/app_acauto_config.png" alt="app_acauto_config.png" />
+<figcaption>app_acauto_config.png</figcaption>
 </figure>
 <figure class="shot-item">
 <img src="/shots/app_battery.png" alt="app_battery.png" />
 <figcaption>app_battery.png</figcaption>
 </figure>
-
-
 <figure class="shot-item">
-<img src="/shots/app_hidkeyboard_001.png" alt="app_hidkeyboard_001.png" />
-<figcaption>app_hidkeyboard_001.png</figcaption>
+<img src="/shots/app_battery_001.png" alt="app_battery_001.png" />
+<figcaption>app_battery_001.png</figcaption>
 </figure>
+
 <figure class="shot-item">
 <img src="/shots/app_hidkeyboard_main.png" alt="app_hidkeyboard_main.png" />
 <figcaption>app_hidkeyboard_main.png</figcaption>
@@ -90,6 +100,14 @@ pageClass: shots-page
 <figure class="shot-item">
 <img src="/shots/app_config_003.png" alt="app_config_003.png" />
 <figcaption>app_config_003.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_config_ap.png" alt="app_config_ap.png" />
+<figcaption>app_config_ap.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_config_lan.png" alt="app_config_lan.png" />
+<figcaption>app_config_lan.png</figcaption>
 </figure>
 <figure class="shot-item">
 <img src="/shots/app_cursor_24d.png" alt="app_cursor_24d.png" />
@@ -299,22 +317,8 @@ pageClass: shots-page
 <img src="/shots/app_led_001.png" alt="app_led_001.png" />
 <figcaption>app_led_001.png</figcaption>
 </figure>
-<figure class="shot-item">
-<img src="/shots/app_menu_001.png" alt="app_menu_001.png" />
-<figcaption>app_menu_001.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_menu_002.png" alt="app_menu_002.png" />
-<figcaption>app_menu_002.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_menu_003.png" alt="app_menu_003.png" />
-<figcaption>app_menu_003.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_menu_01.png" alt="app_menu_01.png" />
-<figcaption>app_menu_01.png</figcaption>
-</figure>
+
+
 <figure class="shot-item">
 <img src="/shots/app_mic_001.png" alt="app_mic_001.png" />
 <figcaption>app_mic_001.png</figcaption>
@@ -326,6 +330,10 @@ pageClass: shots-page
 <figure class="shot-item">
 <img src="/shots/app_mijia_001.png" alt="app_mijia_001.png" />
 <figcaption>app_mijia_001.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_mijia_info.png" alt="app_mijia_info.png" />
+<figcaption>app_mijia_info.png</figcaption>
 </figure>
 <figure class="shot-item">
 <img src="/shots/app_mijia_quick_panel.png" alt="app_mijia_quick_panel.png" />
