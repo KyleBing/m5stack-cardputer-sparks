@@ -84,8 +84,50 @@ Four sub-modes: **Uptime**, **Clock**, **Countdown**, **Stopwatch**. The app is 
 
 1. Default mode comes from config `time.default` (e.g. `up`); timezone is `time.timezone` (e.g. `CST-8`).
 2. Clock uses RTC; with network, `r` does NTP.
-3. On Clock, `b` enters Big Clock (HH:MM dot-matrix only). After ~1 minute idle, the main loop slows to about one tick per second to save power.
+3. On Clock, `b` enters Big Clock (HH:MM dot-matrix only, no seconds).
 4. **Countdown / Stopwatch** keep timing after leaving the Time App or switching sub-modes — see below.
+
+## Power saving (clock display)
+
+Time does **not** auto-blank the screen, dim the backlight, or enter ESP light / deep sleep. Long-running clock display saves power by **slowing the main loop**; for real sleep use the main-menu [Sleep](./sleep) app.
+
+### Where it applies
+
+| Scenario | Idle slow loop? |
+|----------|-----------------|
+| **Uptime** / **Clock** (including Big Clock) | Yes — after ~**1 minute** with no activity |
+| Help open | No — keeps a faster poll |
+| NTP sync in progress | No — stays ~**30ms** poll for timeouts / reconnect |
+| **Countdown** / **Stopwatch** | No — need higher refresh; not idle-throttled |
+
+### Idle slow loop (~1 s tick)
+
+After **60s** with no keys / mode switches (`TIME_IDLE_SLOW_MS`):
+
+- Main-loop `delay` **aligns to the next whole second** (~1 s tick); keys respond within about 1 s.
+- `updateRtcApp` poll goes from ~**30ms** to **1000ms**.
+- Normal Clock / Uptime UI still refreshes every **1 s** so the seconds digit does not skip.
+
+While active (Uptime / Clock): main loop ~**30ms** to avoid busy-spin power waste while staying responsive.
+
+Any key or mode switch inside Time resets the idle timer; Help open blocks the slow loop.
+
+### Big Clock redraw
+
+| State | Redraw check interval | Notes |
+|-------|----------------------|--------|
+| Active | ~**15s** | HH:MM only — no need to redraw every second |
+| Idle slow loop | ~**1s** | Minute flips stay timely |
+
+### vs Sleep
+
+| Capability | Time clock display | [Sleep](./sleep) |
+|------------|--------------------|------------------|
+| Slower CPU polling | ✓ ~1 s when idle | — |
+| Screen off / backlight 0 | ✗ | ✓ when entering sleep |
+| ESP light / deep sleep | ✗ | ✓ |
+
+Good desk-clock setup: stay on Uptime or Clock (optional `b` large digits); after ~1 minute the loop slows automatically. Use Sleep when you want deeper power saving.
 
 ## Background running
 

@@ -19,6 +19,7 @@
 - **Time**：NTP 同步中恢复全屏无 header（与其它 Time 模块一致）
 - **版本**：固件 / M5Burner 元数据统一为 **v1.11**（`APP_VERSION` / `m5burner.json`）；`APP_UPDATE_TIME` → `2026.08.09`
 - **文档**：同步英文截图总览条目顺序与现有截图文件名；README 补充任意界面按 `h` 查看 Help
+- **文档 / Time**：补充中英文时钟展示省电策略（空闲约 1 分钟主循环降频、Big Clock 刷新、与 Sleep 对比）
 
 ---
 
