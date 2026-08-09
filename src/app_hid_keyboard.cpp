@@ -13,7 +13,15 @@
 #include <HIDTypes.h>
 #include <Preferences.h>
 #include <USB.h>
+// USBHIDKeyboard 与 M5 Keyboard_def 的 KEY_BACKSPACE/KEY_TAB 取值冲突
+// （Arduino 特殊键码 vs HID usage）；暂存 M5 定义后再 include
+#pragma push_macro("KEY_BACKSPACE")
+#pragma push_macro("KEY_TAB")
+#undef KEY_BACKSPACE
+#undef KEY_TAB
 #include <USBHIDKeyboard.h>
+#pragma pop_macro("KEY_TAB")
+#pragma pop_macro("KEY_BACKSPACE")
 #include <USBHIDMouse.h>
 #include <WiFi.h>
 #include <esp_gap_ble_api.h>
