@@ -9,6 +9,6 @@
     "device": ["M5Cardputer"],
     "default_baud": 921600
   },
-  "version": "1.10",
+  "version": "1.11",
   "framework": "Arduino"
 }
