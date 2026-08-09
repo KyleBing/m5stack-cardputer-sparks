@@ -17,8 +17,9 @@ static constexpr int WIFI_LIST_LINE_H = 24; // 状态页行距
 static constexpr int WIFI_CARD_GAP = 2; // 已保存卡片间距（越小卡片越高）
 static constexpr int WIFI_PASS_MAX = 64;
 static constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 5000;  // 已保存档案后台连接
-static constexpr uint32_t WIFI_JOIN_TIMEOUT_MS = 10000;    // 输入密码后的手动连接
-static constexpr uint32_t WIFI_FAIL_GRACE_MS = 1500;       // 刚 begin 时忽略瞬时错误状态
+static constexpr uint32_t WIFI_JOIN_TIMEOUT_MS = 12000;    // 扫网手动连接（含 begin 重试）
+static constexpr uint32_t WIFI_JOIN_RETRY_MS = 3500;       // 关联中重发 begin，避免扫网后卡死
+static constexpr uint32_t WIFI_JOIN_SETTLE_MS = 80;        // disconnect 后等射频收尾
 static constexpr int WIFI_SSID_CARD_H = 26;
 static constexpr int WIFI_PROGRESS_H = 10;
 static constexpr int WIFI_PROGRESS_SEG_W = 56;
@@ -64,11 +65,16 @@ static bool wifiConnectFromConfig = false;
 static bool wifiHelpVisible = false;
 static int wifiHelpPage = 0;
 static constexpr int WIFI_HELP_PAGES = 2;
-// 连接目标（脱离扫描索引，失败页仍可显示）
+// 连接目标（脱离扫描索引：失败页 / 重试仍可用）
 static char wifiTargetSsid[33] = "";
 static int wifiTargetRssi = -100;
+static int32_t wifiTargetChannel = 0;
+static int wifiTargetEnc = WIFI_AUTH_OPEN;
+static uint8_t wifiTargetBssid[6] = {0};
+static bool wifiTargetBssidValid = false;
 static uint32_t wifiConnectStartMs = 0;
 static uint32_t wifiConnectAnimMs = 0;
+static uint32_t wifiConnectNextRetryMs = 0;
 static int wifiConnectAnimPos = 0;
 static int wifiConnectLeftSec = -1;
 // 失败原因（失败页需手动按键返回）
@@ -593,9 +599,10 @@ static void drawWifiPasswordEditArea() {
 static void drawWifiPasswordScreen() {
     beginWifiScreen(false);
 
-    const bool has_pick = wifiSelectedIdx >= 0 && wifiSelectedIdx < wifiScanCount;
-    drawWifiSsidCard(WIFI_CONTENT_TOP, has_pick ? WiFi.SSID(wifiSelectedIdx).c_str() : "?",
-                     has_pick ? WiFi.RSSI(wifiSelectedIdx) : -100, wifiCardAccentGold());
+    // 优先显示已缓存目标（扫网结果被清掉时仍能画密码页）
+    const char* pass_ssid = wifiTargetSsid[0] != '\0' ? wifiTargetSsid : "?";
+    const int pass_rssi = wifiTargetSsid[0] != '\0' ? wifiTargetRssi : -100;
+    drawWifiSsidCard(WIFI_CONTENT_TOP, pass_ssid, pass_rssi, wifiCardAccentGold());
 
     drawWifiPasswordEditArea();
 
@@ -699,8 +706,8 @@ static void drawWifiConnectingScreen() {
     drawWifiConnectProgress();
     drawWifiConnectCountdown();
 
-    // 目标热点详情：信号 + 加密 + 信道
-    if (wifiSelectedIdx >= 0 && wifiSelectedIdx < wifiScanCount) {
+    // 目标热点详情：信号 + 加密 + 信道（用缓存，不依赖 scan 结果是否还在）
+    if (wifiTargetSsid[0] != '\0') {
         const int detail_y = track_y + WIFI_PROGRESS_H + 8;
         char buf[24];
         snprintf(buf, sizeof(buf), "%d dBm", wifiTargetRssi);
@@ -709,8 +716,8 @@ static void drawWifiConnectingScreen() {
         M5Cardputer.Display.setCursor(card_x, detail_y);
         M5Cardputer.Display.print(buf);
 
-        snprintf(buf, sizeof(buf), "%s  ch%d", wifiAuthName(WiFi.encryptionType(wifiSelectedIdx)),
-                 static_cast<int>(WiFi.channel(wifiSelectedIdx)));
+        snprintf(buf, sizeof(buf), "%s  ch%d", wifiAuthName(wifiTargetEnc),
+                 static_cast<int>(wifiTargetChannel));
         M5Cardputer.Display.setCursor(card_x + card_w - M5Cardputer.Display.textWidth(buf),
                                       detail_y);
         M5Cardputer.Display.print(buf);
@@ -879,31 +886,61 @@ static void startWifiScan() {
     drawWifiListScreen();
 }
 
+// 从扫网结果缓存目标 AP（SSID / BSSID / 信道），供连接与失败重试
+static void cacheWifiScanTarget(const int idx) {
+    if (idx < 0 || idx >= wifiScanCount) {
+        return;
+    }
+    strncpy(wifiTargetSsid, WiFi.SSID(idx).c_str(), sizeof(wifiTargetSsid) - 1);
+    wifiTargetSsid[sizeof(wifiTargetSsid) - 1] = '\0';
+    wifiTargetRssi = WiFi.RSSI(idx);
+    wifiTargetChannel = WiFi.channel(idx);
+    wifiTargetEnc = WiFi.encryptionType(idx);
+    const uint8_t* bssid = WiFi.BSSID(idx);
+    if (bssid != nullptr) {
+        memcpy(wifiTargetBssid, bssid, 6);
+        wifiTargetBssidValid = true;
+    } else {
+        memset(wifiTargetBssid, 0, 6);
+        wifiTargetBssidValid = false;
+    }
+}
+
+// 按缓存的目标发起关联（扫网后带 channel+BSSID 更稳）
+static void beginWifiTargetJoin(const char* password) {
+    if (wifiTargetBssidValid && wifiTargetChannel > 0) {
+        WiFi.begin(wifiTargetSsid, password, wifiTargetChannel, wifiTargetBssid);
+    } else {
+        WiFi.begin(wifiTargetSsid, password);
+    }
+}
+
 static void startWifiConnect(const char* password) {
-    if (wifiSelectedIdx < 0 || wifiSelectedIdx >= wifiScanCount) {
+    // 优先用当前扫网下标刷新缓存；重试时扫网结果可能已空，改用上次缓存
+    if (wifiSelectedIdx >= 0 && wifiSelectedIdx < wifiScanCount) {
+        cacheWifiScanTarget(wifiSelectedIdx);
+    }
+    if (wifiTargetSsid[0] == '\0') {
         return;
     }
 
-    const String ssid = WiFi.SSID(wifiSelectedIdx);
     claimStaWifi();
     WiFi.mode(WIFI_STA);
     applyWifiRadioSleepPolicy();
-    // 切换 SSID 时才断开，避免频繁 disconnect 导致连接超时
-    if (WiFi.status() == WL_CONNECTED && WiFi.SSID() != ssid) {
-        WiFi.disconnect();
-    }
-    WiFi.begin(ssid.c_str(), password);
+    WiFi.setAutoReconnect(true);
+    // 扫网收尾后射频常仍处 scan 态，直接 begin 易报 NO_SSID / 超时；先断开再关联
+    WiFi.disconnect(false);
+    delay(WIFI_JOIN_SETTLE_MS);
+    beginWifiTargetJoin(password);
 
     wifiConnectFromConfig = false;
     wifiPhase = WifiAppPhase::CONNECTING;
     wifiConnectStartMs = millis();
     wifiConnectDeadline = wifiConnectStartMs + WIFI_JOIN_TIMEOUT_MS;
+    wifiConnectNextRetryMs = wifiConnectStartMs + WIFI_JOIN_RETRY_MS;
     wifiConnectAnimMs = wifiConnectStartMs;
     wifiConnectAnimPos = 0;
     wifiConnectLeftSec = -1;
-    strncpy(wifiTargetSsid, ssid.c_str(), sizeof(wifiTargetSsid) - 1);
-    wifiTargetSsid[sizeof(wifiTargetSsid) - 1] = '\0';
-    wifiTargetRssi = WiFi.RSSI(wifiSelectedIdx);
     wifiStatus[0] = '\0';
     wifiFailReason[0] = '\0';
     drawWifiConnectingScreen();
@@ -943,13 +980,13 @@ static void selectWifiNetwork(const int list_index) {
     wifiPassword[0] = '\0';
     wifiStatus[0] = '\0';
     wifiConnectFromConfig = false;
+    cacheWifiScanTarget(idx);
 
     // 若已保存过该 SSID，预填密码
     {
         const AppConfig& cfg = getAppConfig();
-        const String ssid = WiFi.SSID(idx);
         for (int i = 0; i < cfg.wifi_count; i++) {
-            if (ssid == cfg.wifis[i].ssid) {
+            if (strcmp(cfg.wifis[i].ssid, wifiTargetSsid) == 0) {
                 strncpy(wifiPassword, cfg.wifis[i].password, WIFI_PASS_MAX);
                 wifiPassword[WIFI_PASS_MAX] = '\0';
                 break;
@@ -957,7 +994,7 @@ static void selectWifiNetwork(const int list_index) {
         }
     }
 
-    if (WiFi.encryptionType(idx) == WIFI_AUTH_OPEN) {
+    if (wifiTargetEnc == WIFI_AUTH_OPEN) {
         startWifiConnect("");
         return;
     }
@@ -994,6 +1031,10 @@ void enterWifiApp() {
     wifiFailReason[0] = '\0';
     wifiTargetSsid[0] = '\0';
     wifiTargetRssi = -100;
+    wifiTargetChannel = 0;
+    wifiTargetEnc = WIFI_AUTH_OPEN;
+    wifiTargetBssidValid = false;
+    memset(wifiTargetBssid, 0, sizeof(wifiTargetBssid));
 
     const AppConfig& cfg = getAppConfig();
 
@@ -1093,23 +1134,24 @@ void updateWifiApp() {
         return;
     }
 
-    // 手动连接：认证/找不到 AP 可提前判失败，跳过 begin 初期的瞬时状态
-    if (!wifiConnectFromConfig && millis() - wifiConnectStartMs >= WIFI_FAIL_GRACE_MS) {
-        const wl_status_t st = WiFi.status();
-        if (st == WL_CONNECT_FAILED) {
-            failWifiConnect("wrong password?");
-            return;
-        }
-        if (st == WL_NO_SSID_AVAIL) {
-            failWifiConnect("AP not found");
-            return;
-        }
+    // 扫网手动连接：周期重发 begin（与 ensureStaWifi 同因，避免关联被异步 disconnect 打断）
+    if (!wifiConnectFromConfig &&
+        static_cast<int32_t>(millis() - wifiConnectNextRetryMs) >= 0) {
+        beginWifiTargetJoin(wifiPassword);
+        wifiConnectNextRetryMs = millis() + WIFI_JOIN_RETRY_MS;
     }
 
     if (static_cast<int32_t>(millis() - wifiConnectDeadline) >= 0) {
-        // 手动连接失败留在失败页；档案连接才在列表项上标 timeout
+        // 手动连接失败留在失败页；按最终状态给原因（勿在 begin 初期把瞬时 NO_SSID 当失败）
         if (!wifiConnectFromConfig) {
-            failWifiConnect("timed out, AP no response");
+            const wl_status_t st = WiFi.status();
+            if (st == WL_CONNECT_FAILED) {
+                failWifiConnect("wrong password?");
+            } else if (st == WL_NO_SSID_AVAIL) {
+                failWifiConnect("AP not found");
+            } else {
+                failWifiConnect("timed out, AP no response");
+            }
             return;
         }
         strncpy(wifiStatus, "timeout", sizeof(wifiStatus));
@@ -1161,14 +1203,15 @@ void handleWifiApp(const Keyboard_Class::KeysState& status) {
         }
         for (const char c : status.word) {
             if (c == 'r' || c == 'R') {
-                if (wifiSelectedIdx >= 0 && wifiSelectedIdx < wifiScanCount) {
+                // 用缓存 SSID 重试，不依赖扫网结果是否仍在
+                if (wifiTargetSsid[0] != '\0') {
                     startWifiConnect(wifiPassword);
                 }
                 return;
             }
             // 改密码重来
             if (c == 'p' || c == 'P') {
-                if (wifiSelectedIdx >= 0 && wifiSelectedIdx < wifiScanCount) {
+                if (wifiTargetSsid[0] != '\0') {
                     wifiFailReason[0] = '\0';
                     wifiStatus[0] = '\0';
                     wifiPhase = WifiAppPhase::PASSWORD;
@@ -1209,7 +1252,7 @@ void handleWifiApp(const Keyboard_Class::KeysState& status) {
             if (c == 'r' || c == 'R') {
                 if (wifiConnectFromConfig) {
                     startWifiConfigConnect();
-                } else if (wifiSelectedIdx >= 0) {
+                } else if (wifiTargetSsid[0] != '\0') {
                     startWifiConnect(wifiPassword);
                 }
             }

@@ -66,7 +66,6 @@ enum class RtcTimeSync : uint8_t {
 static RtcTimeSync g_rtc_sync = RtcTimeSync::Idle;
 static uint32_t g_rtc_sync_deadline_ms = 0;
 static uint32_t g_rtc_wifi_retry_ms = 0;
-static uint32_t g_rtc_header_ms = 0; // 同步中刷新 header WiFi 图标
 static const char* g_rtc_busy_msg = nullptr; // 同步中提示文案
 
 static void drawRtcApp(const bool full_init);
@@ -242,14 +241,15 @@ static void redrawCurrentTimeMode() {
 }
 
 static void drawRtcBusyScreen(const char* msg) {
-    // 同步中用共享 header，便于显示 WiFi 连接状态
-    beginAppScreen("Clock");
+    // 同步中也无 header：全屏黑底，正文避开左上角模式小字
+    clearAppHeaderStatusRefresh();
+    M5Cardputer.Display.fillScreen(BLACK);
     rtcScreenReady = true;
     g_rtc_busy_msg = msg;
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y);
-    M5Cardputer.Display.println(msg);
+    M5Cardputer.Display.setCursor(APP_CONTENT_X, TIME_TOP_CONTENT_Y);
+    M5Cardputer.Display.print(msg);
 }
 
 static bool rtcSyncBusy() {
@@ -455,14 +455,6 @@ static void updateClockSync() {
                 finishClockSync(hasValidClockTime(), true);
             }
             break;
-    }
-
-    // 联网期间刷新 header WiFi 图标
-    if (g_rtc_sync == RtcTimeSync::WaitWifi || g_rtc_sync == RtcTimeSync::WaitNtp) {
-        if (millis() - g_rtc_header_ms >= 500) {
-            g_rtc_header_ms = millis();
-            updateAppHeaderStatus();
-        }
     }
 }
 

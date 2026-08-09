@@ -54,6 +54,89 @@ static int g_web_help_page = 0;
 static constexpr int WEB_HELP_PAGES = 2;
 static bool g_web_ui_active = false; // 在 Config 界面内：禁止刷系统 header
 
+// Config Web UI 语言：中文 / English
+enum class WebLang : uint8_t { Zh = 0, En = 1 };
+static WebLang g_web_lang = WebLang::Zh;
+static bool g_web_lang_cookie_pending = false;
+
+// 按当前语言取文案
+static const char* T(const char* zh, const char* en) {
+    return g_web_lang == WebLang::En ? en : zh;
+}
+
+static bool parseWebLangToken(const String& raw, WebLang& out) {
+    String s = raw;
+    s.trim();
+    s.toLowerCase();
+    if (s == "en" || s == "en-us" || s == "en-gb") {
+        out = WebLang::En;
+        return true;
+    }
+    if (s == "zh" || s.startsWith("zh-") || s == "cn") {
+        out = WebLang::Zh;
+        return true;
+    }
+    return false;
+}
+
+// 从 Cookie 头取 cp_lang
+static bool webLangFromCookie(WebLang& out) {
+    if (!g_server.hasHeader("Cookie")) {
+        return false;
+    }
+    const String cookie = g_server.header("Cookie");
+    int pos = 0;
+    while (pos < static_cast<int>(cookie.length())) {
+        int amp = cookie.indexOf(';', pos);
+        if (amp < 0) {
+            amp = static_cast<int>(cookie.length());
+        }
+        String part = cookie.substring(pos, amp);
+        part.trim();
+        if (part.startsWith("cp_lang=")) {
+            return parseWebLangToken(part.substring(8), out);
+        }
+        pos = amp + 1;
+    }
+    return false;
+}
+
+// 每个 HTML 请求开始时解析语言（appendTopBar / 部分 handler 会调用）
+static void resolveWebLang() {
+    g_web_lang_cookie_pending = false;
+    WebLang lang = WebLang::Zh;
+    bool have = false;
+    if (g_server.hasArg("lang") && parseWebLangToken(g_server.arg("lang"), lang)) {
+        have = true;
+        g_web_lang_cookie_pending = true;
+    } else if (webLangFromCookie(lang)) {
+        have = true;
+    } else if (g_server.hasHeader("Accept-Language")) {
+        const String al = g_server.header("Accept-Language");
+        // 取第一个 language tag
+        int end = al.indexOf(',');
+        String first = end >= 0 ? al.substring(0, end) : al;
+        int q = first.indexOf(';');
+        if (q >= 0) {
+            first = first.substring(0, q);
+        }
+        first.trim();
+        first.toLowerCase();
+        if (first.startsWith("zh")) {
+            lang = WebLang::Zh;
+            have = true;
+        } else if (first.length() > 0) {
+            lang = WebLang::En;
+            have = true;
+        }
+    }
+    g_web_lang = have ? lang : WebLang::Zh;
+}
+
+// 前向声明：语言切换链接保留 query 时编码参数
+static String urlEncodePath(const String& path);
+
+
 static const char* DEFAULT_CONFIG = R"({
   "wifis": [
     {
@@ -183,9 +266,18 @@ enum HtmlCssFlags : uint8_t {
 // 分块发送 HTML：不拼 head+body 大 String，避免 OOM / pending
 static void sendHtmlPage(const String& body, const uint8_t css_flags = HTML_CSS_NONE) {
     g_server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+    // ?lang= 时写入 Cookie，后续请求沿用
+    if (g_web_lang_cookie_pending) {
+        g_server.sendHeader(
+            "Set-Cookie",
+            String("cp_lang=") + (g_web_lang == WebLang::En ? "en" : "zh") +
+                "; Path=/; Max-Age=31536000; SameSite=Lax");
+    }
     g_server.send(200, "text/html", "");
+    g_server.sendContent(F("<!DOCTYPE html><html lang='"));
+    g_server.sendContent(g_web_lang == WebLang::En ? "en" : "zh-CN");
     g_server.sendContent_P(PSTR(
-        "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+        "'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         "<link rel='icon' href='/favicon.svg' type='image/svg+xml'>"
         "<title>Cardputer Config</title>"
@@ -206,10 +298,17 @@ static void sendHtmlPage(const String& body, const uint8_t css_flags = HTML_CSS_
         "body{font-family:system-ui,sans-serif;margin:0;padding:12px 14px 20px;line-height:1.4;"
         "width:100%;max-width:100%;background:var(--bg);color:var(--fg)}"
         ".topbar{margin-bottom:12px}"
-        ".brand{display:flex;align-items:center;gap:10px;margin-bottom:10px}"
+        ".brand{display:flex;align-items:center;gap:10px;margin-bottom:10px;"
+        "justify-content:flex-start}"
         ".site-logo{width:36px;height:36px;object-fit:contain;flex-shrink:0}"
         ".brand-text{min-width:0}"
         ".brand-text h1{font-size:1.2rem;margin:0;color:var(--fg-h)}"
+        ".lang-switch{margin-left:auto;display:inline-flex;gap:4px;align-items:center;font-size:12px}"
+        ".lang-switch a{padding:4px 8px;border-radius:4px;text-decoration:none;"
+        "color:var(--tab-fg);border:1px solid transparent}"
+        ".lang-switch a.active{background:var(--tab-act);color:#fff;border-color:var(--tab-act);"
+        "font-weight:600}"
+        "@media(prefers-color-scheme:dark){.lang-switch a.active{color:#121212}}"
         ".nav{display:flex;flex-wrap:wrap;gap:4px;margin:0;padding:0}"
         ".nav a{display:inline-block;padding:5px 10px;border-radius:6px;font-size:13px;"
         "color:var(--tab-fg);text-decoration:none;border:1px solid transparent;"
@@ -494,24 +593,60 @@ static void appendNavLink(String& body, const WebNavTab tab, const WebNavTab act
     body += F("</a>");
 }
 
+// 语言切换：保留当前 path 与其它 query（除 lang）
+static void appendLangSwitch(String& body) {
+    String path = g_server.uri();
+    if (path.length() == 0) {
+        path = "/";
+    }
+    body += F("<div class='lang-switch'>");
+    for (int i = 0; i < 2; i++) {
+        const bool en = (i == 1);
+        String href = path + "?lang=";
+        href += en ? "en" : "zh";
+        for (int a = 0; a < g_server.args(); a++) {
+            if (g_server.argName(a) == "lang") {
+                continue;
+            }
+            href += "&";
+            href += g_server.argName(a);
+            href += "=";
+            href += urlEncodePath(g_server.arg(a));
+        }
+        body += F("<a href='");
+        body += href;
+        body += '\'';
+        if ((en && g_web_lang == WebLang::En) || (!en && g_web_lang == WebLang::Zh)) {
+            body += F(" class='active'");
+        }
+        body += '>';
+        body += en ? "EN" : "中文";
+        body += F("</a>");
+    }
+    body += F("</div>");
+}
+
 // 各页共用顶栏导航；并打开内容卡片
 static void appendTopBar(String& body, const char* title, const WebNavTab active = WebNavTab::None) {
+    resolveWebLang();
     body += F("<div class='topbar'><div class='brand'>"
               "<img class='site-logo' src='/favicon.svg' alt='' width='36' height='36'>"
               "<div class='brand-text'><h1>");
     body += title;
-    body += F("</h1></div></div><nav class='nav'>");
+    body += F("</h1></div>");
+    appendLangSwitch(body);
+    body += F("</div><nav class='nav'>");
     appendNavLink(body, WebNavTab::Wifi, active, "/wifi", "WiFi");
-    appendNavLink(body, WebNavTab::Devices, active, "/", "米家设备");
-    appendNavLink(body, WebNavTab::Groups, active, "/groups", "米家设备编组");
+    appendNavLink(body, WebNavTab::Devices, active, "/", T("米家设备", "Devices"));
+    appendNavLink(body, WebNavTab::Groups, active, "/groups", T("米家设备编组", "Groups"));
     appendNavLink(body, WebNavTab::Cursor, active, "/cursor", "Cursor");
-    appendNavLink(body, WebNavTab::AcAuto, active, "/ac-auto", "空调自动化");
-    appendNavLink(body, WebNavTab::System, active, "/system", "系统");
-    appendNavLink(body, WebNavTab::Shots, active, "/shots", "截图");
-    appendNavLink(body, WebNavTab::Files, active, "/files", "TF文件");
-    appendNavLink(body, WebNavTab::Advanced, active, "/advanced", "高级JSON");
-    appendNavLink(body, WebNavTab::Example, active, "/example", "示例");
-    appendNavLink(body, WebNavTab::About, active, "/about", "关于");
+    appendNavLink(body, WebNavTab::AcAuto, active, "/ac-auto", T("空调自动化", "AC Auto"));
+    appendNavLink(body, WebNavTab::System, active, "/system", T("系统", "System"));
+    appendNavLink(body, WebNavTab::Shots, active, "/shots", T("截图", "Shots"));
+    appendNavLink(body, WebNavTab::Files, active, "/files", T("TF文件", "TF Files"));
+    appendNavLink(body, WebNavTab::Advanced, active, "/advanced", T("高级JSON", "Advanced"));
+    appendNavLink(body, WebNavTab::Example, active, "/example", T("示例", "Example"));
+    appendNavLink(body, WebNavTab::About, active, "/about", T("关于", "About"));
     body += F("</nav></div><div class='card'>");
 }
 
@@ -608,7 +743,7 @@ static void handleFormRoot() {
 
     String body;
     body.reserve(cfg.length() + 6144);
-    appendTopBar(body, "米家设备", WebNavTab::Devices);
+    appendTopBar(body, T("米家设备", "Devices"), WebNavTab::Devices);
     body += F("<form id='save-form' method='POST' action='/save'>"
               "<input type='hidden' name='config' id='config-payload'>"
               "<div class='toolbar'>"
@@ -617,23 +752,39 @@ static void handleFormRoot() {
               "<div class='table-wrap'><table class='dev-table'>"
               "<thead><tr>"
               "<th class='col-idx'>#</th>"
-              "<th class='col-name'>名称</th>"
-              "<th class='col-namezh'>中文名</th>"
-              "<th class='col-hotkey' title='快速选择快捷键 a-z/0-9，勿用 q'>快捷键</th>"
-              "<th class='col-act'>操作</th>"
+              "<th class='col-name'>");
+    body += T("名称", "Name");
+    body += F("</th>"
+              "<th class='col-namezh'>");
+    body += T("中文名", "Chinese name");
+    body += F("</th>"
+              "<th class='col-hotkey' title='");
+    body += T("快速选择快捷键 a-z/0-9，勿用 q", "Quick-select hotkey a-z/0-9; do not use q");
+    body += F("'>");
+    body += T("快捷键", "Hotkey");
+    body += F("</th>"
+              "<th class='col-act'>");
+    body += T("操作", "Actions");
+    body += F("</th>"
               "<th class='col-ip'>IP</th>"
               "<th class='col-token'>Token</th>"
               "<th class='col-ble'>BLE Key</th>"
-              "<th class='col-model'>型号</th>"
+              "<th class='col-model'>");
+    body += T("型号", "Model");
+    body += F("</th>"
               "<th class='col-id'>ID</th>"
               "<th class='col-mac'>MAC</th>"
               "</tr></thead>"
               "<tbody id='dev-tbody'></tbody>"
               "</table></div>"
               // 列表最下方全宽添加按钮
-              "<button type='button' id='btn-add' class='btn-add-row' title='添加设备'>+</button>"
+              "<button type='button' id='btn-add' class='btn-add-row' title='");
+    body += T("添加设备", "Add device");
+    body += F("'>+</button>"
               "<div class='save-bar'>"
-              "<button type='submit' class='primary' id='btn-save'>保存到设备</button>"
+              "<button type='submit' class='primary' id='btn-save'>");
+    body += T("保存到设备", "Save to device");
+    body += F("</button>"
               "</div></form>");
     appendCardEnd(body);
     appendCfgDataScript(body, cfg);
@@ -685,11 +836,27 @@ static void handleFormRoot() {
         "<td class='col-namezh'>${ta('name_zh',d.name_zh||d.name_cn||'')}</td>"
         "<td class='col-hotkey'>${ta('hotkey',d.hotkey||'')}</td>"
         "<td class='col-act'><div class='act-stack'>"
-        "<button type='button' class='icon-btn' data-act='up' title='上移'>↑</button>"
-        "<button type='button' class='icon-btn' data-act='down' title='下移'>↓</button>"
-        "<button type='button' class='icon-btn' data-act='top' title='置顶'>顶</button>"
-        "<button type='button' class='icon-btn' data-act='bottom' title='置底'>底</button>"
-        "<button type='button' class='danger icon-btn' data-act='del' title='删除'>删</button>"
+        "<button type='button' class='icon-btn' data-act='up' title='");
+    body += T("上移", "Move up");
+    body += F("'>↑</button>"
+        "<button type='button' class='icon-btn' data-act='down' title='");
+    body += T("下移", "Move down");
+    body += F("'>↓</button>"
+        "<button type='button' class='icon-btn' data-act='top' title='");
+    body += T("置顶", "Top");
+    body += F("'>");
+    body += T("顶", "Top");
+    body += F("</button>"
+        "<button type='button' class='icon-btn' data-act='bottom' title='");
+    body += T("置底", "Bottom");
+    body += F("'>");
+    body += T("底", "Bot");
+    body += F("</button>"
+        "<button type='button' class='danger icon-btn' data-act='del' title='");
+    body += T("删除", "Delete");
+    body += F("'>");
+    body += T("删", "Del");
+    body += F("</button>"
         "</div></td>"
         "<td class='col-ip'>${ta('ip',d.ip)}</td>"
         "<td class='col-token'>${ta('token',d.token)}</td>"
@@ -697,7 +864,10 @@ static void handleFormRoot() {
         "<td class='col-model'>${modelCell(d.model)}</td>"
         "<td class='col-id'>${ta('id',d.id)}</td>"
         "<td class='col-mac'>${ta('mac',d.mac)}</td>`;tb.appendChild(tr);});"
-        "document.getElementById('dev-count').textContent=`共 ${cfg.devices.length} / ${DEV_MAX} 台`;}"
+        "document.getElementById('dev-count').textContent=`");
+    body += T("共 ${cfg.devices.length} / ${DEV_MAX} 台",
+              "${cfg.devices.length} / ${DEV_MAX} devices");
+    body += F("`;}"
         "function move(i,d){collect();const j=i+d;if(j<0||j>=cfg.devices.length)return;"
         "[cfg.devices[i],cfg.devices[j]]=[cfg.devices[j],cfg.devices[i]];renderDevices();}"
         "function moveTop(i){collect();if(i<=0)return;"
@@ -706,7 +876,11 @@ static void handleFormRoot() {
         "const item=cfg.devices.splice(i,1)[0];cfg.devices.push(item);renderDevices();}"
         "function init(){loadCfg();renderDevices();"
         "document.getElementById('btn-add').onclick=()=>{collect();"
-        "if(cfg.devices.length>=DEV_MAX){alert('最多 '+DEV_MAX+' 台设备');return;}"
+        "if(cfg.devices.length>=DEV_MAX){alert('");
+    body += T("最多 ", "Max ");
+    body += F("'+DEV_MAX+'");
+    body += T(" 台设备", " devices");
+    body += F("');return;}"
         "cfg.devices.push({name:'',name_zh:'',id:'',mac:'',ip:'',token:'',model:'',hotkey:'',ble:{key:''}});"
         "renderDevices();};"
         "document.getElementById('dev-tbody').onclick=e=>{const b=e.target.closest('button');"
@@ -740,8 +914,13 @@ static void handleWifiPage() {
     body += F("<form id='save-form' method='POST' action='/save'>"
               "<input type='hidden' name='config' id='config-payload'>"
               "<h2>WiFi</h2>"
-              "<p class='hint'>对应 <code>wifis[]</code> + <code>wifi_active</code>；最多 "
-              "<strong>5</strong> 条。选中 Active 为当前联网凭据；设备 WiFi App 也可切换。</p>"
+              "<p class='hint'>");
+    body += T("对应 <code>wifis[]</code> + <code>wifi_active</code>；最多 "
+              "<strong>5</strong> 条。选中 Active 为当前联网凭据；设备 WiFi App 也可切换。",
+              "Maps to <code>wifis[]</code> + <code>wifi_active</code>; up to "
+              "<strong>5</strong> profiles. The Active radio is the current credential; "
+              "you can also switch in the on-device WiFi app.");
+    body += F("</p>"
               "<div class='toolbar'>"
               "<span class='count' id='wifi-count'></span>"
               "</div>"
@@ -750,14 +929,20 @@ static void handleWifiPage() {
               "<thead><tr>"
               "<th class='col-active'>Active</th>"
               "<th class='col-ssid'>SSID</th>"
-              "<th class='col-pass'>密码</th>"
+              "<th class='col-pass'>");
+    body += T("密码", "Password");
+    body += F("</th>"
               "<th class='col-act'></th>"
               "</tr></thead>"
               "<tbody id='wifi-tbody'></tbody>"
               "</table></div>"
-              "<button type='button' class='btn-add-row' id='btn-add-wifi' title='添加'>+</button>"
+              "<button type='button' class='btn-add-row' id='btn-add-wifi' title='");
+    body += T("添加", "Add");
+    body += F("'>+</button>"
               "<div class='save-bar'>"
-              "<button type='submit' class='primary' id='btn-save'>保存到设备</button>"
+              "<button type='submit' class='primary' id='btn-save'>");
+    body += T("保存到设备", "Save to device");
+    body += F("</button>"
               "</div></form>");
     appendCardEnd(body);
     appendCfgDataScript(body, cfg);
@@ -803,7 +988,9 @@ static void handleWifiPage() {
         "tdP.appendChild(inP);"
         "const tdA=document.createElement('td');tdA.className='col-act';"
         "const del=document.createElement('button');del.type='button';"
-        "del.className='danger icon-btn';del.textContent='删';"
+        "del.className='danger icon-btn';del.textContent='");
+    body += T("删", "Del");
+    body += F("';"
         "del.onclick=()=>{"
         "const was=w.ssid||'';"
         "cfg.wifis.splice(i,1);"
@@ -854,20 +1041,30 @@ static void handleGroupsPage() {
 
     String body;
     body.reserve(cfg.length() + 4096);
-    appendTopBar(body, "米家设备编组", WebNavTab::Groups);
+    appendTopBar(body, T("米家设备编组", "Device groups"), WebNavTab::Groups);
     body += F("<form id='save-form' method='POST' action='/save'>"
               "<input type='hidden' name='config' id='config-payload'>"
-              "<p class='hint'>用设备 <code>id</code> 组成米家设备编组；改名不影响成员。"
+              "<p class='hint'>");
+    body += T("用设备 <code>id</code> 组成米家设备编组；改名不影响成员。"
               "成员里的 name / name_zh 仅方便阅读，保存时会从设备表同步。"
               "BLE 只读设备可勾选但设备端开/关会跳过。"
-              "请先在 <a href='/'>米家设备</a> 填写设备 id。</p>"
+              "请先在 <a href='/'>米家设备</a> 填写设备 id。",
+              "Group Mijia devices by <code>id</code>; renaming a group does not change members. "
+              "Member name / name_zh are for display only and sync from the device list on save. "
+              "BLE read-only devices can be checked but on/off is skipped on device. "
+              "Add device ids on <a href='/'>Devices</a> first.");
+    body += F("</p>"
               "<div class='toolbar'>"
-              "<button type='button' id='btn-add-group'>+ 添加米家设备编组</button>"
+              "<button type='button' id='btn-add-group'>+ ");
+    body += T("添加米家设备编组", "Add device group");
+    body += F("</button>"
               "<span class='count' id='group-count'></span>"
               "</div>"
               "<div id='group-list'></div>"
               "<div class='save-bar'>"
-              "<button type='submit' class='primary'>保存到设备</button>"
+              "<button type='submit' class='primary'>");
+    body += T("保存到设备", "Save to device");
+    body += F("</button>"
               "</div></form>");
     appendCardEnd(body);
     appendCfgDataScript(body, cfg);
@@ -923,26 +1120,50 @@ static void handleGroupsPage() {
         "data-namezh='${esc(zh)}' ${selected.has(d.id)?'checked':''}>"
         "<span class='member-meta'><span>${label}${ble?' · BLE':''}</span>"
         "<div class='member-id'>id: ${esc(d.id)}</div></span></label>`;});"
-        "if(!membersHtml)membersHtml='<p class=\"hint\">请先在「米家设备」里填写设备 id</p>';"
+        "if(!membersHtml)membersHtml='<p class=\"hint\">");
+    body += T("请先在「米家设备」里填写设备 id", "Add device ids on Devices first");
+    body += F("</p>';"
         "card.innerHTML=`<div class='group-head'>"
-        "<label>名称<input data-gf='name' value='${esc(g.name||'')}'></label>"
-        "<label>中文名<input data-gf='name_zh' value='${esc(g.name_zh||g.name_cn||'')}'></label>"
+        "<label>");
+    body += T("名称", "Name");
+    body += F("<input data-gf='name' value='${esc(g.name||'')}'></label>"
+        "<label>");
+    body += T("中文名", "Chinese name");
+    body += F("<input data-gf='name_zh' value='${esc(g.name_zh||g.name_cn||'')}'></label>"
         "<div class='group-acts'>"
-        "<button type='button' class='icon-btn' data-gact='up' title='上移'>↑</button>"
-        "<button type='button' class='icon-btn' data-gact='down' title='下移'>↓</button>"
-        "<button type='button' class='danger icon-btn' data-gact='del' title='删除'>删</button>"
+        "<button type='button' class='icon-btn' data-gact='up' title='");
+    body += T("上移", "Move up");
+    body += F("'>↑</button>"
+        "<button type='button' class='icon-btn' data-gact='down' title='");
+    body += T("下移", "Move down");
+    body += F("'>↓</button>"
+        "<button type='button' class='danger icon-btn' data-gact='del' title='");
+    body += T("删除", "Delete");
+    body += F("'>");
+    body += T("删", "Del");
+    body += F("</button>"
         "</div></div>"
-        "<div class='hint'>成员 ${selected.size} / ${GROUP_MEMBER_MAX}</div>"
+        "<div class='hint'>");
+    body += T("成员 ${selected.size} / ${GROUP_MEMBER_MAX}",
+              "Members ${selected.size} / ${GROUP_MEMBER_MAX}");
+    body += F("</div>"
         "<div class='group-members'>${membersHtml}</div>`;"
         "list.appendChild(card);});"
         "document.getElementById('group-count').textContent="
-        "`共 ${cfg.device_groups.length} / ${GROUP_MAX} 组`;}"
+        "`");
+    body += T("共 ${cfg.device_groups.length} / ${GROUP_MAX} 组",
+              "${cfg.device_groups.length} / ${GROUP_MAX} groups");
+    body += F("`;}"
         "function moveGroup(i,d){collect();const j=i+d;if(j<0||j>=cfg.device_groups.length)return;"
         "[cfg.device_groups[i],cfg.device_groups[j]]=[cfg.device_groups[j],cfg.device_groups[i]];"
         "renderGroups();}"
         "function init(){loadCfg();renderGroups();"
         "document.getElementById('btn-add-group').onclick=()=>{collect();"
-        "if(cfg.device_groups.length>=GROUP_MAX){alert('最多 '+GROUP_MAX+' 组');return;}"
+        "if(cfg.device_groups.length>=GROUP_MAX){alert('");
+    body += T("最多 ", "Max ");
+    body += F("'+GROUP_MAX+'");
+    body += T(" 组", " groups");
+    body += F("');return;}"
         "cfg.device_groups.push({name:'',name_zh:'',members:[]});renderGroups();};"
         "document.getElementById('group-list').onclick=e=>{const b=e.target.closest('button');"
         "if(!b||!b.dataset.gact)return;const i=+b.closest('.group-card').dataset.gi;"
@@ -966,20 +1187,40 @@ static void handleCursorPage() {
     body += F("<form id='save-form' method='POST' action='/save'>"
               "<input type='hidden' name='config' id='config-payload'>"
               "<h2>Cursor Session Token</h2>"
-              "<p class='hint'>用于 Cursor 应用拉取用量数据，写入 "
-              "<code>cursor.token</code>。</p>"
-              "<h3 class='token-method-title'>方式一：浏览器 Cookie</h3>"
+              "<p class='hint'>");
+    body += T("用于 Cursor 应用拉取用量数据，写入 <code>cursor.token</code>。",
+              "Used by the Cursor app to fetch usage; stored as <code>cursor.token</code>.");
+    body += F("</p>"
+              "<h3 class='token-method-title'>");
+    body += T("方式一：浏览器 Cookie", "Method 1: Browser cookie");
+    body += F("</h3>"
               "<ol class='token-steps'>"
-              "<li>在电脑浏览器登录 <code>https://cursor.com</code></li>"
-              "<li>打开开发者工具 → Application（应用）→ Cookies → "
-              "<code>cursor.com</code></li>"
-              "<li>找到 <code>WorkosCursorSessionToken</code>，复制其 Value</li>"
-              "<li>粘贴到下方输入框并保存</li>"
+              "<li>");
+    body += T("在电脑浏览器登录 <code>https://cursor.com</code>",
+              "Sign in at <code>https://cursor.com</code> in a desktop browser");
+    body += F("</li>"
+              "<li>");
+    body += T("打开开发者工具 → Application（应用）→ Cookies → <code>cursor.com</code>",
+              "Open DevTools → Application → Cookies → <code>cursor.com</code>");
+    body += F("</li>"
+              "<li>");
+    body += T("找到 <code>WorkosCursorSessionToken</code>，复制其 Value",
+              "Find <code>WorkosCursorSessionToken</code> and copy its Value");
+    body += F("</li>"
+              "<li>");
+    body += T("粘贴到下方输入框并保存", "Paste into the box below and save");
+    body += F("</li>"
               "</ol>"
-              "<h3 class='token-method-title'>方式二：Cursor IDE 本地 SQLite</h3>"
-              "<p class='hint'>在电脑安装并登录 Cursor IDE 后，从 "
+              "<h3 class='token-method-title'>");
+    body += T("方式二：Cursor IDE 本地 SQLite", "Method 2: Cursor IDE local SQLite");
+    body += F("</h3>"
+              "<p class='hint'>");
+    body += T("在电脑安装并登录 Cursor IDE 后，从 "
               "<code>state.vscdb</code> 读取 JWT（需本机已安装 "
-              "<code>sqlite3</code>）。</p>"
+              "<code>sqlite3</code>）。",
+              "After installing and signing into Cursor IDE, read the JWT from "
+              "<code>state.vscdb</code> (requires <code>sqlite3</code> on the host).");
+    body += F("</p>"
               "<ul class='token-paths'>"
               "<li>macOS：<code>~/Library/Application Support/Cursor/User/globalStorage/state.vscdb</code></li>"
               "<li>Linux：<code>~/.config/Cursor/User/globalStorage/state.vscdb</code></li>"
@@ -987,14 +1228,25 @@ static void handleCursorPage() {
               "</ul>"
               "<pre class='token-cmd'>sqlite3 \"&lt;path-to&gt;/state.vscdb\" "
               "\"SELECT value FROM ItemTable WHERE key='cursorAuth/accessToken';\"</pre>"
-              "<p class='hint'>输出为 JWT（<code>eyJ...</code> 开头），可直接粘贴；"
-              "固件会从 JWT 解析 <code>sub</code> 并组装 Cookie。</p>"
-              "<p class='token-formats'>支持格式：完整 Cookie 值 "
+              "<p class='hint'>");
+    body += T("输出为 JWT（<code>eyJ...</code> 开头），可直接粘贴；"
+              "固件会从 JWT 解析 <code>sub</code> 并组装 Cookie。",
+              "Output is a JWT (starts with <code>eyJ...</code>); paste it directly. "
+              "Firmware parses <code>sub</code> from the JWT and builds the Cookie.");
+    body += F("</p>"
+              "<p class='token-formats'>");
+    body += T("支持格式：完整 Cookie 值 "
               "（<code>sub::jwt</code> 或 <code>sub%3A%3Ajwt</code>）；"
-              "或仅粘贴 JWT。</p>"
+              "或仅粘贴 JWT。",
+              "Accepted formats: full Cookie value "
+              "(<code>sub::jwt</code> or <code>sub%3A%3Ajwt</code>), "
+              "or JWT alone.");
+    body += F("</p>"
               "<label>Session Token<textarea id='cursor-key' rows='4'></textarea></label>"
               "<div class='save-bar'>"
-              "<button type='submit' class='primary'>保存到设备</button>"
+              "<button type='submit' class='primary'>");
+    body += T("保存到设备", "Save to device");
+    body += F("</button>"
               "</div></form>");
     appendCardEnd(body);
     appendCfgDataScript(body, cfg);
@@ -1019,22 +1271,34 @@ static void handleAcAutoPage() {
 
     String body;
     body.reserve(cfg.length() + 7168);
-    appendTopBar(body, "空调自动化", WebNavTab::AcAuto);
+    appendTopBar(body, T("空调自动化", "AC Auto"), WebNavTab::AcAuto);
     body += F(
         "<form id='save-form' method='POST' action='/save'>"
         "<input type='hidden' name='config' id='config-payload'>"
-        "<h2>空调自动化 <span class='key'>ac_auto</span></h2>"
-        "<p class='hint'>用 BLE 温湿度计读数自动控制空调红外开关。先在下方选好传感器与阈值，"
-        "保存后设备主菜单按 <code>n</code> 进入 AC Auto，再按 <code>t</code> 启动 AUTO。</p>"
-        "<label>温湿度计（sensor_id）"
-        "<select id='ac-sensor'></select></label>"
-        "<label>开空调温度（&gt;℃）"
-        "<input id='ac-on-temp' type='number' min='16' max='40' step='1'></label>"
-        "<label>关空调温度（&lt;℃）"
-        "<input id='ac-off-temp' type='number' min='10' max='35' step='1'></label>"
-        "<label>过滤次数"
-        "<input id='ac-filter' type='number' min='1' max='10' step='1'></label>"
-        "<div class='field-label'>空调品牌</div>"
+        "<h2>");
+    body += T("空调自动化", "AC Auto");
+    body += F(" <span class='key'>ac_auto</span></h2>"
+        "<p class='hint'>");
+    body += T("用 BLE 温湿度计读数自动控制空调红外开关。先在下方选好传感器与阈值，"
+              "保存后设备主菜单按 <code>n</code> 进入 AC Auto，再按 <code>t</code> 启动 AUTO。",
+              "Auto IR on/off from a BLE temp/humidity sensor. Pick the sensor and thresholds below, "
+              "save, then press <code>n</code> on the device menu for AC Auto and <code>t</code> to start AUTO.");
+    body += F("</p>"
+        "<label>");
+    body += T("温湿度计（sensor_id）", "Sensor (sensor_id)");
+    body += F("<select id='ac-sensor'></select></label>"
+        "<label>");
+    body += T("开空调温度（&gt;℃）", "Turn AC on above (°C)");
+    body += F("<input id='ac-on-temp' type='number' min='16' max='40' step='1'></label>"
+        "<label>");
+    body += T("关空调温度（&lt;℃）", "Turn AC off below (°C)");
+    body += F("<input id='ac-off-temp' type='number' min='10' max='35' step='1'></label>"
+        "<label>");
+    body += T("过滤次数", "Filter count");
+    body += F("<input id='ac-filter' type='number' min='1' max='10' step='1'></label>"
+        "<div class='field-label'>");
+    body += T("空调品牌", "AC brand");
+    body += F("</div>"
         "<div class='radio-group' id='ac-brand'>"
         "<label class='radio-row'><input type='radio' name='ac-brand' value='midea'>Midea</label>"
         "<label class='radio-row'><input type='radio' name='ac-brand' value='gree'>Gree</label>"
@@ -1043,7 +1307,9 @@ static void handleAcAutoPage() {
         "<label class='radio-row'><input type='radio' name='ac-brand' value='hisense'>Hisense</label>"
         "<label class='radio-row'><input type='radio' name='ac-brand' value='xiaomi'>Xiaomi</label>"
         "</div>"
-        "<div class='field-label'>模式</div>"
+        "<div class='field-label'>");
+    body += T("模式", "Mode");
+    body += F("</div>"
         "<div class='radio-group' id='ac-mode'>"
         "<label class='radio-row'><input type='radio' name='ac-mode' value='cool'>Cool</label>"
         "<label class='radio-row'><input type='radio' name='ac-mode' value='heat'>Heat</label>"
@@ -1051,9 +1317,12 @@ static void handleAcAutoPage() {
         "<label class='radio-row'><input type='radio' name='ac-mode' value='fan'>Fan</label>"
         "<label class='radio-row'><input type='radio' name='ac-mode' value='auto'>Auto</label>"
         "</div>"
-        "<label>设定温度（℃）"
-        "<input id='ac-temp' type='number' min='16' max='30' step='1'></label>"
-        "<div class='field-label'>风力</div>"
+        "<label>");
+    body += T("设定温度（℃）", "Set temperature (°C)");
+    body += F("<input id='ac-temp' type='number' min='16' max='30' step='1'></label>"
+        "<div class='field-label'>");
+    body += T("风力", "Fan");
+    body += F("</div>"
         "<div class='radio-group' id='ac-fan'>"
         "<label class='radio-row'><input type='radio' name='ac-fan' value='auto'>Auto</label>"
         "<label class='radio-row'><input type='radio' name='ac-fan' value='min'>Min</label>"
@@ -1063,29 +1332,57 @@ static void handleAcAutoPage() {
         "<label class='radio-row'><input type='radio' name='ac-fan' value='max'>Max</label>"
         "</div>"
         "<div class='save-bar'>"
-        "<button type='submit' class='primary'>保存到设备</button>"
+        "<button type='submit' class='primary'>");
+    body += T("保存到设备", "Save to device");
+    body += F("</button>"
         "</div></form>"
         // 设置项下方：运行机制说明
-        "<h3 style='margin:18px 0 8px'>运行机制</h3>"
-        "<ul class='hint' style='padding-left:1.2em;line-height:1.6;margin:0'>"
-        "<li><strong>触发源</strong>：只监听上方选中的 BLE 温湿度计（需在「设备」里已添加，"
-        "且带 <code>ble.key</code>）。</li>"
-        "<li><strong>AUTO 开关</strong>：进入 App 后按 <code>t</code> 启动 / 停止自动化；"
-        "未启动时仍会收温湿度、画曲线，但不会发红外。</li>"
-        "<li><strong>开空调</strong>：温度 <code>&gt; on_temp</code> 连续达到 "
-        "<code>filter</code> 次读数，且当前判定为关机 → 发红外开机"
-        "（用上方配置的 brand / mode / temp / fan）。</li>"
-        "<li><strong>关空调</strong>：温度 <code>&lt; off_temp</code> 连续达到 "
-        "<code>filter</code> 次读数，且当前判定为开机 → 发红外关机。</li>"
-        "<li><strong>假定开关</strong>：App 不探测真实空调状态，进 App 默认视为关机；"
-        "展示页按 <code>p</code> 可切换右侧电源图标（仅对齐内部状态，不发红外）。</li>"
-        "<li><strong>滞回带</strong>：温度落在 <code>off_temp</code>～"
-        "<code>on_temp</code> 之间时，开/关连续计数清零，避免临界温度反复开关。</li>"
-        "<li><strong>BLE 节奏</strong>：进入 App 即开始听广播（与 AUTO 无关）；"
-        "一轮最长约 6 分钟，收到读数后休眠约 4 分钟再听，节省功耗。</li>"
-        "<li><strong>展示页</strong>：左侧温湿度，右侧 on/off 累计次数与电源图标；"
-        "曲线始终画温度，并标出 on/off 阈值线。按 <code>h</code> 可看设备内 Help。</li>"
-        "</ul>");
+        "<h3 style='margin:18px 0 8px'>");
+    body += T("运行机制", "How it works");
+    body += F("</h3>"
+        "<ul class='hint' style='padding-left:1.2em;line-height:1.6;margin:0'>");
+    if (g_web_lang == WebLang::En) {
+        body += F(
+            "<li><strong>Trigger</strong>: listens only to the BLE sensor selected above "
+            "(must exist under Devices with <code>ble.key</code>).</li>"
+            "<li><strong>AUTO toggle</strong>: press <code>t</code> in the app to start/stop; "
+            "when off it still receives readings and draws the chart, but sends no IR.</li>"
+            "<li><strong>Turn on</strong>: temp <code>&gt; on_temp</code> for "
+            "<code>filter</code> consecutive readings while assumed off → IR power-on "
+            "(brand / mode / temp / fan above).</li>"
+            "<li><strong>Turn off</strong>: temp <code>&lt; off_temp</code> for "
+            "<code>filter</code> consecutive readings while assumed on → IR power-off.</li>"
+            "<li><strong>Assumed power</strong>: the app does not probe the real AC; "
+            "it starts assumed off. Press <code>p</code> on the display page to flip the "
+            "power icon (internal state only, no IR).</li>"
+            "<li><strong>Hysteresis</strong>: when temp is between <code>off_temp</code> and "
+            "<code>on_temp</code>, on/off streak counters reset to avoid chatter.</li>"
+            "<li><strong>BLE cadence</strong>: listening starts on app entry (independent of AUTO); "
+            "each listen window is up to ~6 minutes, then ~4 minutes sleep after a reading.</li>"
+            "<li><strong>Display</strong>: temp/humidity on the left; on/off counts and power icon "
+            "on the right; chart always shows temperature with threshold lines. "
+            "Press <code>h</code> for on-device Help.</li>");
+    } else {
+        body += F(
+            "<li><strong>触发源</strong>：只监听上方选中的 BLE 温湿度计（需在「设备」里已添加，"
+            "且带 <code>ble.key</code>）。</li>"
+            "<li><strong>AUTO 开关</strong>：进入 App 后按 <code>t</code> 启动 / 停止自动化；"
+            "未启动时仍会收温湿度、画曲线，但不会发红外。</li>"
+            "<li><strong>开空调</strong>：温度 <code>&gt; on_temp</code> 连续达到 "
+            "<code>filter</code> 次读数，且当前判定为关机 → 发红外开机"
+            "（用上方配置的 brand / mode / temp / fan）。</li>"
+            "<li><strong>关空调</strong>：温度 <code>&lt; off_temp</code> 连续达到 "
+            "<code>filter</code> 次读数，且当前判定为开机 → 发红外关机。</li>"
+            "<li><strong>假定开关</strong>：App 不探测真实空调状态，进 App 默认视为关机；"
+            "展示页按 <code>p</code> 可切换右侧电源图标（仅对齐内部状态，不发红外）。</li>"
+            "<li><strong>滞回带</strong>：温度落在 <code>off_temp</code>～"
+            "<code>on_temp</code> 之间时，开/关连续计数清零，避免临界温度反复开关。</li>"
+            "<li><strong>BLE 节奏</strong>：进入 App 即开始听广播（与 AUTO 无关）；"
+            "一轮最长约 6 分钟，收到读数后休眠约 4 分钟再听，节省功耗。</li>"
+            "<li><strong>展示页</strong>：左侧温湿度，右侧 on/off 累计次数与电源图标；"
+            "曲线始终画温度，并标出 on/off 阈值线。按 <code>h</code> 可看设备内 Help。</li>");
+    }
+    body += F("</ul>");
     appendCardEnd(body);
     appendCfgDataScript(body, cfg);
     body += F("<script>");
@@ -1106,7 +1403,9 @@ static void handleAcAutoPage() {
         "const sel=document.getElementById('ac-sensor');sel.innerHTML='';"
         "const mk=(val,text)=>{const o=document.createElement('option');"
         "o.value=val;o.textContent=text;sel.appendChild(o);};"
-        "mk('','(未选择)');"
+        "mk('','");
+    body += T("(未选择)", "(none)");
+    body += F("');"
         "(cfg.devices||[]).forEach(d=>{"
         "if(!isHt(d)||!d.id)return;"
         "mk(d.id,(d.name_zh||d.name||d.id)+' ('+d.id+')');});}"
@@ -1130,7 +1429,9 @@ static void handleAcAutoPage() {
         "sel.value=sid;"
         // 已保存 id 不在列表时补一条，避免被清空
         "if(sid&&sel.value!==sid){const o=document.createElement('option');"
-        "o.value=sid;o.textContent=sid+' (未在设备列表)';sel.appendChild(o);sel.value=sid;}"
+        "o.value=sid;o.textContent=sid+' ");
+    body += T("(未在设备列表)", "(not in device list)");
+    body += F("';sel.appendChild(o);sel.value=sid;}"
         "document.getElementById('ac-on-temp').value=String(a.on_temp??29);"
         "document.getElementById('ac-off-temp').value=String(a.off_temp??26);"
         "document.getElementById('ac-filter').value=String(a.filter??3);"
@@ -1151,91 +1452,132 @@ static void handleSystemPage() {
 
     String body;
     body.reserve(cfg.length() + 3072);
-    appendTopBar(body, "系统设置", WebNavTab::System);
+    appendTopBar(body, T("系统设置", "System"), WebNavTab::System);
     body += F("<form id='save-form' method='POST' action='/save'>"
               "<input type='hidden' name='config' id='config-payload'>"
-              "<p class='hint'>左侧选择分项，右侧编辑对应设置。亮度 screen.brightness（0~100）"
-              "会换算为背光 0~255；反色写入 screen.invert。</p>"
+              "<p class='hint'>");
+    body += T("左侧选择分项，右侧编辑对应设置。亮度 screen.brightness（0~100）"
+              "会换算为背光 0~255；反色写入 screen.invert。",
+              "Pick a section on the left and edit on the right. "
+              "screen.brightness (0~100) maps to backlight 0~255; invert writes screen.invert.");
+    body += F("</p>"
               "<div class='sys-wrap'>"
               // 左侧分项 list
               "<nav class='sys-nav' id='sys-nav'>"
-              "<button type='button' data-pane='screen' class='active'>屏幕"
-              "<span class='key'>screen</span></button>"
-              "<button type='button' data-pane='sound'>声音"
-              "<span class='key'>sound</span></button>"
+              "<button type='button' data-pane='screen' class='active'>");
+    body += T("屏幕", "Screen");
+    body += F("<span class='key'>screen</span></button>"
+              "<button type='button' data-pane='sound'>");
+    body += T("声音", "Sound");
+    body += F("<span class='key'>sound</span></button>"
               "<button type='button' data-pane='time'>Time"
               "<span class='key'>time</span></button>"
-              "<button type='button' data-pane='calendar'>日历"
-              "<span class='key'>calendar</span></button>"
-              "<button type='button' data-pane='infrared'>红外"
-              "<span class='key'>infrared</span></button>"
-              "<button type='button' data-pane='keyboard'>键盘"
-              "<span class='key'>hid_keyboard</span></button>"
+              "<button type='button' data-pane='calendar'>");
+    body += T("日历", "Calendar");
+    body += F("<span class='key'>calendar</span></button>"
+              "<button type='button' data-pane='infrared'>");
+    body += T("红外", "Infrared");
+    body += F("<span class='key'>infrared</span></button>"
+              "<button type='button' data-pane='keyboard'>");
+    body += T("键盘", "Keyboard");
+    body += F("<span class='key'>hid_keyboard</span></button>"
               "</nav>"
               // 右侧设置内容
               "<div class='sys-panes'>"
               // 屏幕
               "<section class='sys-sec active' data-pane='screen'>"
-              "<h3>屏幕 <span class='key'>screen</span></h3>"
-              "<label>亮度（0~100）"
-              "<div class='bright-row'>"
+              "<h3>");
+    body += T("屏幕", "Screen");
+    body += F(" <span class='key'>screen</span></h3>"
+              "<label>");
+    body += T("亮度（0~100）", "Brightness (0~100)");
+    body += F("<div class='bright-row'>"
               "<input id='sys-brightness' type='range' min='0' max='100' step='1'>"
               "<span class='bright-val' id='sys-brightness-val'>30</span>"
               "</div></label>"
               "<label class='check-row'>"
               "<input id='sys-screen-invert' type='checkbox'>"
-              "<span>屏幕反色（invert）</span></label>"
+              "<span>");
+    body += T("屏幕反色（invert）", "Invert display (invert)");
+    body += F("</span></label>"
               "</section>"
               // 声音
               "<section class='sys-sec' data-pane='sound'>"
-              "<h3>声音 <span class='key'>sound</span></h3>"
-              "<label>喇叭音量（0~100）"
-              "<div class='bright-row'>"
+              "<h3>");
+    body += T("声音", "Sound");
+    body += F(" <span class='key'>sound</span></h3>"
+              "<label>");
+    body += T("喇叭音量（0~100）", "Speaker volume (0~100)");
+    body += F("<div class='bright-row'>"
               "<input id='sys-sound-volume' type='range' min='0' max='100' step='1'>"
               "<span class='bright-val' id='sys-sound-volume-val'>25</span>"
               "</div></label>"
               "<label class='check-row'>"
               "<input id='sys-sound-time-key' type='checkbox'>"
-              "<span>Time 按键声（stopwatch / countdown）</span></label>"
+              "<span>");
+    body += T("Time 按键声（stopwatch / countdown）",
+              "Time key click (stopwatch / countdown)");
+    body += F("</span></label>"
               "<label class='check-row'>"
               "<input id='sys-sound-mijia' type='checkbox'>"
-              "<span>米家开/关提示音</span></label>"
+              "<span>");
+    body += T("米家开/关提示音", "Mijia on/off beep");
+    body += F("</span></label>"
               "<label class='check-row'>"
               "<input id='sys-sound-screenshot' type='checkbox'>"
-              "<span>截图提示音（Fn+s）</span></label>"
+              "<span>");
+    body += T("截图提示音（Fn+s）", "Screenshot beep (Fn+s)");
+    body += F("</span></label>"
               "</section>"
               // Time 应用
               "<section class='sys-sec' data-pane='time'>"
               "<h3>Time <span class='key'>time</span></h3>"
-              "<label>默认模块"
-              "<select id='sys-time-default'>"
+              "<label>");
+    body += T("默认模块", "Default module");
+    body += F("<select id='sys-time-default'>"
               "<option value='up'>Uptime</option>"
               "<option value='ntp'>Clock</option>"
               "<option value='countdown'>Countdown</option>"
               "<option value='stopwatch'>Stopwatch</option>"
               "</select></label>"
-              "<label>时区（POSIX TZ）"
-              "<input id='sys-timezone' placeholder='CST-8' autocomplete='off'></label>"
+              "<label>");
+    body += T("时区（POSIX TZ）", "Timezone (POSIX TZ)");
+    body += F("<input id='sys-timezone' placeholder='CST-8' autocomplete='off'></label>"
               "</section>"
               // Calendar 应用
               "<section class='sys-sec' data-pane='calendar'>"
-              "<h3>日历 <span class='key'>calendar</span></h3>"
-              "<label>每周起始日"
-              "<select id='sys-week-start'>"
-              "<option value='sunday'>周日</option>"
-              "<option value='monday'>周一</option>"
+              "<h3>");
+    body += T("日历", "Calendar");
+    body += F(" <span class='key'>calendar</span></h3>"
+              "<label>");
+    body += T("每周起始日", "Week starts on");
+    body += F("<select id='sys-week-start'>"
+              "<option value='sunday'>");
+    body += T("周日", "Sunday");
+    body += F("</option>"
+              "<option value='monday'>");
+    body += T("周一", "Monday");
+    body += F("</option>"
               "</select></label>"
               "</section>"
               // 红外
               "<section class='sys-sec' data-pane='infrared'>"
-              "<h3>红外 <span class='key'>infrared</span></h3>"
-              "<label>默认功能块"
-              "<select id='sys-ir-default'>"
-              "<option value='tv'>电视 TV</option>"
-              "<option value='ac'>空调 AC</option>"
+              "<h3>");
+    body += T("红外", "Infrared");
+    body += F(" <span class='key'>infrared</span></h3>"
+              "<label>");
+    body += T("默认功能块", "Default block");
+    body += F("<select id='sys-ir-default'>"
+              "<option value='tv'>");
+    body += T("电视 TV", "TV");
+    body += F("</option>"
+              "<option value='ac'>");
+    body += T("空调 AC", "AC");
+    body += F("</option>"
               "</select></label>"
-              "<label>默认电视品牌"
-              "<select id='sys-ir-tv-brand'>"
+              "<label>");
+    body += T("默认电视品牌", "Default TV brand");
+    body += F("<select id='sys-ir-tv-brand'>"
               "<option value='samsung'>Samsung</option>"
               "<option value='sony'>Sony</option>"
               "<option value='lg'>LG</option>"
@@ -1244,8 +1586,9 @@ static void handleSystemPage() {
               "<option value='xiaomi'>Xiaomi</option>"
               "<option value='hisense'>Hisense</option>"
               "</select></label>"
-              "<label>默认空调品牌"
-              "<select id='sys-ir-ac-brand'>"
+              "<label>");
+    body += T("默认空调品牌", "Default AC brand");
+    body += F("<select id='sys-ir-ac-brand'>"
               "<option value='midea'>Midea</option>"
               "<option value='gree'>Gree</option>"
               "<option value='haier'>Haier</option>"
@@ -1256,21 +1599,27 @@ static void handleSystemPage() {
               "</section>"
               // HID 键盘
               "<section class='sys-sec' data-pane='keyboard'>"
-              "<h3>键盘 <span class='key'>hid_keyboard</span></h3>"
-              "<label>默认传输方式"
-              "<select id='sys-hid-transport'>"
+              "<h3>");
+    body += T("键盘", "Keyboard");
+    body += F(" <span class='key'>hid_keyboard</span></h3>"
+              "<label>");
+    body += T("默认传输方式", "Default transport");
+    body += F("<select id='sys-hid-transport'>"
               "<option value='ble'>Bluetooth LE</option>"
               "<option value='usb'>USB</option>"
               "</select></label>"
-              "<label>IMU 鼠标灵敏度（1~10）"
-              "<div class='bright-row'>"
+              "<label>");
+    body += T("IMU 鼠标灵敏度（1~10）", "IMU mouse sensitivity (1~10)");
+    body += F("<div class='bright-row'>"
               "<input id='sys-hid-sensitivity' type='range' min='1' max='10' step='1'>"
               "<span class='bright-val' id='sys-hid-sensitivity-val'>5</span>"
               "</div></label>"
               "</section>"
               "</div></div>"
               "<div class='save-bar'>"
-              "<button type='submit' class='primary'>保存到设备</button>"
+              "<button type='submit' class='primary'>");
+    body += T("保存到设备", "Save to device");
+    body += F("</button>"
               "</div></form>");
     appendCardEnd(body);
     appendCfgDataScript(body, cfg);
@@ -1359,12 +1708,16 @@ static void handleAdvancedRoot() {
 
     String body;
     body.reserve(cfg.length() + 512);
-    appendTopBar(body, "高级 JSON", WebNavTab::Advanced);
-    body += F("<h2>高级 JSON 编辑</h2>"
+    appendTopBar(body, T("高级 JSON", "Advanced JSON"), WebNavTab::Advanced);
+    body += F("<h2>");
+    body += T("高级 JSON 编辑", "Advanced JSON editor");
+    body += F("</h2>"
               "<form method='POST' action='/save'>"
               "<textarea class='json-editor' name='config'>");
     body += escapeForTextarea(cfg);
-    body += F("</textarea><br><button type='submit' class='primary'>保存到设备</button></form>");
+    body += F("</textarea><br><button type='submit' class='primary'>");
+    body += T("保存到设备", "Save to device");
+    body += F("</button></form>");
     appendCardEnd(body);
     sendHtmlPage(body);
 }
@@ -1385,25 +1738,40 @@ static void handleSave() {
         snprintf(g_web_status, sizeof(g_web_status), "saved %d dev",
                  getAppConfig().device_count);
         String body;
-        appendTopBar(body, "已保存");
-        body += F("<p class='ok'>config.json 写入成功。</p>"
-                  "<p>设备数: ");
+        appendTopBar(body, T("已保存", "Saved"));
+        body += F("<p class='ok'>");
+        body += T("config.json 写入成功。", "config.json written successfully.");
+        body += F("</p>"
+                  "<p>");
+        body += T("设备数: ", "Devices: ");
         body += getAppConfig().device_count;
         body += F("</p><div class='result-actions'>"
-                  "<a href='/' class='btn primary'>返回米家设备</a>"
+                  "<a href='/' class='btn primary'>");
+        body += T("返回米家设备", "Back to Devices");
+        body += F("</a>"
                   "<a href='/wifi' class='btn'>WiFi</a>"
-                  "<a href='/groups' class='btn'>米家设备编组</a>"
-                  "<a href='/advanced' class='btn'>高级 JSON</a></div>");
+                  "<a href='/groups' class='btn'>");
+        body += T("米家设备编组", "Groups");
+        body += F("</a>"
+                  "<a href='/advanced' class='btn'>");
+        body += T("高级 JSON", "Advanced JSON");
+        body += F("</a></div>");
         appendCardEnd(body);
         sendHtmlPage(body);
     } else {
         strncpy(g_web_status, "json error", sizeof(g_web_status));
         String body;
-        appendTopBar(body, "保存失败");
-        body += F("<p class='err'>JSON 格式无效，请检查后重试。</p>"
+        appendTopBar(body, T("保存失败", "Save failed"));
+        body += F("<p class='err'>");
+        body += T("JSON 格式无效，请检查后重试。", "Invalid JSON; please fix and retry.");
+        body += F("</p>"
                   "<div class='result-actions'>"
-                  "<a href='/' class='btn primary'>返回米家设备</a>"
-                  "<a href='/advanced' class='btn'>高级 JSON</a></div>");
+                  "<a href='/' class='btn primary'>");
+        body += T("返回米家设备", "Back to Devices");
+        body += F("</a>"
+                  "<a href='/advanced' class='btn'>");
+        body += T("高级 JSON", "Advanced JSON");
+        body += F("</a></div>");
         appendCardEnd(body);
         sendHtmlPage(body);
     }
@@ -1411,22 +1779,40 @@ static void handleSave() {
 
 static void handleExample() {
     String body;
-    appendTopBar(body, "示例 config.json", WebNavTab::Example);
-    body += F(
-        "<p class='hint'>下面是一份完整的 <code>config.json</code> 示例，可复制到"
-        "「高级 JSON」粘贴保存，或对照各管理页逐项填写。</p>"
-        "<ul class='hint' style='padding-left:1.2em;line-height:1.55;margin:0 0 12px'>"
-        "<li><code>wifis</code> / <code>wifi_active</code>：WiFi 档案列表与当前选用的 SSID</li>"
-        "<li><code>devices</code>：米家设备。"
-        "WiFi 灯/插座等填 <code>ip</code>+<code>token</code>；"
-        "BLE 传感器填 <code>mac</code>+<code>ble.key</code>；"
-        "可选 <code>name_zh</code>、<code>hotkey</code>（a-z / 0-9，勿用 <code>q</code>）</li>"
-        "<li><code>device_groups</code>：编组；<code>members</code> 用设备 <code>id</code> 引用</li>"
-        "<li><code>screen</code> / <code>sound</code> / <code>time</code> / "
-        "<code>calendar</code> / <code>infrared</code>：系统项，也可在"
-        "<a href='/system'>系统设置</a>修改</li>"
-        "<li><code>cursor.token</code>：Cursor 用量，见 <a href='/cursor'>Cursor</a> 页</li>"
-        "</ul><pre>");
+    appendTopBar(body, T("示例 config.json", "Example config.json"), WebNavTab::Example);
+    body += F("<p class='hint'>");
+    body += T("下面是一份完整的 <code>config.json</code> 示例，可复制到"
+              "「高级 JSON」粘贴保存，或对照各管理页逐项填写。",
+              "A full <code>config.json</code> sample — paste into Advanced JSON to save, "
+              "or use it as a reference while filling the editor pages.");
+    body += F("</p>"
+        "<ul class='hint' style='padding-left:1.2em;line-height:1.55;margin:0 0 12px'>");
+    if (g_web_lang == WebLang::En) {
+        body += F(
+            "<li><code>wifis</code> / <code>wifi_active</code>: WiFi profiles and the active SSID</li>"
+            "<li><code>devices</code>: Mijia devices. WiFi lights/plugs need <code>ip</code>+"
+            "<code>token</code>; BLE sensors need <code>mac</code>+<code>ble.key</code>; "
+            "optional <code>name_zh</code>, <code>hotkey</code> (a-z / 0-9, not <code>q</code>)</li>"
+            "<li><code>device_groups</code>: groups; <code>members</code> reference device "
+            "<code>id</code></li>"
+            "<li><code>screen</code> / <code>sound</code> / <code>time</code> / "
+            "<code>calendar</code> / <code>infrared</code>: system keys; also editable under "
+            "<a href='/system'>System</a></li>"
+            "<li><code>cursor.token</code>: Cursor usage — see the <a href='/cursor'>Cursor</a> page</li>");
+    } else {
+        body += F(
+            "<li><code>wifis</code> / <code>wifi_active</code>：WiFi 档案列表与当前选用的 SSID</li>"
+            "<li><code>devices</code>：米家设备。"
+            "WiFi 灯/插座等填 <code>ip</code>+<code>token</code>；"
+            "BLE 传感器填 <code>mac</code>+<code>ble.key</code>；"
+            "可选 <code>name_zh</code>、<code>hotkey</code>（a-z / 0-9，勿用 <code>q</code>）</li>"
+            "<li><code>device_groups</code>：编组；<code>members</code> 用设备 <code>id</code> 引用</li>"
+            "<li><code>screen</code> / <code>sound</code> / <code>time</code> / "
+            "<code>calendar</code> / <code>infrared</code>：系统项，也可在"
+            "<a href='/system'>系统设置</a>修改</li>"
+            "<li><code>cursor.token</code>：Cursor 用量，见 <a href='/cursor'>Cursor</a> 页</li>");
+    }
+    body += F("</ul><pre>");
     body += DEFAULT_CONFIG;
     body += F("</pre>");
     appendCardEnd(body);
@@ -1437,18 +1823,30 @@ static void handleExample() {
 static void handleAboutPage() {
     String body;
     body.reserve(1024);
-    appendTopBar(body, "关于", WebNavTab::About);
+    appendTopBar(body, T("关于", "About"), WebNavTab::About);
     body += F("<h2>Sparks</h2>"
-              "<p class='hint'>M5Stack Cardputer 多应用固件：字母键启动器，覆盖米家控制、"
-              "红外遥控、配网、时间工具、Cursor 用量与硬件调试等。</p>"
+              "<p class='hint'>");
+    body += T("M5Stack Cardputer 多应用固件：字母键启动器，覆盖米家控制、"
+              "红外遥控、配网、时间工具、Cursor 用量与硬件调试等。",
+              "Multi-app firmware for M5Stack Cardputer: letter-key launcher covering "
+              "Mijia control, IR remote, WiFi setup, time tools, Cursor usage, and hardware debug.");
+    body += F("</p>"
               "<dl class='about-dl'>"
-              "<dt>版本</dt><dd>");
+              "<dt>");
+    body += T("版本", "Version");
+    body += F("</dt><dd>");
     body += APP_VERSION;
-    body += F("</dd><dt>更新日期</dt><dd>");
+    body += F("</dd><dt>");
+    body += T("更新日期", "Updated");
+    body += F("</dt><dd>");
     body += APP_UPDATE_TIME;
-    body += F("</dd><dt>作者</dt><dd>");
+    body += F("</dd><dt>");
+    body += T("作者", "Author");
+    body += F("</dt><dd>");
     body += APP_AUTHOR;
-    body += F("</dd><dt>邮箱</dt><dd><a href='mailto:");
+    body += F("</dd><dt>");
+    body += T("邮箱", "Email");
+    body += F("</dt><dd><a href='mailto:");
     body += APP_EMAIL;
     body += F("'>");
     body += APP_EMAIL;
@@ -1532,7 +1930,9 @@ static void appendShotCard(const char* storage, const char* basename, const size
     *body += basename;
     *body += F("?dl=1' download='");
     *body += basename;
-    *body += F("'>下载</a>"
+    *body += F("'>");
+    *body += T("下载", "Download");
+    *body += F("</a>"
                "<form method='POST' action='/shots/delete'>"
                "<input type='hidden' name='src' value='");
     *body += storage;
@@ -1541,7 +1941,11 @@ static void appendShotCard(const char* storage, const char* basename, const size
     *body += basename;
     *body += F("'>"
                "<button type='submit' class='danger' "
-               "onclick=\"return confirm('删除这张截图？')\">删除</button>"
+               "onclick=\"return confirm('");
+    *body += T("删除这张截图？", "Delete this screenshot?");
+    *body += F("')\">");
+    *body += T("删除", "Delete");
+    *body += F("</button>"
                "</form></div></div></div>");
 }
 
@@ -1567,37 +1971,52 @@ static void handleShotsList() {
 
     String body;
     body.reserve(4096);
-    appendTopBar(body, "截图", WebNavTab::Shots);
-    body += F("<p class='hint'>任意界面按 <code>Fn+s</code> 截图："
+    appendTopBar(body, T("截图", "Shots"), WebNavTab::Shots);
+    body += F("<p class='hint'>");
+    body += T("任意界面按 <code>Fn+s</code> 截图："
               "有 TF 卡优先存卡，否则存 Flash；"
               "文件名 <code>app_&lt;界面&gt;_001.png</code> 序号递增。"
-              "本页可预览、单张下载 / 删除，或打包 ZIP。</p>"
-              "<p class='hint'>新截图将存到：<strong>");
-    body += sd_ok ? F("TF 卡") : F("Flash（LittleFS）");
+              "本页可预览、单张下载 / 删除，或打包 ZIP。",
+              "Press <code>Fn+s</code> on any screen to capture: TF card preferred, else Flash. "
+              "Names look like <code>app_&lt;screen&gt;_001.png</code> with rising numbers. "
+              "Preview, download/delete one, or ZIP here.");
+    body += F("</p>"
+              "<p class='hint'>");
+    body += T("新截图将存到：", "New shots go to: ");
+    body += F("<strong>");
+    body += sd_ok ? T("TF 卡", "TF card") : T("Flash（LittleFS）", "Flash (LittleFS)");
     body += F("</strong></p>");
 
     // 两边都有图时提供全部打包
     if (tf_count > 0 && flash_count > 0) {
         body += F("<div class='toolbar' style='margin-bottom:12px'>"
-                  "<a class='btn primary' href='/shots/zip?src=all'>全部打包下载</a>"
-                  "<span class='count'>共 ");
+                  "<a class='btn primary' href='/shots/zip?src=all'>");
+        body += T("全部打包下载", "Download all as ZIP");
+        body += F("</a>"
+                  "<span class='count'>");
+        body += T("共 ", "");
         body += String(tf_count + flash_count);
-        body += F(" 张</span></div>");
+        body += T(" 张", " shots");
+        body += F("</span></div>");
     }
 
     // —— TF 卡截图 ——
     if (sd_ok) {
         body += F("<div class='shot-space'>"
-                  "<div><strong>TF 卡（SD）截图</strong></div>"
-                  "<div>总容量：");
+                  "<div><strong>");
+        body += T("TF 卡（SD）截图", "TF card (SD) shots");
+        body += F("</strong></div>"
+                  "<div>");
+        body += T("总容量：", "Total: ");
         body += formatBytesHuman(sd_total);
-        body += F(" · 已占用：");
+        body += T(" · 已占用：", " · Used: ");
         body += formatBytesHuman(sd_used);
-        body += F(" · 剩余：");
+        body += T(" · 剩余：", " · Free: ");
         body += formatBytesHuman(sd_free);
-        body += F("</div><div>截图：");
+        body += F("</div><div>");
+        body += T("截图：", "Shots: ");
         body += String(tf_count);
-        body += F(" 张 · 占用 ");
+        body += T(" 张 · 占用 ", " · ");
         body += formatBytesHuman(tf_bytes);
         body += F("</div><div class='bar'><i style='width:");
         body += String(sd_pct);
@@ -1605,35 +2024,50 @@ static void handleShotsList() {
 
         if (tf_count > 0) {
             body += F("<div class='toolbar'>"
-                      "<a class='btn primary' href='/shots/zip?src=tf'>打包下载 TF</a>"
+                      "<a class='btn primary' href='/shots/zip?src=tf'>");
+            body += T("打包下载 TF", "ZIP download TF");
+            body += F("</a>"
                       "<form method='POST' action='/shots/clear-tf' style='margin:0'>"
                       "<button type='submit' class='danger' "
-                      "onclick=\"return confirm('删除 TF 卡上的全部截图？')\">"
-                      "清空 TF 截图</button></form>"
+                      "onclick=\"return confirm('");
+            body += T("删除 TF 卡上的全部截图？", "Delete all screenshots on the TF card?");
+            body += F("')\">");
+            body += T("清空 TF 截图", "Clear TF shots");
+            body += F("</button></form>"
                       "<span class='count'>TF ");
             body += String(tf_count);
-            body += F(" 张</span></div><div class='shot-grid'>");
+            body += T(" 张", " shots");
+            body += F("</span></div><div class='shot-grid'>");
             enumTfScreenshots(appendShotCard, &body);
             body += F("</div>");
         } else {
-            body += F("<p class='hint'>TF 卡上暂无截图。</p>");
+            body += F("<p class='hint'>");
+            body += T("TF 卡上暂无截图。", "No screenshots on the TF card.");
+            body += F("</p>");
         }
     } else {
-        body += F("<p class='hint'>未检测到 TF 卡；插入后新截图会优先存卡。</p>");
+        body += F("<p class='hint'>");
+        body += T("未检测到 TF 卡；插入后新截图会优先存卡。",
+                  "No TF card detected; new shots will prefer the card once inserted.");
+        body += F("</p>");
     }
 
     // —— Flash 截图 ——
     body += F("<div class='shot-space' style='margin-top:16px'>"
-              "<div><strong>Flash（LittleFS）截图</strong></div>"
-              "<div>总容量：");
+              "<div><strong>");
+    body += T("Flash（LittleFS）截图", "Flash (LittleFS) shots");
+    body += F("</strong></div>"
+              "<div>");
+    body += T("总容量：", "Total: ");
     body += formatBytesHuman(fs_total);
-    body += F(" · 已占用：");
+    body += T(" · 已占用：", " · Used: ");
     body += formatBytesHuman(fs_used);
-    body += F(" · 剩余：");
+    body += T(" · 剩余：", " · Free: ");
     body += formatBytesHuman(fs_free);
-    body += F("</div><div>截图：");
+    body += F("</div><div>");
+    body += T("截图：", "Shots: ");
     body += String(flash_count);
-    body += F(" 张 · 占用 ");
+    body += T(" 张 · 占用 ", " · ");
     body += formatBytesHuman(flash_bytes);
     body += F("</div><div class='bar'><i style='width:");
     body += String(used_pct);
@@ -1641,22 +2075,33 @@ static void handleShotsList() {
 
     if (flash_count > 0) {
         body += F("<div class='toolbar'>"
-                  "<a class='btn primary' href='/shots/zip?src=flash'>打包下载 Flash</a>"
+                  "<a class='btn primary' href='/shots/zip?src=flash'>");
+        body += T("打包下载 Flash", "ZIP download Flash");
+        body += F("</a>"
                   "<form method='POST' action='/shots/clear-flash' style='margin:0'>"
                   "<button type='submit' class='danger' "
-                  "onclick=\"return confirm('删除 Flash 上的全部截图？')\">"
-                  "清空 Flash 截图</button></form>"
+                  "onclick=\"return confirm('");
+        body += T("删除 Flash 上的全部截图？", "Delete all screenshots on Flash?");
+        body += F("')\">");
+        body += T("清空 Flash 截图", "Clear Flash shots");
+        body += F("</button></form>"
                   "<span class='count'>Flash ");
         body += String(flash_count);
-        body += F(" 张</span></div><div class='shot-grid'>");
+        body += T(" 张", " shots");
+        body += F("</span></div><div class='shot-grid'>");
         enumFlashScreenshots(appendShotCard, &body);
         body += F("</div>");
     } else {
-        body += F("<p class='hint'>Flash 上暂无截图。</p>");
+        body += F("<p class='hint'>");
+        body += T("Flash 上暂无截图。", "No screenshots on Flash.");
+        body += F("</p>");
     }
 
     if (tf_count == 0 && flash_count == 0) {
-        body += F("<p class='hint'>到任意界面按 Fn+s 后再刷新本页。</p>");
+        body += F("<p class='hint'>");
+        body += T("到任意界面按 Fn+s 后再刷新本页。",
+                  "Press Fn+s on any screen, then refresh this page.");
+        body += F("</p>");
     }
 
     appendCardEnd(body);
@@ -1924,24 +2369,39 @@ static void handleShotsZip() {
 static void sendShotsClearResult(const char* title, const int n, const char* where) {
     String body;
     appendTopBar(body, title);
-    body += F("<p>已从 ");
-    body += where;
-    body += F(" 删除 ");
-    body += String(n);
-    body += F(" 张截图。</p>"
-              "<p><a href='/shots'>返回截图</a></p>");
+    body += F("<p>");
+    if (g_web_lang == WebLang::En) {
+        body += F("Deleted ");
+        body += String(n);
+        body += F(" screenshot(s) from ");
+        body += where;
+        body += F(".");
+    } else {
+        body += F("已从 ");
+        body += where;
+        body += F(" 删除 ");
+        body += String(n);
+        body += F(" 张截图。");
+    }
+    body += F("</p>"
+              "<p><a href='/shots'>");
+    body += T("返回截图", "Back to shots");
+    body += F("</a></p>");
     appendCardEnd(body);
     sendHtmlPage(body);
 }
 
 // 清空 TF 卡截图
 static void handleShotsClearTf() {
-    sendShotsClearResult("已清空 TF", clearTfScreenshots(), "TF 卡");
+    resolveWebLang();
+    sendShotsClearResult(T("已清空 TF", "TF cleared"), clearTfScreenshots(),
+                         T("TF 卡", "TF card"));
 }
 
 // 清空 Flash 截图
 static void handleShotsClearFlash() {
-    sendShotsClearResult("已清空 Flash", clearFlashScreenshots(), "Flash");
+    resolveWebLang();
+    sendShotsClearResult(T("已清空 Flash", "Flash cleared"), clearFlashScreenshots(), "Flash");
 }
 
 // 删除单张截图（src=TF|Flash，name=basename）
@@ -1950,29 +2410,39 @@ static void handleShotsDeleteOne() {
     const String name = g_server.hasArg("name") ? g_server.arg("name") : "";
     String body;
     if (src.length() == 0 || name.length() == 0) {
-        appendTopBar(body, "删除失败");
-        body += F("<p class='err'>缺少参数。</p>"
-                  "<p><a href='/shots'>返回截图</a></p>");
+        appendTopBar(body, T("删除失败", "Delete failed"));
+        body += F("<p class='err'>");
+        body += T("缺少参数。", "Missing parameters.");
+        body += F("</p>"
+                  "<p><a href='/shots'>");
+        body += T("返回截图", "Back to shots");
+        body += F("</a></p>");
         appendCardEnd(body);
         sendHtmlPage(body);
         return;
     }
     if (deleteScreenshotFile(src.c_str(), name.c_str())) {
-        appendTopBar(body, "已删除");
-        body += F("<p>已删除 ");
+        appendTopBar(body, T("已删除", "Deleted"));
+        body += F("<p>");
+        body += T("已删除 ", "Deleted ");
         body += name;
         body += F("（");
         body += src;
         body += F("）。</p>"
-                  "<p><a href='/shots'>返回截图</a></p>");
+                  "<p><a href='/shots'>");
+        body += T("返回截图", "Back to shots");
+        body += F("</a></p>");
     } else {
-        appendTopBar(body, "删除失败");
-        body += F("<p class='err'>无法删除 ");
+        appendTopBar(body, T("删除失败", "Delete failed"));
+        body += F("<p class='err'>");
+        body += T("无法删除 ", "Could not delete ");
         body += name;
         body += F("（");
         body += src;
         body += F("）。</p>"
-                  "<p><a href='/shots'>返回截图</a></p>");
+                  "<p><a href='/shots'>");
+        body += T("返回截图", "Back to shots");
+        body += F("</a></p>");
     }
     appendCardEnd(body);
     sendHtmlPage(body);
@@ -2236,8 +2706,11 @@ static void fmRedirect(const String& path, const char* msg, const bool ok) {
 static void handleFilesList() {
     if (!isScreenshotSdReady()) {
         String body;
-        appendTopBar(body, "TF 文件", WebNavTab::Files);
-        body += F("<p class='err'>未检测到 TF 卡，或挂载失败。插入 microSD 后刷新本页。</p>");
+        appendTopBar(body, T("TF 文件", "TF Files"), WebNavTab::Files);
+        body += F("<p class='err'>");
+        body += T("未检测到 TF 卡，或挂载失败。插入 microSD 后刷新本页。",
+                  "No TF card detected or mount failed. Insert a microSD and refresh.");
+        body += F("</p>");
         appendCardEnd(body);
         sendHtmlPage(body, HTML_CSS_FILES | HTML_CSS_SHOTS);
         return;
@@ -2263,8 +2736,9 @@ static void handleFilesList() {
             dir.close();
         }
         String body;
-        appendTopBar(body, "TF 文件", WebNavTab::Files);
-        body += F("<p class='err'>目录不存在：");
+        appendTopBar(body, T("TF 文件", "TF Files"), WebNavTab::Files);
+        body += F("<p class='err'>");
+        body += T("目录不存在：", "Directory not found: ");
         body += escapeHtmlText(path);
         body += F("</p>");
         appendCardEnd(body);
@@ -2315,14 +2789,17 @@ static void handleFilesList() {
     // 列表时间按配置时区显示
     setenv("TZ", getAppTimezone(), 1);
     tzset();
-    appendTopBar(body, "TF 文件", WebNavTab::Files);
+    appendTopBar(body, T("TF 文件", "TF Files"), WebNavTab::Files);
     body += F("<div class='shot-space'>"
-              "<div><strong>TF 卡（SD）</strong></div>"
-              "<div>总容量：");
+              "<div><strong>");
+    body += T("TF 卡（SD）", "TF card (SD)");
+    body += F("</strong></div>"
+              "<div>");
+    body += T("总容量：", "Total: ");
     body += formatBytesHuman(sd_total);
-    body += F(" · 已占用：");
+    body += T(" · 已占用：", " · Used: ");
     body += formatBytesHuman(sd_used);
-    body += F(" · 剩余：");
+    body += T(" · 剩余：", " · Free: ");
     body += formatBytesHuman(sd_free);
     body += F("</div><div class='bar'><i style='width:");
     body += String(sd_pct);
@@ -2340,7 +2817,9 @@ static void handleFilesList() {
     }
 
     // 面包屑
-    body += F("<nav class='fm-crumb'><a href='/files?path=%2F'>根目录</a>");
+    body += F("<nav class='fm-crumb'><a href='/files?path=%2F'>");
+    body += T("根目录", "Root");
+    body += F("</a>");
     if (path != "/") {
         String acc = "";
         int start = 1;
@@ -2380,30 +2859,42 @@ static void handleFilesList() {
               "<input type='hidden' name='path' value='");
     body += escapeHtmlText(path);
     body += F("'>"
-              "<label for='fm-new-dir'>新建文件夹</label>"
+              "<label for='fm-new-dir'>");
+    body += T("新建文件夹", "New folder");
+    body += F("</label>"
               "<input id='fm-new-dir' type='text' name='name' maxlength='48' "
-              "placeholder='文件夹名' required autocomplete='off'>"
-              "<button type='submit' class='primary'>创建</button>"
+              "placeholder='");
+    body += T("文件夹名", "Folder name");
+    body += F("' required autocomplete='off'>"
+              "<button type='submit' class='primary'>");
+    body += T("创建", "Create");
+    body += F("</button>"
               "</form><span class='fm-count'>");
     body += String(count);
-    body += F(" 项");
+    body += T(" 项", " items");
     if (truncated) {
-        body += F("（已截断，仅显示前 ");
+        body += T("（已截断，仅显示前 ", " (truncated; showing first ");
         body += String(FM_MAX_ENTRIES);
-        body += F(" 项）");
+        body += T(" 项）", ")");
     }
     body += F("</span></div>");
 
-    if (entries == nullptr) {
-        body += F("<p class='err'>内存不足，无法列出目录。</p>");
+if (entries == nullptr) {
+        body += F("<p class='err'>");
+        body += T("内存不足，无法列出目录。", "Out of memory; cannot list directory.");
+        body += F("</p>");
         appendCardEnd(body);
         sendHtmlPage(body, HTML_CSS_FILES | HTML_CSS_SHOTS);
         return;
     }
 
     if (count == 0) {
-        body += F("<div class='fm-empty'><strong>此目录为空</strong>"
-                  "可在上方创建文件夹，或用电脑往 TF 卡拷入文件后刷新。</div>");
+        body += F("<div class='fm-empty'><strong>");
+        body += T("此目录为空", "This folder is empty");
+        body += F("</strong>");
+        body += T("可在上方创建文件夹，或用电脑往 TF 卡拷入文件后刷新。",
+                  "Create a folder above, or copy files onto the TF card from a computer and refresh.");
+        body += F("</div>");
         free(entries);
         appendCardEnd(body);
         sendHtmlPage(body, HTML_CSS_FILES | HTML_CSS_SHOTS);
@@ -2412,11 +2903,21 @@ static void handleFilesList() {
 
     body += F("<div class='table-wrap'><table class='fm-table'>"
               "<thead><tr>"
-              "<th class='col-name'>名称</th>"
-              "<th class='col-size'>大小</th>"
-              "<th class='col-time'>修改时间</th>"
-              "<th class='col-time'>创建时间</th>"
-              "<th class='col-act'>操作</th>"
+              "<th class='col-name'>");
+    body += T("名称", "Name");
+    body += F("</th>"
+              "<th class='col-size'>");
+    body += T("大小", "Size");
+    body += F("</th>"
+              "<th class='col-time'>");
+    body += T("修改时间", "Modified");
+    body += F("</th>"
+              "<th class='col-time'>");
+    body += T("创建时间", "Created");
+    body += F("</th>"
+              "<th class='col-act'>");
+    body += T("操作", "Actions");
+    body += F("</th>"
               "</tr></thead><tbody>");
     for (int i = 0; i < count; i++) {
         const FmEntry& e = entries[i];
@@ -2453,11 +2954,15 @@ static void handleFilesList() {
         if (e.is_dir) {
             body += F("<a class='btn' href='/files?path=");
             body += enc;
-            body += F("'>打开</a>");
+            body += F("'>");
+            body += T("打开", "Open");
+            body += F("</a>");
         } else {
             body += F("<a class='btn' href='/sd?path=");
             body += enc;
-            body += F("&dl=1'>下载</a>");
+            body += F("&dl=1'>");
+            body += T("下载", "Download");
+            body += F("</a>");
         }
         body += F("<form method='POST' action='/files/delete'>"
                   "<input type='hidden' name='path' value='");
@@ -2465,16 +2970,18 @@ static void handleFilesList() {
         body += F("'>"
                   "<button type='submit' class='danger' data-msg=\"");
         if (e.is_dir) {
-            body += F("删除文件夹 ");
+            body += T("删除文件夹 ", "Delete folder ");
             body += safe_name;
-            body += F(" 及其全部内容？此操作不可恢复。");
+            body += T(" 及其全部内容？此操作不可恢复。",
+                      " and all its contents? This cannot be undone.");
         } else {
-            body += F("删除文件 ");
+            body += T("删除文件 ", "Delete file ");
             body += safe_name;
-            body += F("？");
+            body += T("？", "?");
         }
-        body += F("\" onclick=\"return confirm(this.getAttribute('data-msg'))\">"
-                  "删除</button></form></div></td></tr>");
+        body += F("\" onclick=\"return confirm(this.getAttribute('data-msg'))\">");
+        body += T("删除", "Delete");
+        body += F("</button></form></div></td></tr>");
     }
     body += F("</tbody></table></div>");
     free(entries);
@@ -2484,6 +2991,7 @@ static void handleFilesList() {
 
 // 新建文件夹 POST path=父目录&name=名称
 static void handleFilesMkdir() {
+    resolveWebLang();
     if (!isScreenshotSdReady()) {
         g_server.send(503, "text/plain", "no sd");
         return;
@@ -2500,27 +3008,28 @@ static void handleFilesMkdir() {
     String name = g_server.arg("name");
     name.trim();
     if (!fmValidEntryName(name)) {
-        fmRedirect(parent, "文件夹名无效", false);
+        fmRedirect(parent, T("文件夹名无效", "Invalid folder name"), false);
         return;
     }
     const String full = fmJoinPath(parent, name.c_str());
     if (full.length() > FM_PATH_MAX) {
-        fmRedirect(parent, "路径过长", false);
+        fmRedirect(parent, T("路径过长", "Path too long"), false);
         return;
     }
     if (SD.exists(full)) {
-        fmRedirect(parent, "已存在同名项", false);
+        fmRedirect(parent, T("已存在同名项", "Name already exists"), false);
         return;
     }
     if (!SD.mkdir(full)) {
-        fmRedirect(parent, "创建失败", false);
+        fmRedirect(parent, T("创建失败", "Create failed"), false);
         return;
     }
-    fmRedirect(parent, "已创建文件夹", true);
+    fmRedirect(parent, T("已创建文件夹", "Folder created"), true);
 }
 
 // 删除 TF 上文件或目录（非空目录递归删）
 static void handleFilesDelete() {
+    resolveWebLang();
     if (!isScreenshotSdReady()) {
         g_server.send(503, "text/plain", "no sd");
         return;
@@ -2537,7 +3046,7 @@ static void handleFilesDelete() {
 
     const bool ok = fmRemoveTree(path);
     const String parent = fmParentPath(path);
-    fmRedirect(parent, ok ? "已删除" : "删除失败", ok);
+    fmRedirect(parent, ok ? T("已删除", "Deleted") : T("删除失败", "Delete failed"), ok);
 }
 
 // 提供 /sd?path=... ：图片默认内联；?dl=1 强制下载
@@ -2780,6 +3289,8 @@ static bool startStaConfigWebServer() {
     }
 
     registerWebRoutes();
+    static const char* WEB_COLLECT_HEADERS[] = {"Cookie", "Accept-Language"};
+    g_server.collectHeaders(WEB_COLLECT_HEADERS, 2);
     g_server.begin();
 
     snprintf(g_web_url, sizeof(g_web_url), "http://%s", WiFi.localIP().toString().c_str());
@@ -2807,6 +3318,8 @@ static bool startApConfigWebServer() {
     }
 
     registerWebRoutes();
+    static const char* WEB_COLLECT_HEADERS[] = {"Cookie", "Accept-Language"};
+    g_server.collectHeaders(WEB_COLLECT_HEADERS, 2);
     g_server.begin();
 
     strncpy(g_web_url, AP_WEB_URL, sizeof(g_web_url));

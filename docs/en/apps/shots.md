@@ -30,6 +30,23 @@ Device captures (`Fn+s`), sorted by filename.
 </figure>
 
 <figure class="shot-item">
+<img src="/shots/app_ir_ac_gree.png" alt="app_ir_ac_gree.png" />
+<figcaption>app_ir_ac_gree.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_ir_ac_mi.png" alt="app_ir_ac_mi.png" />
+<figcaption>app_ir_ac_mi.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_ir_tv_lg.png" alt="app_ir_tv_lg.png" />
+<figcaption>app_ir_tv_lg.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_ir_tv_sony.png" alt="app_ir_tv_sony.png" />
+<figcaption>app_ir_tv_sony.png</figcaption>
+</figure>
+
+<figure class="shot-item">
 <img src="/shots/app_acauto_main.png" alt="app_acauto_main.png" />
 <figcaption>app_acauto_main.png</figcaption>
 </figure>
@@ -49,14 +66,28 @@ Device captures (`Fn+s`), sorted by filename.
 <img src="/shots/app_battery_001.png" alt="app_battery_001.png" />
 <figcaption>app_battery_001.png</figcaption>
 </figure>
+
 <figure class="shot-item">
-<img src="/shots/app_ble_list.png" alt="app_ble_list.png" />
-<figcaption>app_ble_list.png</figcaption>
+<img src="/shots/app_hidkeyboard_main.png" alt="app_hidkeyboard_main.png" />
+<figcaption>app_hidkeyboard_main.png</figcaption>
 </figure>
 <figure class="shot-item">
-<img src="/shots/app_ble_scan.png" alt="app_ble_scan.png" />
-<figcaption>app_ble_scan.png</figcaption>
+<img src="/shots/app_hidkeyboard_mouse_mode.png" alt="app_hidkeyboard_mouse_mode.png" />
+<figcaption>app_hidkeyboard_mouse_mode.png</figcaption>
 </figure>
+<figure class="shot-item">
+<img src="/shots/app_hidkeyboard_pair_list.png" alt="app_hidkeyboard_pair_list.png" />
+<figcaption>app_hidkeyboard_pair_list.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_hidkeyboard_specailkey.png" alt="app_hidkeyboard_specailkey.png" />
+<figcaption>app_hidkeyboard_specailkey.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_hidkeyboard_usb_mode.png" alt="app_hidkeyboard_usb_mode.png" />
+<figcaption>app_hidkeyboard_usb_mode.png</figcaption>
+</figure>
+
 <figure class="shot-item">
 <img src="/shots/app_calendar.png" alt="app_calendar.png" />
 <figcaption>app_calendar.png</figcaption>
@@ -89,86 +120,12 @@ Device captures (`Fn+s`), sorted by filename.
 <img src="/shots/app_cursor_summary.png" alt="app_cursor_summary.png" />
 <figcaption>app_cursor_summary.png</figcaption>
 </figure>
-<figure class="shot-item">
-<img src="/shots/app_display_001.png" alt="app_display_001.png" />
-<figcaption>app_display_001.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_display_002.png" alt="app_display_002.png" />
-<figcaption>app_display_002.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_display_003.png" alt="app_display_003.png" />
-<figcaption>app_display_003.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_display_004.png" alt="app_display_004.png" />
-<figcaption>app_display_004.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_display_005.png" alt="app_display_005.png" />
-<figcaption>app_display_005.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_display_006.png" alt="app_display_006.png" />
-<figcaption>app_display_006.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_display_007.png" alt="app_display_007.png" />
-<figcaption>app_display_007.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_display_008.png" alt="app_display_008.png" />
-<figcaption>app_display_008.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_display_009.png" alt="app_display_009.png" />
-<figcaption>app_display_009.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_display_010.png" alt="app_display_010.png" />
-<figcaption>app_display_010.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_display_011.png" alt="app_display_011.png" />
-<figcaption>app_display_011.png</figcaption>
-</figure>
+
 <figure class="shot-item">
 <img src="/shots/app_exi2c_001.png" alt="app_exi2c_001.png" />
 <figcaption>app_exi2c_001.png</figcaption>
 </figure>
-<figure class="shot-item">
-<img src="/shots/app_font_001.png" alt="app_font_001.png" />
-<figcaption>app_font_001.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_font_002.png" alt="app_font_002.png" />
-<figcaption>app_font_002.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_font_003.png" alt="app_font_003.png" />
-<figcaption>app_font_003.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_font_005.png" alt="app_font_005.png" />
-<figcaption>app_font_005.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_font_006.png" alt="app_font_006.png" />
-<figcaption>app_font_006.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_font_007.png" alt="app_font_007.png" />
-<figcaption>app_font_007.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_font_008.png" alt="app_font_008.png" />
-<figcaption>app_font_008.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_font_009.png" alt="app_font_009.png" />
-<figcaption>app_font_009.png</figcaption>
-</figure>
+
 <figure class="shot-item">
 <img src="/shots/app_games_chaos.png" alt="app_games_chaos.png" />
 <figcaption>app_games_chaos.png</figcaption>
@@ -285,82 +242,7 @@ Device captures (`Fn+s`), sorted by filename.
 <img src="/shots/app_games_wheel_spinning.png" alt="app_games_wheel_spinning.png" />
 <figcaption>app_games_wheel_spinning.png</figcaption>
 </figure>
-<figure class="shot-item">
-<img src="/shots/app_hardware_001.png" alt="app_hardware_001.png" />
-<figcaption>app_hardware_001.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hardware_002.png" alt="app_hardware_002.png" />
-<figcaption>app_hardware_002.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hardware_ble_list.png" alt="app_hardware_ble_list.png" />
-<figcaption>app_hardware_ble_list.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hardware_ble_list_1.png" alt="app_hardware_ble_list_1.png" />
-<figcaption>app_hardware_ble_list_1.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hardware_ble_scan.png" alt="app_hardware_ble_scan.png" />
-<figcaption>app_hardware_ble_scan.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hardware_exi2.png" alt="app_hardware_exi2.png" />
-<figcaption>app_hardware_exi2.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hardware_font_01.png" alt="app_hardware_font_01.png" />
-<figcaption>app_hardware_font_01.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hardware_font_02.png" alt="app_hardware_font_02.png" />
-<figcaption>app_hardware_font_02.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hardware_font_03.png" alt="app_hardware_font_03.png" />
-<figcaption>app_hardware_font_03.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hardware_font_04.png" alt="app_hardware_font_04.png" />
-<figcaption>app_hardware_font_04.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hardware_icon_01.png" alt="app_hardware_icon_01.png" />
-<figcaption>app_hardware_icon_01.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hardware_icon_02.png" alt="app_hardware_icon_02.png" />
-<figcaption>app_hardware_icon_02.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hardware_ini2.png" alt="app_hardware_ini2.png" />
-<figcaption>app_hardware_ini2.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hardware_led.png" alt="app_hardware_led.png" />
-<figcaption>app_hardware_led.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hidkeyboard_main.png" alt="app_hidkeyboard_main.png" />
-<figcaption>app_hidkeyboard_main.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hidkeyboard_mouse_mode.png" alt="app_hidkeyboard_mouse_mode.png" />
-<figcaption>app_hidkeyboard_mouse_mode.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hidkeyboard_pair_list.png" alt="app_hidkeyboard_pair_list.png" />
-<figcaption>app_hidkeyboard_pair_list.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hidkeyboard_specailkey.png" alt="app_hidkeyboard_specailkey.png" />
-<figcaption>app_hidkeyboard_specailkey.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_hidkeyboard_usb_mode.png" alt="app_hidkeyboard_usb_mode.png" />
-<figcaption>app_hidkeyboard_usb_mode.png</figcaption>
-</figure>
+
 <figure class="shot-item">
 <img src="/shots/app_icons.png" alt="app_icons.png" />
 <figcaption>app_icons.png</figcaption>
@@ -417,22 +299,7 @@ Device captures (`Fn+s`), sorted by filename.
 <img src="/shots/app_ini2c_001.png" alt="app_ini2c_001.png" />
 <figcaption>app_ini2c_001.png</figcaption>
 </figure>
-<figure class="shot-item">
-<img src="/shots/app_ir_ac_gree.png" alt="app_ir_ac_gree.png" />
-<figcaption>app_ir_ac_gree.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_ir_ac_mi.png" alt="app_ir_ac_mi.png" />
-<figcaption>app_ir_ac_mi.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_ir_tv_lg.png" alt="app_ir_tv_lg.png" />
-<figcaption>app_ir_tv_lg.png</figcaption>
-</figure>
-<figure class="shot-item">
-<img src="/shots/app_ir_tv_sony.png" alt="app_ir_tv_sony.png" />
-<figcaption>app_ir_tv_sony.png</figcaption>
-</figure>
+
 <figure class="shot-item">
 <img src="/shots/app_led_001.png" alt="app_led_001.png" />
 <figcaption>app_led_001.png</figcaption>
@@ -554,5 +421,145 @@ Device captures (`Fn+s`), sorted by filename.
 <img src="/shots/app_wifi_scanner.png" alt="app_wifi_scanner.png" />
 <figcaption>app_wifi_scanner.png</figcaption>
 </figure>
+<figure class="shot-item">
+<img src="/shots/app_hardware_001.png" alt="app_hardware_001.png" />
+<figcaption>app_hardware_001.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_hardware_002.png" alt="app_hardware_002.png" />
+<figcaption>app_hardware_002.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_hardware_ble_list.png" alt="app_hardware_ble_list.png" />
+<figcaption>app_hardware_ble_list.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_hardware_ble_list_1.png" alt="app_hardware_ble_list_1.png" />
+<figcaption>app_hardware_ble_list_1.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_hardware_ble_scan.png" alt="app_hardware_ble_scan.png" />
+<figcaption>app_hardware_ble_scan.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_hardware_exi2.png" alt="app_hardware_exi2.png" />
+<figcaption>app_hardware_exi2.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_hardware_font_01.png" alt="app_hardware_font_01.png" />
+<figcaption>app_hardware_font_01.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_hardware_font_02.png" alt="app_hardware_font_02.png" />
+<figcaption>app_hardware_font_02.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_hardware_font_03.png" alt="app_hardware_font_03.png" />
+<figcaption>app_hardware_font_03.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_hardware_font_04.png" alt="app_hardware_font_04.png" />
+<figcaption>app_hardware_font_04.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_hardware_icon_01.png" alt="app_hardware_icon_01.png" />
+<figcaption>app_hardware_icon_01.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_hardware_icon_02.png" alt="app_hardware_icon_02.png" />
+<figcaption>app_hardware_icon_02.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_hardware_ini2.png" alt="app_hardware_ini2.png" />
+<figcaption>app_hardware_ini2.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_hardware_led.png" alt="app_hardware_led.png" />
+<figcaption>app_hardware_led.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_display_001.png" alt="app_display_001.png" />
+<figcaption>app_display_001.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_display_002.png" alt="app_display_002.png" />
+<figcaption>app_display_002.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_display_003.png" alt="app_display_003.png" />
+<figcaption>app_display_003.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_display_004.png" alt="app_display_004.png" />
+<figcaption>app_display_004.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_display_005.png" alt="app_display_005.png" />
+<figcaption>app_display_005.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_display_006.png" alt="app_display_006.png" />
+<figcaption>app_display_006.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_display_007.png" alt="app_display_007.png" />
+<figcaption>app_display_007.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_display_008.png" alt="app_display_008.png" />
+<figcaption>app_display_008.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_display_009.png" alt="app_display_009.png" />
+<figcaption>app_display_009.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_display_010.png" alt="app_display_010.png" />
+<figcaption>app_display_010.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_display_011.png" alt="app_display_011.png" />
+<figcaption>app_display_011.png</figcaption>
+</figure>
 
+<figure class="shot-item">
+<img src="/shots/app_font_001.png" alt="app_font_001.png" />
+<figcaption>app_font_001.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_font_002.png" alt="app_font_002.png" />
+<figcaption>app_font_002.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_font_003.png" alt="app_font_003.png" />
+<figcaption>app_font_003.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_font_005.png" alt="app_font_005.png" />
+<figcaption>app_font_005.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_font_006.png" alt="app_font_006.png" />
+<figcaption>app_font_006.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_font_007.png" alt="app_font_007.png" />
+<figcaption>app_font_007.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_font_008.png" alt="app_font_008.png" />
+<figcaption>app_font_008.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_font_009.png" alt="app_font_009.png" />
+<figcaption>app_font_009.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_ble_list.png" alt="app_ble_list.png" />
+<figcaption>app_ble_list.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_ble_scan.png" alt="app_ble_scan.png" />
+<figcaption>app_ble_scan.png</figcaption>
+</figure>
 </div>
