@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstring>
 #include <esp_chip_info.h>
+#include <esp_ota_ops.h>
 #include <esp_system.h>
 #include <esp_timer.h>
 
@@ -262,12 +263,24 @@ static uint16_t memUsedBarColor(const int used_pct) {
     return APP_COLOR_OK;
 }
 
-// 格式化 used/total（字节 → KB/MB）
+// 当前固件分区容量。无 OTA 双槽时 getFreeSketchSpace() 为 0，不能当剩余空间用。
+static uint32_t sketchPartitionSize() {
+    const esp_partition_t* part = esp_ota_get_running_partition();
+    if (part != nullptr && part->size > 0) {
+        return static_cast<uint32_t>(part->size);
+    }
+    const uint32_t sketch = ESP.getSketchSize();
+    const uint32_t ota = ESP.getFreeSketchSpace();
+    return sketch + ota;
+}
+
+// 格式化 used/total（字节 → KB/MB；MB 保留一位小数，避免 2.5/3.2 被收成 2/3）
 static void formatMemPair(char* out, const size_t out_size, const uint32_t used,
                           const uint32_t total) {
     if (total >= 1024u * 1024u) {
-        snprintf(out, out_size, "%lu/%lu MB", static_cast<unsigned long>((used + 512) / 1024 / 1024),
-                 static_cast<unsigned long>((total + 512) / 1024 / 1024));
+        const float mb = 1024.0f * 1024.0f;
+        snprintf(out, out_size, "%.1f/%.1f MB", static_cast<double>(used) / mb,
+                 static_cast<double>(total) / mb);
     } else {
         snprintf(out, out_size, "%lu/%lu KB", static_cast<unsigned long>((used + 512) / 1024),
                  static_cast<unsigned long>((total + 512) / 1024));
@@ -387,8 +400,7 @@ static void sampleInfoMem(const bool force_slow) {
     }
 
     g_mem_sketch = ESP.getSketchSize();
-    const uint32_t sketch_free = ESP.getFreeSketchSpace();
-    g_mem_sketch_part = g_mem_sketch + sketch_free;
+    g_mem_sketch_part = sketchPartitionSize();
 
     snprintf(g_mem_maxa, sizeof(g_mem_maxa), "%lu KB",
              static_cast<unsigned long>(ESP.getMaxAllocHeap() / 1024));
@@ -632,9 +644,12 @@ static void sampleInfoTextPage(const int page, const bool force_slow) {
         }
         case InfoPage::Fw: {
             snprintf(g_buf_sdk, sizeof(g_buf_sdk), "%s", ESP.getSdkVersion());
-            snprintf(g_buf_sketch, sizeof(g_buf_sketch), "%d KB", ESP.getSketchSize() / 1024);
-            snprintf(g_buf_free_sk, sizeof(g_buf_free_sk), "%d KB",
-                     ESP.getFreeSketchSpace() / 1024);
+            const uint32_t sketch_used = ESP.getSketchSize();
+            const uint32_t sketch_part = sketchPartitionSize();
+            const uint32_t sketch_free =
+                sketch_part > sketch_used ? sketch_part - sketch_used : 0;
+            snprintf(g_buf_sketch, sizeof(g_buf_sketch), "%d KB", sketch_used / 1024);
+            snprintf(g_buf_free_sk, sizeof(g_buf_free_sk), "%d KB", sketch_free / 1024);
             snprintf(g_buf_flash, sizeof(g_buf_flash), "%d MB",
                      ESP.getFlashChipSize() / (1024 * 1024));
             snprintf(g_buf_fspd, sizeof(g_buf_fspd), "%d MHz",
