@@ -182,7 +182,7 @@ LittleFS 读原始像素 → pushAlphaImage（读底色 + 混合 + 写回）
 | 60×60 | ≈ 7.2 KB | ≈ 14.4 KB |
 | 70×70 | ≈ 9.8 KB | ≈ 19.6 KB |
 
-本仓库 LittleFS 分区约 **1.5 MB**。设备图标全套原始像素约数百 KB 量级；若同时保留 PNG + bake，体积会叠加。
+本仓库 LittleFS 分区约 **4.69 MB**（`partitions/no_ota_8MB.csv`）。设备图标全套原始像素约数百 KB 量级；若同时保留 PNG + bake，体积会叠加。
 
 **RAM 策略：**
 

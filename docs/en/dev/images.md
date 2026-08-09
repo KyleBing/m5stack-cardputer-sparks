@@ -182,7 +182,7 @@ Formula (uncompressed raw pixels):
 | 60×60 | ≈ 7.2 KB | ≈ 14.4 KB |
 | 70×70 | ≈ 9.8 KB | ≈ 19.6 KB |
 
-This repo's LittleFS partition is about **1.5 MB**. A full device-icon set of raw pixels is on the order of hundreds of KB; keeping PNG + bake doubles that.
+This repo's LittleFS partition is about **4.69 MB** (`partitions/no_ota_8MB.csv`). A full device-icon set of raw pixels is on the order of hundreds of KB; keeping PNG + bake doubles that.
 
 **RAM strategy:**
 

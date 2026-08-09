@@ -14,6 +14,7 @@
 
 ### 改进
 
+- **分区表**：改用 `partitions/no_ota_8MB.csv`，去掉 OTA `app1` 双槽；LittleFS **1.5 MB → 4.69 MB**（偏移 `0x340000`），固件区仍为 3.19 MB；打包 / Release / README 同步；改分区后需重刷固件 + FS
 - **WiFi**：扫网手动连接缓存 BSSID/信道并周期重发 `begin`，降低扫网后关联超时 / `NO_SSID`；密码页与连接页不再依赖仍存活的 scan 结果
 - **Time**：NTP 同步中恢复全屏无 header（与其它 Time 模块一致）
 - **文档**：同步英文截图总览条目顺序与现有截图文件名

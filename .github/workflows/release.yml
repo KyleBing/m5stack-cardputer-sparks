@@ -52,7 +52,7 @@ jobs:
           cp "$BUILD/firmware.bin" "$OUT/sparks-${TAG}-firmware.bin"
           cp "$BUILD/littlefs.bin" "$OUT/sparks-${TAG}-littlefs.bin"
 
-          # 合并 bootloader + 分区表 + app + LittleFS（StampS3 8MB / default_8MB）
+          # 合并 bootloader + 分区表 + app + LittleFS（StampS3 8MB / no_ota_8MB）
           esptool.py --chip esp32s3 merge_bin \
             -o "$OUT/sparks-${TAG}-merged.bin" \
             --flash_mode qio \
@@ -61,7 +61,8 @@ jobs:
             0x0 "$BUILD/bootloader.bin" \
             0x8000 "$BUILD/partitions.bin" \
             0x10000 "$BUILD/firmware.bin" \
-            0x670000 "$BUILD/littlefs.bin"
+            0x340000 "$BUILD/littlefs.bin"
+
 
           ls -lh "$OUT"
 
@@ -80,7 +81,7 @@ jobs:
             |------|------|
             | `sparks-${{ steps.pkg.outputs.tag }}-merged.bin` | 整片烧录（推荐首次刷机 / M5Burner），地址 `0x0` |
             | `sparks-${{ steps.pkg.outputs.tag }}-firmware.bin` | 仅更新程序，地址 `0x10000` |
-            | `sparks-${{ steps.pkg.outputs.tag }}-littlefs.bin` | 仅更新资源（图标等），地址 `0x670000` |
+            | `sparks-${{ steps.pkg.outputs.tag }}-littlefs.bin` | 仅更新资源（图标等），地址 `0x340000` |
 
             ### 刷写工具
 
@@ -123,7 +124,7 @@ jobs:
             ```bash
             esptool.py --chip esp32s3 --port PORT --baud 921600 write_flash \
               --flash_mode qio --flash_freq 80m --flash_size 8MB \
-              0x670000 sparks-${{ steps.pkg.outputs.tag }}-littlefs.bin
+              0x340000 sparks-${{ steps.pkg.outputs.tag }}-littlefs.bin
             ```
 
             ### PlatformIO 本地编译

@@ -48,33 +48,32 @@ Full firmware docs:
 
 ## 3. Flash layout & usage
 
-Cardputer-ADV (StampS3) has **8 MB** on-chip Flash. The partition table is Arduino / PlatformIO `default_8MB.csv` (same layout as the Release merged image).
+Cardputer-ADV (StampS3) has **8 MB** on-chip Flash. The partition table is `partitions/no_ota_8MB.csv` in this repo (no OTA dual slot; same layout as the Release merged image).
 
 | Partition | Offset | Size | Role |
 |-----------|--------|------|------|
 | bootloader | `0x0` | ~32 KB reserved | Boot |
 | partitions | `0x8000` | 4 KB | Partition table |
 | nvs | `0x9000` | 20 KB | NVS (WiFi, etc.) |
-| otadata | `0xE000` | 8 KB | OTA slot select |
-| **app0** | `0x10000` | **3.19 MB** (3264 KB) | Running firmware |
-| app1 | `0x340000` | 3.19 MB | OTA alternate (normal upgrades write app0 only) |
-| **spiffs / LittleFS** | `0x670000` | **1.5 MB** (1536 KB) | Filesystem (`config.json`, icons, logs, shots, …) |
+| otadata | `0xE000` | 8 KB | Bootloader compat (OTA unused) |
+| **app0** | `0x10000` | **3.19 MB** (3264 KB) | Firmware (factory) |
+| **spiffs / LittleFS** | `0x340000` | **4.69 MB** (4800 KB) | Filesystem (`config.json`, icons, logs, shots, …) |
 | coredump | `0x7F0000` | 64 KB | Crash dump |
 
-Flash offsets match Release notes: firmware `0x10000`, filesystem `0x670000`, full image `0x0`.
+Flash offsets match Release notes: firmware `0x10000`, filesystem `0x340000`, full image `0x0`.
 
 ### Current usage (v1.10 local build, approximate)
 
 | Item | Used | Partition | Usage |
 |------|------|-----------|-------|
 | Firmware (Sketch / app0) | ~**2.49 MB** (2551 KB) | 3.19 MB | **~78%** |
-| LittleFS assets (`data/`) | ~**0.66 MB** (671 KB, ~244 files) | 1.5 MB | **~44%** |
+| LittleFS assets (`data/`) | ~**0.66 MB** (671 KB, ~244 files) | 4.69 MB | **~14%** |
 
 Notes:
 
 - Firmware size changes with features; on-device **Info → Memory** shows live Sketch / LittleFS bars.
-- The LittleFS image fills the full 1.5 MB region; “used” above is source file bytes — FS metadata and runtime writes (config, logs, screenshots, game records) add more on device.
-- app1 is usually empty on the normal flash path and is not counted as day-to-day usage.
+- The LittleFS image fills the full 4.69 MB region; “used” above is source file bytes — FS metadata and runtime writes (config, logs, screenshots, game records) add more on device.
+- After changing partitions, reflash the table + firmware + LittleFS (`upload` and `uploadfs`, or a full `merged.bin`); data from the old layout is not migrated.
 
 
 ## 4. Flashing

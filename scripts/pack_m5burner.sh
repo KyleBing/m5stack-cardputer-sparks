@@ -26,12 +26,13 @@ FW_DIR="${OUT_DIR}/firmware"
 
 BOOT_APP0="${HOME}/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin"
 
-# ESP32-S3 / StampS3 (default_8MB) 烧录地址
+# ESP32-S3 / StampS3（partitions/no_ota_8MB.csv）烧录地址
 ADDR_BOOTLOADER=0x0
 ADDR_PARTITIONS=0x8000
 ADDR_BOOT_APP0=0xe000
 ADDR_FIRMWARE=0x10000
-ADDR_LITTLEFS=0x670000
+ADDR_LITTLEFS=0x340000
+
 
 SKIP_BUILD=0
 for arg in "$@"; do

@@ -1,0 +1,7 @@
+# Name,   Type, SubType, Offset,  Size, Flags
+# 8MB / 无 OTA 双槽：去掉 app1，空间并给 LittleFS（subtype 仍叫 spiffs）
+nvs,      data, nvs,     0x9000,  0x5000,
+otadata,  data, ota,     0xe000,  0x2000,
+app0,     app,  factory, 0x10000, 0x330000,
+spiffs,   data, spiffs,  0x340000,0x4B0000,
+coredump, data, coredump,0x7F0000,0x10000,
