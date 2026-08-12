@@ -2,7 +2,6 @@
 
 #include "app_colors.h"
 #include "app_common.h"
-#include "app_header.h"
 
 #include <FS.h>
 #include <LittleFS.h>
@@ -18,6 +17,7 @@ static constexpr int VOCAB_MAX_DICT = 16;
 static constexpr int VOCAB_PATH_MAX = 96;
 static constexpr int VOCAB_NAME_MAX = 48;
 static constexpr uint32_t VOCAB_SAVE_DEBOUNCE_MS = 800;
+static constexpr int VOCAB_HELP_PAGES = 2;
 
 struct VocabDict {
     char path[VOCAB_PATH_MAX];
@@ -40,6 +40,8 @@ static String g_cur_meaning = "";
 static bool g_screen_ready = false;
 static bool g_dirty = false;
 static uint32_t g_dirty_ms = 0;
+static bool g_help = false;
+static int g_help_page = 0;
 
 static uint64_t* g_state_hashes = nullptr;
 static int g_state_hash_cap = 0;
@@ -303,60 +305,82 @@ static void loadCurrentLine() {
     }
 }
 
-static void drawVocabApp(const bool full_init) {
-    if (full_init || !g_screen_ready) {
-        beginAppScreen("Vocab");
-        g_screen_ready = true;
-    } else {
-        clearAppContentArea();
-    }
-
-    int y = APP_CONTENT_INSET_Y;
-    char dict_buf[20];
-    snprintf(dict_buf, sizeof(dict_buf), "%d/%d", g_dict_count > 0 ? g_dict_idx + 1 : 0, g_dict_count);
-    drawInfoLineAt(APP_CONTENT_X, y, "dict", dict_buf, 1);
+static void drawVocabStatus(const char* message, const char* detail, const uint16_t color) {
+    M5Cardputer.Display.fillScreen(BLACK);
+    M5Cardputer.Display.setFont(&fonts::efontCN_14);
     M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(INFO_VALUE_COLOR, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X + 64, y);
+    M5Cardputer.Display.setTextColor(color, BLACK);
+    M5Cardputer.Display.setCursor(APP_HELP_CONTENT_X, 48);
+    M5Cardputer.Display.print(message);
+    if (detail != nullptr && detail[0] != '\0') {
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(APP_HELP_CONTENT_X, 70);
+        M5Cardputer.Display.print(detail);
+    }
+    M5Cardputer.Display.setTextFont(1);
+}
+
+static void drawVocabHelp() {
+    int y = drawAppHelpBegin("Vocab");
+    constexpr int x = APP_HELP_CONTENT_X;
+    if (g_help_page == 0) {
+        y = drawAppHelpBadge(x, y, "Arrows ,.", "previous / next word");
+        y = drawAppHelpBadge(x, y, "O/K", "toggle known");
+        y = drawAppHelpKey(x, y, 'r', "random unknown word");
+        y = drawAppHelpBadge(x, y, "[]", "switch dictionary");
+        y = drawAppHelpBadge(x, y, "BtnGO", "exit app");
+        (void)drawAppHelpKey(x, y, 'h', "open / close help");
+    } else {
+        y = drawAppHelpTextColored(x, y, "Word status", APP_COLOR_LABEL);
+        y = drawAppHelpLabelText(x, y, "green", APP_COLOR_OK, " = known");
+        y = drawAppHelpLabelText(x, y, "white", APP_COLOR_VALUE, " = learning");
+        y = drawAppHelpTextColored(x, y, "Storage", APP_COLOR_LABEL);
+        (void)drawAppHelpText(x, y, "Known words are saved automatically.");
+    }
+    drawAppHelpFooter(g_help_page, VOCAB_HELP_PAGES);
+}
+
+static void drawVocabApp(const bool full_init) {
+    (void)full_init;
+    M5Cardputer.Display.fillScreen(BLACK);
+    g_screen_ready = true;
+
+    // 文件名和中文释义统一使用中文 14px 字体。
+    M5Cardputer.Display.setFont(&fonts::efontCN_14);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
+    M5Cardputer.Display.setCursor(APP_HELP_CONTENT_X, APP_HELP_EDGE);
     if (g_dict_count > 0) {
         M5Cardputer.Display.print(g_dicts[g_dict_idx].name);
     } else {
         M5Cardputer.Display.print("no file");
     }
+    M5Cardputer.Display.setTextFont(1);
 
-    y += INFO_LINE_H;
+    int y = 24;
     char line_buf[24];
     snprintf(line_buf, sizeof(line_buf), "%d/%d", g_line_count > 0 ? g_cur_line + 1 : 0, g_line_count);
-    drawInfoLineAt(APP_CONTENT_X, y, "line", line_buf, 1);
+    drawInfoLineAt(APP_HELP_CONTENT_X, y, "line", line_buf, 1);
 
     y += INFO_LINE_H;
     char known_buf[24];
     const int pct = g_line_count > 0 ? (g_known_count * 100) / g_line_count : 0;
     snprintf(known_buf, sizeof(known_buf), "%d (%d%%)", g_known_count, pct);
-    drawInfoLineAt(APP_CONTENT_X, y, "known", known_buf, 1);
+    drawInfoLineAt(APP_HELP_CONTENT_X, y, "known", known_buf, 1);
 
-    y += INFO_LINE_H + 4;
+    y += INFO_LINE_H + 5;
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(bitIsKnown(g_cur_line) ? APP_COLOR_OK : APP_COLOR_VALUE, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
+    M5Cardputer.Display.setCursor(APP_HELP_CONTENT_X, y);
     M5Cardputer.Display.print(g_cur_word);
 
-    y += INFO_LINE_H_2X + 4;
-    // 中文释义使用与米家信息标题一致的默认字库字体，避免 Font0 下汉字缺字形。
-    M5Cardputer.Display.setFont(nullptr);
-    M5Cardputer.Display.setTextFont(2);
+    y += INFO_LINE_H_2X + 7;
+    M5Cardputer.Display.setFont(&fonts::efontCN_14);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(INFO_LABEL_COLOR, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, y);
+    M5Cardputer.Display.setCursor(APP_HELP_CONTENT_X, y);
     M5Cardputer.Display.print(g_cur_meaning);
-    // 恢复常规 8px 文本配置，避免影响底栏提示行。
     M5Cardputer.Display.setTextFont(1);
-
-    const int hint_y = M5Cardputer.Display.height() - 12;
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, hint_y);
-    M5Cardputer.Display.print(",/.nav o mark r rand [/] dict");
 }
 
 static bool rebuildIndexForDict(const int dict_idx) {
@@ -366,19 +390,27 @@ static bool rebuildIndexForDict(const int dict_idx) {
         return false;
     }
 
+    loadKnownWordHashesForDict(g_dicts[dict_idx].dict_id);
     File f = LittleFS.open(g_dicts[dict_idx].path, "r");
     if (!f) {
+        freeStateHashes();
         return false;
     }
 
-    // 先按最大行数分配，再按实际行数回收，避免频繁 realloc。
+    // 单遍顺序扫描：同时建立行偏移和已会位图，避免逐行 seek 重读整个词库。
     int cap = 2048;
     uint32_t* offsets = static_cast<uint32_t*>(malloc(sizeof(uint32_t) * static_cast<size_t>(cap)));
-    if (offsets == nullptr) {
+    uint8_t* known_bits =
+        static_cast<uint8_t*>(calloc(static_cast<size_t>((cap + 7) / 8), sizeof(uint8_t)));
+    if (offsets == nullptr || known_bits == nullptr) {
+        free(offsets);
+        free(known_bits);
         f.close();
+        freeStateHashes();
         return false;
     }
     int lines = 0;
+    int known_count = 0;
     while (f.available()) {
         const uint32_t off = f.position();
         String line = f.readStringUntil('\n');
@@ -392,60 +424,59 @@ static bool rebuildIndexForDict(const int dict_idx) {
                 realloc(offsets, sizeof(uint32_t) * static_cast<size_t>(next_cap)));
             if (next_offsets == nullptr) {
                 free(offsets);
+                free(known_bits);
                 f.close();
+                freeStateHashes();
                 return false;
             }
             offsets = next_offsets;
+
+            const size_t old_bytes = static_cast<size_t>((cap + 7) / 8);
+            const size_t next_bytes = static_cast<size_t>((next_cap + 7) / 8);
+            uint8_t* next_known_bits = static_cast<uint8_t*>(realloc(known_bits, next_bytes));
+            if (next_known_bits == nullptr) {
+                free(offsets);
+                free(known_bits);
+                f.close();
+                freeStateHashes();
+                return false;
+            }
+            known_bits = next_known_bits;
+            memset(known_bits + old_bytes, 0, next_bytes - old_bytes);
             cap = next_cap;
         }
-        offsets[lines++] = off;
+
+        offsets[lines] = off;
+        String word;
+        String meaning;
+        parseVocabLine(line, word, meaning);
+        if (word.length() > 0 && stateHashContains(hashNormalizedWord(word))) {
+            known_bits[lines >> 3] |= static_cast<uint8_t>(1u << (lines & 7));
+            known_count++;
+        }
+        lines++;
+        if ((lines & 0xFF) == 0) {
+            delay(0);
+        }
     }
     f.close();
+    freeStateHashes();
     if (lines <= 0) {
         free(offsets);
+        free(known_bits);
         return false;
     }
 
-    g_offsets = static_cast<uint32_t*>(realloc(offsets, sizeof(uint32_t) * static_cast<size_t>(lines)));
-    if (g_offsets == nullptr) {
-        free(offsets);
-        return false;
-    }
+    g_offsets = offsets;
+    g_known_bits = known_bits;
     g_line_count = lines;
-
-    g_known_bits =
-        static_cast<uint8_t*>(calloc(static_cast<size_t>((g_line_count + 7) / 8), sizeof(uint8_t)));
-    if (g_known_bits == nullptr) {
-        freeCurrentIndex();
-        return false;
-    }
-
-    loadKnownWordHashesForDict(g_dicts[dict_idx].dict_id);
-
     g_vocab_file = LittleFS.open(g_dicts[dict_idx].path, "r");
     if (!g_vocab_file) {
         freeCurrentIndex();
-        freeStateHashes();
         return false;
     }
 
-    g_known_count = 0;
-    for (int i = 0; i < g_line_count; i++) {
-        String raw;
-        if (!readLineAt(i, raw)) {
-            continue;
-        }
-        String word;
-        String meaning;
-        parseVocabLine(raw, word, meaning);
-        if (word.length() == 0) {
-            continue;
-        }
-        if (stateHashContains(hashNormalizedWord(word))) {
-            bitSetKnown(i, true);
-        }
-    }
-
+    g_known_count = known_count;
     g_cur_line = 0;
     loadCurrentLine();
     g_dirty = false;
@@ -477,11 +508,10 @@ static bool loadDictList() {
             continue;
         }
         VocabDict& d = g_dicts[g_dict_count];
-        strncpy(d.path, name, sizeof(d.path) - 1);
-        d.path[sizeof(d.path) - 1] = '\0';
-
         const char* base = strrchr(name, '/');
         base = base == nullptr ? name : (base + 1);
+        // openNextFile() 可能只返回文件名；统一保存 LittleFS 完整路径。
+        snprintf(d.path, sizeof(d.path), "%s/%s", VOCAB_DIR, base);
         strncpy(d.name, base, sizeof(d.name) - 1);
         d.name[sizeof(d.name) - 1] = '\0';
 
@@ -629,6 +659,7 @@ static void switchDict(const int delta) {
     }
     g_dict_idx = next;
     g_screen_ready = false;
+    drawVocabStatus("载入词库...", g_dicts[g_dict_idx].name, APP_COLOR_LABEL);
     if (!rebuildIndexForDict(g_dict_idx)) {
         g_cur_word = "error";
         g_cur_meaning = "load dict failed";
@@ -641,24 +672,20 @@ void enterVocabApp() {
     g_screen_ready = false;
     g_dirty = false;
     g_dirty_ms = 0;
+    g_help = false;
+    g_help_page = 0;
 
+    drawVocabStatus("载入词库...", nullptr, APP_COLOR_LABEL);
     if (!loadDictList()) {
         freeCurrentIndex();
         g_screen_ready = false;
-        beginAppScreen("Vocab");
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(APP_COLOR_ERROR, BLACK);
-        M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y);
-        M5Cardputer.Display.print("no /vocabulary/*.txt");
+        drawVocabStatus("载入失败", "no /vocabulary/*.txt", APP_COLOR_ERROR);
         return;
     }
 
+    drawVocabStatus("载入词库...", g_dicts[g_dict_idx].name, APP_COLOR_LABEL);
     if (!rebuildIndexForDict(g_dict_idx)) {
-        beginAppScreen("Vocab");
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(APP_COLOR_ERROR, BLACK);
-        M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y);
-        M5Cardputer.Display.print("load dict failed");
+        drawVocabStatus("载入失败", g_dicts[g_dict_idx].name, APP_COLOR_ERROR);
         return;
     }
     drawVocabApp(true);
@@ -669,8 +696,24 @@ void leaveVocabApp() {
     if (g_dirty) {
         saveKnownStateNow();
     }
+    g_help = false;
+    g_help_page = 0;
     freeCurrentIndex();
     freeStateHashes();
+}
+
+bool isVocabHelpVisible() {
+    return g_help;
+}
+
+bool closeVocabHelp() {
+    if (!g_help) {
+        return false;
+    }
+    g_help = false;
+    g_help_page = 0;
+    drawVocabApp(true);
+    return true;
 }
 
 void updateVocabApp() {
@@ -684,6 +727,24 @@ void updateVocabApp() {
 }
 
 void handleVocabApp(const Keyboard_Class::KeysState& status) {
+    const String key = getPressedKey();
+    if (key == "h" || key == "H") {
+        if (!closeVocabHelp()) {
+            g_help = true;
+            g_help_page = 0;
+            drawVocabHelp();
+        }
+        return;
+    }
+    if (g_help) {
+        const int delta = getHelpNavDelta(status);
+        if (delta != 0) {
+            g_help_page = applyHelpPageDelta(g_help_page, VOCAB_HELP_PAGES, delta);
+            drawVocabHelp();
+        }
+        return;
+    }
+
     bool handled = false;
     for (const char c : status.word) {
         if (c == ',') {

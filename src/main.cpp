@@ -146,23 +146,6 @@ static bool bmiScreenReady = false;
 static int bmiPrevDotX[2] = {-1, -1};
 static int bmiPrevDotY[2] = {-1, -1};
 
-// 兼容占位：部分 app 仅提供 is*HelpVisible()，未导出 close*Help()。
-// 为保证统一 ESC 关闭逻辑可编译，缺失接口先返回 false。
-static bool closeRtcHelp() { return false; }
-static bool closeBleHelp() { return false; }
-static bool closeWifiHelp() { return false; }
-static bool closeCursorHelp() { return false; }
-static bool closeMijiaHelp() { return false; }
-static bool closeIrHelp() { return false; }
-static bool closeWebHelp() { return false; }
-static bool closeAcAutoHelp() { return false; }
-static bool closeGamesHelp() { return false; }
-static bool closeDiceHelp() { return false; }
-static bool closeNeonFxHelp() { return false; }
-static bool closeMicHelp() { return false; }
-static bool closeCalendarHelp() { return false; }
-static bool closeIconDemoHelp() { return false; }
-
 void enterApp(const AppState state);
 
 // 根据字母查找 app（支持大小写）
@@ -3232,6 +3215,8 @@ static bool tryCloseCurrentAppHelp() {
                 return true;
             }
             return closeRadioHelp();
+        case AppState::VOCAB:
+            return closeVocabHelp();
         case AppState::ICONS:
             return closeIconDemoHelp();
         case AppState::LED:
@@ -3704,7 +3689,8 @@ void loop() {
     } else if ((currentState == AppState::NEON_FX && isNeonFxHelpVisible()) ||
                (currentState == AppState::DICE && isDiceHelpVisible()) ||
                (currentState == AppState::GAMES && isGamesHelpVisible()) ||
-               (currentState == AppState::RADIO && isRadioHelpVisible())) {
+               (currentState == AppState::RADIO && isRadioHelpVisible()) ||
+               (currentState == AppState::VOCAB && isVocabHelpVisible())) {
         // Help 页静态展示，节流到 ~30ms 节省 CPU
         delay(30);
     } else if (currentState == AppState::HID_KEYBOARD) {

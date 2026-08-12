@@ -7,3 +7,6 @@ void enterVocabApp();
 void leaveVocabApp();
 void updateVocabApp();
 void handleVocabApp(const Keyboard_Class::KeysState& status);
+
+bool isVocabHelpVisible();
+bool closeVocabHelp();

@@ -343,11 +343,13 @@ static void drawStationsList() {
     radioCanvas.fillSprite(BLACK);
     radioCanvas.setTextSize(1);
     radioCanvas.setTextColor(APP_COLOR_LABEL, BLACK);
-    radioCanvas.setCursor(RADIO_UI_LEFT, RADIO_UI_TOP);
+    // 列表是全屏子界面，不预留主界面的 header 高度。
+    constexpr int title_y = 2;
+    radioCanvas.setCursor(RADIO_UI_LEFT, title_y);
     radioCanvas.print("Stations");
 
-    constexpr int row_h = 12;
-    constexpr int list_y = RADIO_UI_TOP + 12;
+    constexpr int row_h = 11;
+    constexpr int list_y = title_y + 11;
     for (int i = 0; i < RADIO_PRESET_COUNT; ++i) {
         const int y = list_y + i * row_h;
         const bool sel = (i == g_sel_slot);
@@ -434,74 +436,26 @@ static void drawRadioChrome() {
 }
 
 static void drawHelpPage() {
-    beginAppScreen("Radio");
-    int y = RADIO_UI_TOP;
-    constexpr int x = RADIO_UI_LEFT;
-    auto helpKeyLine = [&](const char key, const char* text) {
-        int cx = x;
-        cx += drawKeyBadge(cx, y, key, 1);
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(cx, y);
-        M5Cardputer.Display.print(text);
-        y += 12;
-    };
-    auto helpTextBadgeLine = [&](const char* badge, const char* text) {
-        int cx = x;
-        cx += drawTextBadge(cx, y, badge, 1);
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(cx, y);
-        M5Cardputer.Display.print(text);
-        y += 12;
-    };
+    int y = drawAppHelpBegin("Radio");
+    constexpr int x = APP_HELP_CONTENT_X;
     if (g_help_page == 0) {
-        helpTextBadgeLine("-=", "tune 0.1 MHz");
-        int cx = x;
-        cx += drawArrowBadge(cx, y, 1);
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(cx, y);
-        M5Cardputer.Display.print("tune 0.1 MHz");
-        y += 12;
-        helpTextBadgeLine("[]", "seek station");
-        helpKeyLine('s', "auto scan + save");
-        helpKeyLine('m', "mute");
-        helpTextBadgeLine("1-0", "recall preset");
-        helpKeyLine('l', "station list");
+        y = drawAppHelpBadge(x, y, "- =", "tune 0.1 MHz");
+        y = drawAppHelpArrows(x, y, "tune 0.1 MHz");
+        y = drawAppHelpBadge(x, y, "[]", "seek station");
+        y = drawAppHelpKey(x, y, 's', "auto scan + save");
+        y = drawAppHelpKey(x, y, 'm', "mute");
+        y = drawAppHelpBadge(x, y, "1-0", "recall preset");
+        y = drawAppHelpKey(x, y, 'l', "station list");
     } else {
-        helpKeyLine('r', "rename preset");
-        helpTextBadgeLine("=", "save freq to slot");
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-        M5Cardputer.Display.setCursor(x, y);
-        M5Cardputer.Display.print("Dial");
-        y += 12;
-        M5Cardputer.Display.setTextColor(APP_COLOR_OK, BLACK);
-        M5Cardputer.Display.setCursor(x, y);
-        M5Cardputer.Display.print("green");
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.print(" = saved preset");
-        y += 12;
-        M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-        M5Cardputer.Display.setCursor(x, y);
-        M5Cardputer.Display.print("cyan");
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.print(" = active preset");
-        y += 12;
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(x, y);
-        M5Cardputer.Display.print("Audio out: module jack");
-        y += 12;
-        M5Cardputer.Display.setCursor(x, y);
-        M5Cardputer.Display.print("Antenna: module ANT");
+        y = drawAppHelpKey(x, y, 'r', "rename preset");
+        y = drawAppHelpBadge(x, y, "=", "save freq to slot");
+        y = drawAppHelpTextColored(x, y, "Dial", APP_COLOR_LABEL);
+        y = drawAppHelpLabelText(x, y, "green", APP_COLOR_OK, " = saved preset");
+        y = drawAppHelpLabelText(x, y, "cyan", APP_COLOR_LABEL, " = active preset");
+        y = drawAppHelpText(x, y, "Audio out: module jack");
+        y = drawAppHelpText(x, y, "Antenna: module ANT");
     }
-    char page_buf[12];
-    snprintf(page_buf, sizeof(page_buf), "%d/%d", g_help_page + 1, RADIO_HELP_PAGES);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_MUTED, BLACK);
-    M5Cardputer.Display.setCursor(M5Cardputer.Display.width() - 30, M5Cardputer.Display.height() - 12);
-    M5Cardputer.Display.print(page_buf);
+    drawAppHelpFooter(g_help_page, RADIO_HELP_PAGES);
 }
 
 static void applyFrequency(const uint16_t freq_centi) {
@@ -999,14 +953,9 @@ void handleRadioApp(const Keyboard_Class::KeysState& status) {
         return;
     }
     if (g_help) {
-        const int delta = getMenuNavDelta(status);
+        const int delta = getHelpNavDelta(status);
         if (delta != 0) {
-            g_help_page += delta;
-            if (g_help_page < 0) {
-                g_help_page = RADIO_HELP_PAGES - 1;
-            } else if (g_help_page >= RADIO_HELP_PAGES) {
-                g_help_page = 0;
-            }
+            g_help_page = applyHelpPageDelta(g_help_page, RADIO_HELP_PAGES, delta);
             drawHelpPage();
         }
         return;
