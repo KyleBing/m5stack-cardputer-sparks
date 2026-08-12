@@ -1419,3 +1419,14 @@ bool closeAcAutoHelp() {
     drawAcAutoApp();
     return true;
 }
+
+// ESC：Config 打开时先关配置（落盘）回展示页，不直接回主菜单
+bool handleAcAutoBack() {
+    if (g_page != AcAutoPage::Config) {
+        return false;
+    }
+    flushConfigIfDirty();
+    g_page = AcAutoPage::Display;
+    drawAcAutoApp();
+    return true;
+}

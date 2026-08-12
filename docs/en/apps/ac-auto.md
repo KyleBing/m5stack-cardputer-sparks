@@ -34,7 +34,7 @@ Uses a Mijia BLE temperature/humidity sensor to auto-send IR power-on / power-of
 | Config `;` `.` | Move row |
 | Config `-` `=` | Change value |
 
-Back to menu: `ESC` / `GO`.
+Back to menu: on the display page, `ESC` / `GO`. On the config page, `ESC` / `GO` closes config first; press again to leave the app.
 
 ## How it runs
 

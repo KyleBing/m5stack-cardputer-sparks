@@ -3291,6 +3291,9 @@ void loop() {
             if (tryCloseCurrentAppHelp()) {
                 return;
             }
+            if (currentState == AppState::AC_AUTO && handleAcAutoBack()) {
+                return;
+            }
             if (currentState == AppState::GAMES && handleGamesBack()) {
                 return;
             }
