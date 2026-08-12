@@ -30,6 +30,7 @@
 #include "app_calendar.h"
 #include "app_screenshot.h"
 #include "app_ac_auto.h"
+#include "app_radio.h"
 #include <WiFi.h>
 #include <esp_sleep.h>
 #include <esp_timer.h>
@@ -84,6 +85,7 @@ enum class AppState {
     INFO, // 系统信息 / 内存（字母 i）
     CALENDAR,
     AC_AUTO, // 空调自动化
+    RADIO,   // FM 收音机（TEA5767）
 };
 
 enum class HardwareTestMode {
@@ -124,6 +126,7 @@ static const MenuItem MENU_ITEMS[] = {
     {'j', "Mor", "MORSE", AppState::MORSE},
     {'x', "IR", "INFRARED", AppState::IR},
     {'n', "AC", "AC AUTO", AppState::AC_AUTO},
+    {'r', "FM", "RADIO", AppState::RADIO},
 
     // 系统功能测试
     {'k', "KB", "KEYBOARD", AppState::HID_KEYBOARD},
@@ -237,6 +240,8 @@ const char* getCurrentAppShotSlug() {
             return "calendar";
         case AppState::AC_AUTO:
             return "acauto";
+        case AppState::RADIO:
+            return "radio";
         default:
             return "unknown";
     }
@@ -2974,6 +2979,9 @@ void enterApp(const AppState state) {
     if (currentState == AppState::IR && state != AppState::IR) {
         leaveIrApp();
     }
+    if (currentState == AppState::RADIO && state != AppState::RADIO) {
+        leaveRadioApp();
+    }
     currentState = state;
 
     // Sleep 先显示 5 秒提示，再关屏
@@ -3078,6 +3086,9 @@ void enterApp(const AppState state) {
             leaveMijiaApp("Entering.");
             leaveIrApp();
             enterAcAutoApp();
+            break;
+        case AppState::RADIO:
+            enterRadioApp();
             break;
         default:
             break;
@@ -3188,6 +3199,11 @@ static bool tryCloseCurrentAppHelp() {
             return closeMicHelp();
         case AppState::CALENDAR:
             return closeCalendarHelp();
+        case AppState::RADIO:
+            if (closeRadioStations()) {
+                return true;
+            }
+            return closeRadioHelp();
         case AppState::ICONS:
             return closeIconDemoHelp();
         case AppState::LED:
@@ -3312,6 +3328,9 @@ void loop() {
             if (currentState == AppState::DICE) {
                 leaveDiceApp();
             }
+            if (currentState == AppState::RADIO) {
+                leaveRadioApp();
+            }
             if (currentState == AppState::NEWTON_CRADLE) {
                 leaveNewtonCradleApp();
             }
@@ -3363,6 +3382,8 @@ void loop() {
         updateNeonFxApp();
     } else if (currentState == AppState::DICE) {
         updateDiceApp();
+    } else if (currentState == AppState::RADIO) {
+        updateRadioApp();
     } else if (currentState == AppState::NEWTON_CRADLE) {
         pollNewtonCradleBtnA();
         updateNewtonCradleApp();
@@ -3507,6 +3528,11 @@ void loop() {
                     handleDiceApp(M5Cardputer.Keyboard.keysState());
                 }
                 break;
+            case AppState::RADIO:
+                if (M5Cardputer.Keyboard.isPressed()) {
+                    handleRadioApp(M5Cardputer.Keyboard.keysState());
+                }
+                break;
             case AppState::NEWTON_CRADLE:
                 if (M5Cardputer.Keyboard.isPressed()) {
                     handleNewtonCradleApp(M5Cardputer.Keyboard.keysState());
@@ -3642,7 +3668,8 @@ void loop() {
         delay(30);
     } else if ((currentState == AppState::NEON_FX && isNeonFxHelpVisible()) ||
                (currentState == AppState::DICE && isDiceHelpVisible()) ||
-               (currentState == AppState::GAMES && isGamesHelpVisible())) {
+               (currentState == AppState::GAMES && isGamesHelpVisible()) ||
+               (currentState == AppState::RADIO && isRadioHelpVisible())) {
         // Help 页静态展示，节流到 ~30ms 节省 CPU
         delay(30);
     } else if (currentState == AppState::HID_KEYBOARD) {
