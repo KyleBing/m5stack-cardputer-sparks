@@ -31,6 +31,7 @@
 #include "app_screenshot.h"
 #include "app_ac_auto.h"
 #include "app_radio.h"
+#include "app_vocab.h"
 #include <WiFi.h>
 #include <esp_sleep.h>
 #include <esp_timer.h>
@@ -86,6 +87,7 @@ enum class AppState {
     CALENDAR,
     AC_AUTO, // 空调自动化
     RADIO,   // FM 收音机（TEA5767）
+    VOCAB,   // 单词学习
 };
 
 enum class HardwareTestMode {
@@ -127,6 +129,7 @@ static const MenuItem MENU_ITEMS[] = {
     {'x', "IR", "INFRARED", AppState::IR},
     {'n', "AC", "AC AUTO", AppState::AC_AUTO},
     {'r', "FM", "RADIO", AppState::RADIO},
+    {'l', "Voc", "VOCAB", AppState::VOCAB},
 
     // 系统功能测试
     {'k', "KB", "KEYBOARD", AppState::HID_KEYBOARD},
@@ -142,6 +145,23 @@ static int hardwareTestHubPage = 0;
 static bool bmiScreenReady = false;
 static int bmiPrevDotX[2] = {-1, -1};
 static int bmiPrevDotY[2] = {-1, -1};
+
+// 兼容占位：部分 app 仅提供 is*HelpVisible()，未导出 close*Help()。
+// 为保证统一 ESC 关闭逻辑可编译，缺失接口先返回 false。
+static bool closeRtcHelp() { return false; }
+static bool closeBleHelp() { return false; }
+static bool closeWifiHelp() { return false; }
+static bool closeCursorHelp() { return false; }
+static bool closeMijiaHelp() { return false; }
+static bool closeIrHelp() { return false; }
+static bool closeWebHelp() { return false; }
+static bool closeAcAutoHelp() { return false; }
+static bool closeGamesHelp() { return false; }
+static bool closeDiceHelp() { return false; }
+static bool closeNeonFxHelp() { return false; }
+static bool closeMicHelp() { return false; }
+static bool closeCalendarHelp() { return false; }
+static bool closeIconDemoHelp() { return false; }
 
 void enterApp(const AppState state);
 
@@ -242,6 +262,8 @@ const char* getCurrentAppShotSlug() {
             return "acauto";
         case AppState::RADIO:
             return "radio";
+        case AppState::VOCAB:
+            return "vocab";
         default:
             return "unknown";
     }
@@ -2982,6 +3004,9 @@ void enterApp(const AppState state) {
     if (currentState == AppState::RADIO && state != AppState::RADIO) {
         leaveRadioApp();
     }
+    if (currentState == AppState::VOCAB && state != AppState::VOCAB) {
+        leaveVocabApp();
+    }
     currentState = state;
 
     // Sleep 先显示 5 秒提示，再关屏
@@ -3089,6 +3114,9 @@ void enterApp(const AppState state) {
             break;
         case AppState::RADIO:
             enterRadioApp();
+            break;
+        case AppState::VOCAB:
+            enterVocabApp();
             break;
         default:
             break;
@@ -3446,6 +3474,8 @@ void loop() {
     } else if (currentState == AppState::AC_AUTO) {
         pollAcAutoBtnA();
         updateAcAutoApp();
+    } else if (currentState == AppState::VOCAB) {
+        updateVocabApp();
     } else if (currentState == AppState::HID_KEYBOARD) {
         if (pollHidKeyboardBtnAExit()) {
             showMenu();
@@ -3649,6 +3679,11 @@ void loop() {
             case AppState::CALENDAR:
                 if (M5Cardputer.Keyboard.isPressed()) {
                     handleCalendarApp(M5Cardputer.Keyboard.keysState());
+                }
+                break;
+            case AppState::VOCAB:
+                if (M5Cardputer.Keyboard.isPressed()) {
+                    handleVocabApp(M5Cardputer.Keyboard.keysState());
                 }
                 break;
             default:

@@ -12,6 +12,8 @@ namespace {
 static constexpr int RADIO_PRESET_COUNT = 10;
 static constexpr int RADIO_NAME_MAX = 16;
 static constexpr int DIAL_MARGIN = 14; // 两端留空，MHz 数字不被裁切
+static constexpr int RADIO_UI_LEFT = APP_CONTENT_X;
+static constexpr int RADIO_UI_TOP = APP_CONTENT_INSET_Y;
 
 struct RadioPreset {
     uint16_t freq; // 0 = 空槽
@@ -319,7 +321,7 @@ static void drawFrequencyDisplay(const uint16_t freq_centi) {
         char slot_text[6];
         snprintf(slot_text, sizeof(slot_text), "#%d", g_active_slot + 1);
         radioCanvas.setTextColor(APP_COLOR_MUTED, BLACK);
-        radioCanvas.setCursor(APP_HELP_CONTENT_X, freq_y + 4);
+        radioCanvas.setCursor(RADIO_UI_LEFT, freq_y + 4);
         radioCanvas.print(slot_text);
     }
 }
@@ -330,10 +332,10 @@ static void drawNoModuleHint() {
     }
     radioCanvas.setTextSize(1);
     radioCanvas.setTextColor(APP_COLOR_ERROR, BLACK);
-    radioCanvas.setCursor(APP_HELP_CONTENT_X, 82);
+    radioCanvas.setCursor(RADIO_UI_LEFT, 82);
     radioCanvas.print("No TEA5767");
     radioCanvas.setTextColor(APP_COLOR_HINT, BLACK);
-    radioCanvas.setCursor(APP_HELP_CONTENT_X, 94);
+    radioCanvas.setCursor(RADIO_UI_LEFT, 94);
     radioCanvas.print("Connect to Ex I2C Port A");
 }
 
@@ -341,11 +343,11 @@ static void drawStationsList() {
     radioCanvas.fillSprite(BLACK);
     radioCanvas.setTextSize(1);
     radioCanvas.setTextColor(APP_COLOR_LABEL, BLACK);
-    radioCanvas.setCursor(APP_HELP_CONTENT_X, APP_HELP_EDGE);
+    radioCanvas.setCursor(RADIO_UI_LEFT, RADIO_UI_TOP);
     radioCanvas.print("Stations");
 
     constexpr int row_h = 12;
-    constexpr int list_y = APP_HELP_EDGE + 12;
+    constexpr int list_y = RADIO_UI_TOP + 12;
     for (int i = 0; i < RADIO_PRESET_COUNT; ++i) {
         const int y = list_y + i * row_h;
         const bool sel = (i == g_sel_slot);
@@ -356,10 +358,10 @@ static void drawStationsList() {
         char num[4];
         snprintf(num, sizeof(num), "%d", i + 1);
         radioCanvas.setTextColor(sel ? BLACK : APP_COLOR_HINT, sel ? APP_COLOR_LABEL : BLACK);
-        radioCanvas.setCursor(APP_HELP_CONTENT_X, y);
+        radioCanvas.setCursor(RADIO_UI_LEFT, y);
         radioCanvas.print(num);
 
-        radioCanvas.setCursor(APP_HELP_CONTENT_X + 14, y);
+        radioCanvas.setCursor(RADIO_UI_LEFT + 14, y);
         if (g_view == RadioView::Rename && sel) {
             radioCanvas.print(g_rename_buf);
             radioCanvas.print("_");
@@ -372,7 +374,7 @@ static void drawStationsList() {
 
     if (g_view == RadioView::Rename) {
         radioCanvas.setTextColor(APP_COLOR_MUTED, BLACK);
-        radioCanvas.setCursor(APP_HELP_CONTENT_X, g_canvas_h - 10);
+        radioCanvas.setCursor(RADIO_UI_LEFT, g_canvas_h - 10);
         radioCanvas.print("Enter save  ` cancel");
     }
 }
@@ -408,7 +410,7 @@ static void drawRadioMain() {
     drawNoModuleHint();
 
     constexpr int icon_size = 40;
-    const int icon_x = g_canvas_w - icon_size - APP_HELP_CONTENT_X;
+    const int icon_x = g_canvas_w - icon_size - RADIO_UI_LEFT;
     drawPlayPauseIcon(icon_x, 54);
 
     constexpr int meter_y = 112;
@@ -416,8 +418,8 @@ static void drawRadioMain() {
     constexpr int bar_gap = 3;
     constexpr int bars = 5;
     const int bars_w = bars * bar_w + (bars - 1) * bar_gap;
-    drawSignalBars(APP_HELP_CONTENT_X, meter_y, bar_w, bar_gap, 18, g_rssi, g_seeking);
-    drawStatusBadges(APP_HELP_CONTENT_X + bars_w + 10, meter_y + 1);
+    drawSignalBars(RADIO_UI_LEFT, meter_y, bar_w, bar_gap, 18, g_rssi, g_seeking);
+    drawStatusBadges(RADIO_UI_LEFT + bars_w + 10, meter_y + 1);
 
     pushRadioFrame();
 }
@@ -432,27 +434,74 @@ static void drawRadioChrome() {
 }
 
 static void drawHelpPage() {
-    clearAppHeaderStatusRefresh();
-    int y = drawAppHelpBegin("Radio");
-    constexpr int x = APP_HELP_CONTENT_X;
+    beginAppScreen("Radio");
+    int y = RADIO_UI_TOP;
+    constexpr int x = RADIO_UI_LEFT;
+    auto helpKeyLine = [&](const char key, const char* text) {
+        int cx = x;
+        cx += drawKeyBadge(cx, y, key, 1);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(cx, y);
+        M5Cardputer.Display.print(text);
+        y += 12;
+    };
+    auto helpTextBadgeLine = [&](const char* badge, const char* text) {
+        int cx = x;
+        cx += drawTextBadge(cx, y, badge, 1);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(cx, y);
+        M5Cardputer.Display.print(text);
+        y += 12;
+    };
     if (g_help_page == 0) {
-        y = drawAppHelpBadge(x, y, "-=", "tune 0.1 MHz");
-        y = drawAppHelpArrows(x, y, "tune 0.1 MHz");
-        y = drawAppHelpBadge(x, y, "[]", "seek station");
-        y = drawAppHelpKey(x, y, 's', "auto scan + save");
-        y = drawAppHelpKey(x, y, 'm', "mute");
-        y = drawAppHelpBadge(x, y, "1-0", "recall preset");
-        (void)drawAppHelpKey(x, y, 'l', "station list");
+        helpTextBadgeLine("-=", "tune 0.1 MHz");
+        int cx = x;
+        cx += drawArrowBadge(cx, y, 1);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(cx, y);
+        M5Cardputer.Display.print("tune 0.1 MHz");
+        y += 12;
+        helpTextBadgeLine("[]", "seek station");
+        helpKeyLine('s', "auto scan + save");
+        helpKeyLine('m', "mute");
+        helpTextBadgeLine("1-0", "recall preset");
+        helpKeyLine('l', "station list");
     } else {
-        y = drawAppHelpKey(x, y, 'r', "rename preset");
-        y = drawAppHelpBadge(x, y, "=", "save freq to slot");
-        y = drawAppHelpTextColored(x, y, "Dial", APP_COLOR_LABEL);
-        y = drawAppHelpLabelText(x, y, "green", APP_COLOR_OK, " = saved preset");
-        y = drawAppHelpLabelText(x, y, "cyan", APP_COLOR_LABEL, " = active preset");
-        y = drawAppHelpText(x, y, "Audio out: module jack");
-        (void)drawAppHelpText(x, y, "Antenna: module ANT");
+        helpKeyLine('r', "rename preset");
+        helpTextBadgeLine("=", "save freq to slot");
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
+        M5Cardputer.Display.setCursor(x, y);
+        M5Cardputer.Display.print("Dial");
+        y += 12;
+        M5Cardputer.Display.setTextColor(APP_COLOR_OK, BLACK);
+        M5Cardputer.Display.setCursor(x, y);
+        M5Cardputer.Display.print("green");
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.print(" = saved preset");
+        y += 12;
+        M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
+        M5Cardputer.Display.setCursor(x, y);
+        M5Cardputer.Display.print("cyan");
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.print(" = active preset");
+        y += 12;
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(x, y);
+        M5Cardputer.Display.print("Audio out: module jack");
+        y += 12;
+        M5Cardputer.Display.setCursor(x, y);
+        M5Cardputer.Display.print("Antenna: module ANT");
     }
-    drawAppHelpFooter(g_help_page, RADIO_HELP_PAGES);
+    char page_buf[12];
+    snprintf(page_buf, sizeof(page_buf), "%d/%d", g_help_page + 1, RADIO_HELP_PAGES);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(APP_COLOR_MUTED, BLACK);
+    M5Cardputer.Display.setCursor(M5Cardputer.Display.width() - 30, M5Cardputer.Display.height() - 12);
+    M5Cardputer.Display.print(page_buf);
 }
 
 static void applyFrequency(const uint16_t freq_centi) {
@@ -809,7 +858,6 @@ static int getSeekDelta(const Keyboard_Class::KeysState& status) {
 static void restoreMainAfterHelp() {
     g_help = false;
     g_help_page = 0;
-    clearAppHeaderStatusRefresh();
     M5Cardputer.Display.fillScreen(BLACK);
     drawRadioChrome();
 }
@@ -834,7 +882,6 @@ void enterRadioApp() {
     g_tune_repeat_last_ms = 0;
 
     loadRadioPresets();
-    clearAppHeaderStatusRefresh();
     M5Cardputer.Display.wakeup();
     M5Cardputer.Display.powerSaveOff();
     M5Cardputer.Display.fillScreen(BLACK);
@@ -851,7 +898,7 @@ void enterRadioApp() {
     if (!ensureRadioCanvas()) {
         M5Cardputer.Display.setTextSize(1);
         M5Cardputer.Display.setTextColor(APP_COLOR_ERROR, BLACK);
-        M5Cardputer.Display.setCursor(APP_HELP_CONTENT_X, APP_HELP_EDGE);
+        M5Cardputer.Display.setCursor(RADIO_UI_LEFT, RADIO_UI_TOP);
         M5Cardputer.Display.print("Canvas OOM");
         return;
     }
@@ -947,15 +994,19 @@ void handleRadioApp(const Keyboard_Class::KeysState& status) {
         } else if (g_view == RadioView::Main) {
             g_help = true;
             g_help_page = 0;
-            clearAppHeaderStatusRefresh();
             drawHelpPage();
         }
         return;
     }
     if (g_help) {
-        const int delta = getHelpNavDelta(status);
+        const int delta = getMenuNavDelta(status);
         if (delta != 0) {
-            g_help_page = applyHelpPageDelta(g_help_page, RADIO_HELP_PAGES, delta);
+            g_help_page += delta;
+            if (g_help_page < 0) {
+                g_help_page = RADIO_HELP_PAGES - 1;
+            } else if (g_help_page >= RADIO_HELP_PAGES) {
+                g_help_page = 0;
+            }
             drawHelpPage();
         }
         return;
