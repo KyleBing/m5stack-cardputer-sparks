@@ -29,5 +29,5 @@ Back: `ESC` / `GO`. Page keys do nothing when there is no extra page.
 ## Usage
 
 1. Open to see current percentage and the curve.
-2. History is sampled in the background; light and deep sleep use different curve colors.
+2. History is sampled in the background. Before the clock is synced, samples use uptime and are timestamped after NTP/RTC. Light and deep sleep use different curve colors.
 3. Useful for spotting runtime and sleep drain trends — not a precision fuel-gauge calibration tool.

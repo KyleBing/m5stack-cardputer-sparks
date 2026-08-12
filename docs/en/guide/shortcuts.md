@@ -7,7 +7,8 @@ Most screens share the keys below. Each App may also have its own shortcuts — 
 | Key | Action |
 |-----|--------|
 | Letter keys (main menu) | Open the matching App |
-| `ESC` / `GO` (side button) | Return to main menu (Keyboard exits with **BtnGO**) |
+| `ESC` / `GO` (side button) | Return to main menu; if Help is open, close Help first (Keyboard exits with a **long-press BtnGO**) |
+| `h` | Open / close Help on any screen (Keyboard: `Fn` + `h`) |
 | `;` `,` / ↑ / ← | Previous page |
 | `.` `/` / ↓ / → | Next page |
 | `[` `]` | Page some lists / grids (see each App tip / Help) |

@@ -7,11 +7,11 @@ enum class BatterySleepMode : uint8_t {
     Deep,
 };
 
-// 启动时加载日志；深睡唤醒后补全 sleep 缺口
+// 启动时加载日志；无时钟则按 uptime 暂存，深睡唤醒后补全 sleep 缺口
 void initBatteryLog();
-// 主循环：设备开启时按整点记录电量
+// 主循环：有时钟按整点记录；无时钟按 uptime 小时暂存，同步后回填
 void batteryLogTick();
-// 入睡前落盘当前采样和休眠类型（深睡后 RAM 会丢）
+// 入睡前落盘当前采样和休眠类型（深睡后 RAM / pending 会丢）
 void batteryLogPrepareSleep(BatterySleepMode mode);
 // 浅睡唤醒后线性补全缺口并记当前点
 void batteryLogAfterWake();

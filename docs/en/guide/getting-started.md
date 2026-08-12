@@ -1,6 +1,6 @@
 # Getting Started
 
-Sparks is a multi-app firmware for the [M5Stack Cardputer](https://docs.m5stack.com/en/core/Cardputer). From the main menu, press a letter key to open the matching App; `ESC` / `GO` returns to the menu.
+Sparks is a multi-app firmware for the [M5Stack Cardputer](https://docs.m5stack.com/en/core/Cardputer). From the main menu, press a letter key to open the matching App; `ESC` / `GO` returns to the menu; press `h` on any screen for Help.
 
 ## Flash & Configure
 
@@ -32,4 +32,4 @@ The menu paginates with the keyboard arrow keys; no **Fn** needed.
 ## Next Steps
 
 - [App Catalog](/en/apps/) — browse all apps by category  
-- [Global Shortcuts](/en/guide/shortcuts) — screenshots, paging, back, and more
+- [Global Shortcuts](/en/guide/shortcuts) — back to menu, Help, screenshots, paging, and more

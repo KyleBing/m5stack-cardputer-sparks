@@ -4,6 +4,22 @@ Browse by main-menu category. Each App page includes: **overview & screenshots**
 
 Screenshot naming: `docs/public/shots/app_{app}_{feature}.png` (captured on device with `Fn+s`). Full gallery: [Screenshot Gallery](/en/apps/shots) (wide page, no sidebar).
 
+## Basics
+
+Most screens share the keys below. App-specific keys are on each App page. Full list: [Global Shortcuts](/en/guide/shortcuts).
+
+| Key | Action |
+|-----|--------|
+| Letter keys | Open the matching App from the main menu |
+| `ESC` / `GO` (side button) | Return to the main menu; if Help is open, close Help first |
+| `h` | Open / close Help on any screen |
+| `;` `,` / ↑ / ← | Previous page |
+| `.` `/` / ↓ / → | Next page |
+| `[` `]` | Page some lists / grids |
+| `Fn` + `s` | Screenshot |
+
+Exception: [Keyboard](./hid-keyboard) sends `` ` `` to the host as Esc and exits with a **long-press BtnGO**; Help is `Fn` + `h` so it is not typed to the host.
+
 ## Main Menu
 
 More detail: [Getting Started · Main Menu](/en/guide/getting-started#main-menu).
@@ -64,4 +80,4 @@ More detail: [Getting Started · Main Menu](/en/guide/getting-started#main-menu)
 | Key | App | Description |
 |-----|-----|-------------|
 | `g` | [Mini Games](./mini-games) | [Coin](./coin-toss), [pendulum](./double-pendulum), [wheel](./prize-wheel), [Dice](./dice), [Newton cradle](./newton-cradle), [Neon FX](./neon-fx), [curves](./curves), [Minesweeper](./minesweeper), [Snake](./snake), [Conway Life](./conway-life), [MATRIX](./matrix), [WAVE](./wave), [PCLOCK](./particle-clock), [LISSA](./lissa) |
-| `h` | [Hardware Test](./hardware-test) | Display, IMU, Font, Icons, LED, BLE, I2C, page-2 [Mic](./mic) |
+| `h` | [Hardware Test](./hardware-test) | [Display](./display), [IMU](./imu), [Font](./font), [Icons](./icons), [LED](./rgb-led), [BLE](./ble), [I2C](./i2c), page-2 [Mic](./mic) |

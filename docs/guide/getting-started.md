@@ -1,6 +1,6 @@
 # 入门
 
-Sparks 是跑在 [M5Stack Cardputer](https://docs.m5stack.com/en/core/Cardputer) 上的多应用固件。主界面按字母键进入对应 App，`ESC` / `GO` 返回菜单。
+Sparks 是跑在 [M5Stack Cardputer](https://docs.m5stack.com/en/core/Cardputer) 上的多应用固件。主界面按字母键进入对应 App，`ESC` / `GO` 返回菜单，任意界面按 `h` 查看帮助。
 
 ## 烧录与配置
 
@@ -32,4 +32,4 @@ Sparks 是跑在 [M5Stack Cardputer](https://docs.m5stack.com/en/core/Cardputer)
 ## 下一步
 
 - [功能目录](/apps/) — 按分类浏览全部 App  
-- [全局快捷键](/guide/shortcuts) — 截图、翻页、返回等
+- [全局快捷键](/guide/shortcuts) — 返回菜单、Help、截图、翻页等

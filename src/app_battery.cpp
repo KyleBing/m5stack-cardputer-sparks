@@ -11,6 +11,7 @@
 #include <WiFi.h>
 #include <cstdio>
 #include <cstring>
+#include <esp_timer.h>
 #include <time.h>
 
 // ===== 小时采样日志（LittleFS 环形缓冲）=====
@@ -43,6 +44,17 @@ static BatLogStore g_log{};
 static bool g_log_loaded = false;
 static uint32_t g_last_tick_ms = 0;
 
+// 无墙钟时按开机 uptime 暂存；NTP/RTC 就绪后再回填 hour_epoch
+static constexpr int BAT_PENDING_CAP = 48; // 约 2 天，深睡会丢 RAM
+struct BatUptimeSample {
+    uint32_t uptime_sec; // esp_timer 开机秒
+    uint16_t mv;
+    uint8_t level;
+    uint8_t flags;
+};
+static BatUptimeSample g_pending[BAT_PENDING_CAP]{};
+static int g_pending_count = 0;
+
 // UI 缓存
 static bool g_bat_ready = false;
 static char g_last_bat[8] = "";
@@ -56,6 +68,7 @@ static uint8_t g_chart_levels[24];
 static uint8_t g_chart_flags[24];
 static bool g_chart_valid[24];
 static bool g_chart_has_clock = false;
+static bool g_chart_has_data = false; // 墙钟日志或 uptime pending
 
 // 后台 WiFi + NTP（不阻塞主循环 / 不挡电量显示）
 enum class BatTimeSync : uint8_t {
@@ -179,6 +192,14 @@ static uint32_t batHourEpoch(const time_t now) {
     return static_cast<uint32_t>(now / 3600);
 }
 
+static uint32_t batUptimeSec() {
+    return static_cast<uint32_t>(esp_timer_get_time() / 1000000LL);
+}
+
+static uint32_t batUptimeHour(const uint32_t uptime_sec) {
+    return uptime_sec / 3600u;
+}
+
 static void batReadLive(uint8_t& level, uint16_t& mv) {
     int lv = M5Cardputer.Power.getBatteryLevel();
     if (lv < 0) {
@@ -299,10 +320,81 @@ static void batFillGap(const BatSample& before, const uint32_t now_hour, const u
     batUpsertHour(now_hour, now_level, now_mv, 0);
 }
 
+// 无时钟：按 uptime 小时写入 RAM pending（同小时覆盖）
+static void batRecordUptimePending(const uint8_t flags) {
+    uint8_t level = 0;
+    uint16_t mv = 0;
+    batReadLive(level, mv);
+    const uint32_t up = batUptimeSec();
+    const uint32_t hour_u = batUptimeHour(up);
+
+    if (g_pending_count > 0) {
+        BatUptimeSample& last = g_pending[g_pending_count - 1];
+        if (batUptimeHour(last.uptime_sec) == hour_u) {
+            if ((last.flags & BAT_FLAG_INTERP) == 0 && (flags & BAT_FLAG_INTERP) != 0) {
+                return;
+            }
+            last.uptime_sec = up;
+            last.mv = mv;
+            last.level = level;
+            last.flags = flags;
+            return;
+        }
+    }
+    if (g_pending_count >= BAT_PENDING_CAP) {
+        memmove(&g_pending[0], &g_pending[1], sizeof(g_pending[0]) * (BAT_PENDING_CAP - 1));
+        g_pending_count = BAT_PENDING_CAP - 1;
+    }
+    g_pending[g_pending_count++] = {up, mv, level, flags};
+}
+
+// 时钟就绪：uptime → hour_epoch 后写入环形日志
+static void batFlushPendingUptime() {
+    time_t now = 0;
+    if (g_pending_count == 0 || !batClockValid(&now)) {
+        return;
+    }
+    const uint32_t now_up = batUptimeSec();
+    BatSample prev{};
+    bool has_prev = false;
+    for (int i = 0; i < g_pending_count; i++) {
+        const BatUptimeSample& p = g_pending[i];
+        const uint32_t dt_sec = (now_up >= p.uptime_sec) ? (now_up - p.uptime_sec) : 0;
+        const time_t sample_sec = now - static_cast<time_t>(dt_sec);
+        if (sample_sec <= 1600000000) {
+            continue;
+        }
+        const uint32_t hour = batHourEpoch(sample_sec);
+        if (has_prev && hour > prev.hour_epoch + 1) {
+            batFillGap(prev, hour, p.level, p.mv);
+        } else {
+            batUpsertHour(hour, p.level, p.mv, p.flags);
+        }
+        prev = {hour, p.mv, p.level, p.flags};
+        has_prev = true;
+    }
+    g_pending_count = 0;
+    batSaveLog();
+}
+
+static bool batFindPendingHour(const uint32_t hour_u, BatUptimeSample& out) {
+    for (int i = 0; i < g_pending_count; i++) {
+        if (batUptimeHour(g_pending[i].uptime_sec) == hour_u) {
+            out = g_pending[i];
+            return true;
+        }
+    }
+    return false;
+}
+
 static void batRecordNow(const bool allow_gap_fill) {
     time_t now = 0;
     if (!batClockValid(&now)) {
+        batRecordUptimePending(0);
         return;
+    }
+    if (g_pending_count > 0) {
+        batFlushPendingUptime();
     }
     const uint32_t hour = batHourEpoch(now);
     uint8_t level = 0;
@@ -321,7 +413,7 @@ static void batRecordNow(const bool allow_gap_fill) {
 void initBatteryLog() {
     batLoadLog();
     g_log_loaded = true;
-    // 深睡重启：用当前读数补全 sleep 期间缺口
+    // 深睡重启：有时钟则补 sleep 缺口；无时钟则记一条 uptime pending
     batRecordNow(true);
 }
 
@@ -329,15 +421,28 @@ void batteryLogTick() {
     if (!g_log_loaded) {
         return;
     }
+
+    time_t now = 0;
+    const bool clock_ok = batClockValid(&now);
+    // 时钟刚可用：立刻回填 pending 并记当前点，不等整点
+    if (clock_ok && g_pending_count > 0) {
+        batRecordNow(true);
+    }
+
     const uint32_t ms = millis();
-    // 约每分钟检查一次是否跨整点
+    // 约每分钟检查一次是否跨整点 / uptime 小时
     if (g_last_tick_ms != 0 && (ms - g_last_tick_ms) < 60000) {
         return;
     }
     g_last_tick_ms = ms;
 
-    time_t now = 0;
-    if (!batClockValid(&now)) {
+    if (!clock_ok) {
+        const uint32_t hour_u = batUptimeHour(batUptimeSec());
+        if (g_pending_count > 0 &&
+            batUptimeHour(g_pending[g_pending_count - 1].uptime_sec) == hour_u) {
+            return;
+        }
+        batRecordUptimePending(0);
         return;
     }
     const uint32_t hour = batHourEpoch(now);
@@ -357,10 +462,16 @@ void batteryLogPrepareSleep(const BatterySleepMode mode) {
         mode == BatterySleepMode::Deep ? BAT_FLAG_SLEEP_DEEP : BAT_FLAG_SLEEP_LIGHT;
     time_t now = 0;
     if (batClockValid(&now)) {
+        if (g_pending_count > 0) {
+            batFlushPendingUptime();
+        }
         uint8_t level = 0;
         uint16_t mv = 0;
         batReadLive(level, mv);
         batUpsertHour(batHourEpoch(now), level, mv, sleep_flag);
+    } else {
+        // 浅睡 RAM 还在；深睡 pending 会丢
+        batRecordUptimePending(sleep_flag);
     }
     batSaveLog();
 }
@@ -403,17 +514,37 @@ static void batBuildChartCache() {
     memset(g_chart_flags, 0, sizeof(g_chart_flags));
     memset(g_chart_valid, 0, sizeof(g_chart_valid));
     g_chart_has_clock = false;
+    g_chart_has_data = false;
 
     time_t now = 0;
-    if (!batClockValid(&now)) {
+    if (batClockValid(&now)) {
+        g_chart_has_clock = true;
+        const uint32_t end_hour = batHourEpoch(now);
+        for (int i = 0; i < 24; i++) {
+            const uint32_t h = end_hour - static_cast<uint32_t>(23 - i);
+            BatSample s{};
+            if (batFindHour(h, s)) {
+                g_chart_levels[i] = s.level;
+                g_chart_flags[i] = s.flags;
+                g_chart_valid[i] = true;
+            }
+        }
         return;
     }
-    g_chart_has_clock = true;
-    const uint32_t end_hour = batHourEpoch(now);
+
+    // 无墙钟：用 uptime pending 画相对小时柱
+    if (g_pending_count == 0) {
+        return;
+    }
+    g_chart_has_data = true;
+    const uint32_t end_hour = batUptimeHour(batUptimeSec());
     for (int i = 0; i < 24; i++) {
-        const uint32_t h = end_hour - static_cast<uint32_t>(23 - i);
-        BatSample s{};
-        if (batFindHour(h, s)) {
+        const uint32_t rel = static_cast<uint32_t>(23 - i);
+        if (end_hour < rel) {
+            continue;
+        }
+        BatUptimeSample s{};
+        if (batFindPendingHour(end_hour - rel, s)) {
             g_chart_levels[i] = s.level;
             g_chart_flags[i] = s.flags;
             g_chart_valid[i] = true;
@@ -425,7 +556,7 @@ static void batDrawChart(const int x, const int y, const int w, const int bar_h)
     constexpr int n = 24;
     M5Cardputer.Display.fillRect(x, y, w, bar_h + 12, BLACK);
 
-    if (!g_chart_has_clock) {
+    if (!g_chart_has_clock && !g_chart_has_data) {
         M5Cardputer.Display.setTextSize(1);
         M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
         M5Cardputer.Display.setCursor(x, y + 4);
@@ -530,9 +661,9 @@ void enterBatteryApp() {
     g_last_vbus[0] = '\0';
     g_sync_state = BatTimeSync::Idle;
     g_sync_header_ms = 0;
-    // 无时钟则后台 NTP；有时钟则立刻补采样画图
+    // 立刻记点（无时钟进 pending）；无时钟则后台 NTP
+    batRecordNow(true);
     if (batClockValid()) {
-        batRecordNow(true);
         g_sync_state = BatTimeSync::Done;
     } else {
         g_sync_state = BatTimeSync::BeginWifi;
@@ -603,7 +734,7 @@ void updateBatteryApp() {
         batUpdateLine(y, "vbus", vbus, g_last_vbus, sizeof(g_last_vbus));
     }
 
-    // 时钟刚就绪：立刻记点并画历史；同步阶段变化时刷新占位文案
+    // 时钟刚就绪：回填 pending 并画历史；同步阶段变化时刷新占位文案
     batBuildChartCache();
     const bool clock_just_ready = !had_clock && g_chart_has_clock;
     if (clock_just_ready) {
@@ -611,7 +742,7 @@ void updateBatteryApp() {
         batRedrawChart();
         return;
     }
-    if (!g_chart_has_clock && prev_sync != g_sync_state) {
+    if (!g_chart_has_clock && !g_chart_has_data && prev_sync != g_sync_state) {
         batRedrawChart();
         return;
     }

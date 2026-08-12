@@ -4,6 +4,22 @@
 
 截图命名：`docs/public/shots/app_{app}_{子功能}.png`（实拍自设备 `Fn+s`）。全部实拍见 [截图总览](/apps/shots)（无侧栏宽页）。
 
+## 基础操作
+
+多数界面共用下列按键；各 App 专属键见对应文档。更完整说明见 [全局快捷键](/guide/shortcuts)。
+
+| 按键 | 作用 |
+|------|------|
+| 字母键 | 主菜单进入对应 App |
+| `ESC` / `GO`（侧键） | 返回主菜单；Help 打开时先关闭 Help |
+| `h` | 任意界面打开 / 关闭 Help |
+| `;` `,` / ↑ / ← | 上一页 |
+| `.` `/` / ↓ / → | 下一页 |
+| `[` `]` | 部分列表 / 宫格翻页 |
+| `Fn` + `s` | 截图 |
+
+例外：[Keyboard](./hid-keyboard) 把 `` ` `` 发给主机 Esc，退出用 **长按 BtnGO**；Help 为 `Fn` + `h`，避免误发给主机。
+
 ## 主菜单
 
 更多说明见 [入门 · 主菜单](/guide/getting-started#主菜单)。
@@ -64,4 +80,4 @@
 | 键 | App | 说明 |
 |----|-----|------|
 | `g` | [Mini Games](./mini-games) | [硬币](./coin-toss)、[双摆](./double-pendulum)、[抽奖轮](./prize-wheel)、[Dice](./dice)、[牛顿摆](./newton-cradle)、[Neon FX](./neon-fx)、[曲线](./curves)、[扫雷](./minesweeper)、[贪吃蛇](./snake)、[生命游戏](./conway-life)、[代码雨](./matrix)、[丝波](./wave)、[粒子时钟](./particle-clock)、[利萨茹](./lissa) |
-| `h` | [Hardware Test](./hardware-test) | Display、IMU、Font、Icons、LED、BLE、I2C、第 2 页 [Mic](./mic) |
+| `h` | [Hardware Test](./hardware-test) | [Display](./display)、[IMU](./imu)、[Font](./font)、[Icons](./icons)、[LED](./rgb-led)、[BLE](./ble)、[I2C](./i2c)、第 2 页 [Mic](./mic) |
