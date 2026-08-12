@@ -23,13 +23,13 @@ app_{app}_{子功能}.png
 - app_mijia_info.png（设备信息）
 - app_mijia_th_work.png / app_mijia_quick_panel.png
 - app_mijia_masterroom_on.png / app_mijia_masterroom_off.png / app_mijia_outside.png（灯）
-- app_mijia_desklamp.png / app_mijia_fan.png / app_mijia_fryer.png / app_mijia_ble_switch.png
-- app_acauto_main.png / app_acauto_running.png / app_acauto_config.png
+- app_mijia_desklamp.png / app_mijia_fan.png / app_mijia_fryer.png / app_mijia_fryer_cooking.png / app_mijia_ble_switch.png
+- app_acauto_001.png / app_acauto_002.png / app_acauto_003.png / app_acauto_config.png
 
 ### Config / WiFi / Battery / Cursor
 - app_config_lan.png / app_config_ap.png / app_config_help.png
 - app_wifi_saved.png / app_wifi_scanner.png / app_wifi_input_password.png
-- app_battery_001.png
+- app_battery.png
 - app_cursor_summary.png / app_cursor_last.png
 - app_cursor_7d.png / app_cursor_24d.png / app_cursor_30d.png
 

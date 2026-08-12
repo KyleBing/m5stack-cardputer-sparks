@@ -47,6 +47,22 @@ Device captures (`Fn+s`), sorted by filename.
 </figure>
 
 <figure class="shot-item">
+<img src="/shots/app_acauto_001.png" alt="app_acauto_001.png" />
+<figcaption>app_acauto_001.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_acauto_002.png" alt="app_acauto_002.png" />
+<figcaption>app_acauto_002.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_acauto_003.png" alt="app_acauto_003.png" />
+<figcaption>app_acauto_003.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_acauto_config.png" alt="app_acauto_config.png" />
+<figcaption>app_acauto_config.png</figcaption>
+</figure>
+<figure class="shot-item">
 <img src="/shots/app_acauto_main.png" alt="app_acauto_main.png" />
 <figcaption>app_acauto_main.png</figcaption>
 </figure>
@@ -55,17 +71,10 @@ Device captures (`Fn+s`), sorted by filename.
 <figcaption>app_acauto_running.png</figcaption>
 </figure>
 <figure class="shot-item">
-<img src="/shots/app_acauto_config.png" alt="app_acauto_config.png" />
-<figcaption>app_acauto_config.png</figcaption>
-</figure>
-<figure class="shot-item">
 <img src="/shots/app_battery.png" alt="app_battery.png" />
 <figcaption>app_battery.png</figcaption>
 </figure>
-<figure class="shot-item">
-<img src="/shots/app_battery_001.png" alt="app_battery_001.png" />
-<figcaption>app_battery_001.png</figcaption>
-</figure>
+
 
 <figure class="shot-item">
 <img src="/shots/app_hidkeyboard_main.png" alt="app_hidkeyboard_main.png" />
@@ -332,6 +341,10 @@ Device captures (`Fn+s`), sorted by filename.
 <figure class="shot-item">
 <img src="/shots/app_mijia_fryer.png" alt="app_mijia_fryer.png" />
 <figcaption>app_mijia_fryer.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_mijia_fryer_cooking.png" alt="app_mijia_fryer_cooking.png" />
+<figcaption>app_mijia_fryer_cooking.png</figcaption>
 </figure>
 <figure class="shot-item">
 <img src="/shots/app_mijia_info.png" alt="app_mijia_info.png" />

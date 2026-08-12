@@ -48,6 +48,7 @@
 
 ![mijia-fan](/shots/app_mijia_fan.png)
 ![mijia-fryer](/shots/app_mijia_fryer.png)
+![mijia-fryer-cooking](/shots/app_mijia_fryer_cooking.png)
 ![mijia-ble-switch](/shots/app_mijia_ble_switch.png)
 
 </div>
