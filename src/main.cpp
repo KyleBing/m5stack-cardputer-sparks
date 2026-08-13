@@ -2608,8 +2608,7 @@ static void drawI2cScanApp(m5::I2C_Class& bus, const char* title, const bool int
     constexpr int dot_size = 4; // 行前 4x4 圆点
     const int text_x = x + dot_size + 4;
     constexpr int addr_w = 36;
-    // Ex 右侧列窄一些：芯片名缩短占位
-    const int role_x = internal_bus ? (text_x + addr_w + 52) : (text_x + addr_w + 44);
+    const int list_right = I2C_SCREEN_W - edge;
     int count = 0;
     int shown = 0;
     for (int addr = 8; addr < 0x78; ++addr) {
@@ -2631,13 +2630,19 @@ static void drawI2cScanApp(m5::I2C_Class& bus, const char* title, const bool int
         M5Cardputer.Display.setCursor(text_x, y);
         M5Cardputer.Display.print(addr_text);
 
-        M5Cardputer.Display.setTextColor(internal_bus ? APP_COLOR_VALUE : APP_COLOR_HINT, BLACK);
+        // RDA5807M / TEA5767 等长名按实际宽度画，避免固定列宽截断。
+        const char* chip = hint != nullptr ? hint->chip : "--";
+        const char* role = hint != nullptr ? hint->role : "unknown";
+        M5Cardputer.Display.setTextColor(APP_COLOR_VALUE, BLACK);
         M5Cardputer.Display.setCursor(text_x + addr_w, y);
-        M5Cardputer.Display.print(hint != nullptr ? hint->chip : "--");
+        M5Cardputer.Display.print(chip);
 
-        M5Cardputer.Display.setTextColor(I2C_COLOR_GRAY, BLACK);
-        M5Cardputer.Display.setCursor(role_x, y);
-        M5Cardputer.Display.print(hint != nullptr ? hint->role : "unknown");
+        const int role_x = text_x + addr_w + M5Cardputer.Display.textWidth(chip) + 6;
+        if (role_x + M5Cardputer.Display.textWidth(role) <= list_right) {
+            M5Cardputer.Display.setTextColor(I2C_COLOR_GRAY, BLACK);
+            M5Cardputer.Display.setCursor(role_x, y);
+            M5Cardputer.Display.print(role);
+        }
         y += row_h;
         ++shown;
     }

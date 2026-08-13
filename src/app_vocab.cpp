@@ -320,6 +320,89 @@ static void drawVocabStatus(const char* message, const char* detail, const uint1
     M5Cardputer.Display.setTextFont(1);
 }
 
+// 中文 14px 行高再加 2px，避免自动换行与英文字高重叠。
+static constexpr int VOCAB_CN_LINE_GAP = 2;
+static constexpr int VOCAB_KNOWN_BAR_H = 6;
+static constexpr int VOCAB_KNOWN_BAR_GAP = 4;
+
+static const char* nextUtf8Char(const char* p) {
+    if (p == nullptr || *p == '\0') {
+        return p;
+    }
+    const unsigned char c = static_cast<unsigned char>(*p);
+    if ((c & 0x80) == 0) {
+        return p + 1;
+    }
+    if ((c & 0xE0) == 0xC0) {
+        return p + 2;
+    }
+    if ((c & 0xF0) == 0xE0) {
+        return p + 3;
+    }
+    if ((c & 0xF8) == 0xF0) {
+        return p + 4;
+    }
+    return p + 1;
+}
+
+// 按当前中文字体宽度手动折行，行距 = fontHeight + 2px。
+static int drawWrappedCnText(const int x, int y, const int max_w, const int max_y, const char* text,
+                             const uint16_t color) {
+    if (text == nullptr || text[0] == '\0') {
+        return y;
+    }
+    auto& d = M5Cardputer.Display;
+    d.setFont(&fonts::efontCN_14);
+    d.setTextSize(1);
+    d.setTextColor(color, BLACK);
+    d.setTextWrap(false, false);
+    const int line_h = d.fontHeight() + VOCAB_CN_LINE_GAP;
+
+    const char* p = text;
+    char line[192];
+    int line_len = 0;
+    line[0] = '\0';
+
+    auto flushLine = [&]() {
+        if (line_len <= 0) {
+            return;
+        }
+        if (y + d.fontHeight() <= max_y) {
+            d.setCursor(x, y);
+            d.print(line);
+        }
+        y += line_h;
+        line_len = 0;
+        line[0] = '\0';
+    };
+
+    while (*p != '\0') {
+        const char* next = nextUtf8Char(p);
+        const int ch_len = static_cast<int>(next - p);
+        if (ch_len <= 0) {
+            break;
+        }
+        if (line_len + ch_len >= static_cast<int>(sizeof(line))) {
+            flushLine();
+        }
+        memcpy(line + line_len, p, static_cast<size_t>(ch_len));
+        line[line_len + ch_len] = '\0';
+        if (line_len > 0 && d.textWidth(line) > max_w) {
+            line[line_len] = '\0';
+            flushLine();
+            memcpy(line, p, static_cast<size_t>(ch_len));
+            line[ch_len] = '\0';
+            line_len = ch_len;
+        } else {
+            line_len += ch_len;
+        }
+        p = next;
+    }
+    flushLine();
+    d.setTextFont(1);
+    return y;
+}
+
 static void drawVocabHelp() {
     int y = drawAppHelpBegin("Vocab");
     constexpr int x = APP_HELP_CONTENT_X;
@@ -345,42 +428,48 @@ static void drawVocabApp(const bool full_init) {
     M5Cardputer.Display.fillScreen(BLACK);
     g_screen_ready = true;
 
-    // 文件名和中文释义统一使用中文 14px 字体。
-    M5Cardputer.Display.setFont(&fonts::efontCN_14);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-    M5Cardputer.Display.setCursor(APP_HELP_CONTENT_X, APP_HELP_EDGE);
-    if (g_dict_count > 0) {
-        M5Cardputer.Display.print(g_dicts[g_dict_idx].name);
-    } else {
-        M5Cardputer.Display.print("no file");
-    }
-    M5Cardputer.Display.setTextFont(1);
+    const int x = APP_HELP_CONTENT_X;
+    const int screen_w = M5Cardputer.Display.width();
+    const int screen_h = M5Cardputer.Display.height();
+    const int max_w = screen_w - x - APP_HELP_EDGE;
 
-    int y = 24;
+    // 词库标题用黄字；中文行距与释义一致。
+    const char* title = (g_dict_count > 0) ? g_dicts[g_dict_idx].name : "no file";
+    int y = drawWrappedCnText(x, APP_HELP_EDGE, max_w, screen_h, title, YELLOW);
+
+    M5Cardputer.Display.setTextFont(1);
+    M5Cardputer.Display.setTextSize(1);
     char line_buf[24];
     snprintf(line_buf, sizeof(line_buf), "%d/%d", g_line_count > 0 ? g_cur_line + 1 : 0, g_line_count);
-    drawInfoLineAt(APP_HELP_CONTENT_X, y, "line", line_buf, 1);
-
-    y += INFO_LINE_H;
     char known_buf[24];
     const int pct = g_line_count > 0 ? (g_known_count * 100) / g_line_count : 0;
     snprintf(known_buf, sizeof(known_buf), "%d (%d%%)", g_known_count, pct);
-    drawInfoLineAt(APP_HELP_CONTENT_X, y, "known", known_buf, 1);
 
-    y += INFO_LINE_H + 5;
+    // line / known 同一行，右侧进度条表示已会比例。
+    M5Cardputer.Display.setTextColor(INFO_LABEL_COLOR, BLACK);
+    M5Cardputer.Display.setCursor(x, y);
+    M5Cardputer.Display.print("line: ");
+    M5Cardputer.Display.setTextColor(INFO_VALUE_COLOR, BLACK);
+    M5Cardputer.Display.print(line_buf);
+    const int known_x = M5Cardputer.Display.getCursorX() + 10;
+    M5Cardputer.Display.setTextColor(INFO_LABEL_COLOR, BLACK);
+    M5Cardputer.Display.setCursor(known_x, y);
+    M5Cardputer.Display.print("known: ");
+    M5Cardputer.Display.setTextColor(INFO_VALUE_COLOR, BLACK);
+    M5Cardputer.Display.print(known_buf);
+
+    y += INFO_LINE_H;
+    drawPercentBar(x, y, max_w, VOCAB_KNOWN_BAR_H, pct,
+                   pct > 0 ? APP_COLOR_OK : APP_COLOR_MUTED);
+    y += VOCAB_KNOWN_BAR_H + VOCAB_KNOWN_BAR_GAP;
+
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(bitIsKnown(g_cur_line) ? APP_COLOR_OK : APP_COLOR_VALUE, BLACK);
-    M5Cardputer.Display.setCursor(APP_HELP_CONTENT_X, y);
+    M5Cardputer.Display.setCursor(x, y);
     M5Cardputer.Display.print(g_cur_word);
 
-    y += INFO_LINE_H_2X + 7;
-    M5Cardputer.Display.setFont(&fonts::efontCN_14);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(INFO_LABEL_COLOR, BLACK);
-    M5Cardputer.Display.setCursor(APP_HELP_CONTENT_X, y);
-    M5Cardputer.Display.print(g_cur_meaning);
-    M5Cardputer.Display.setTextFont(1);
+    y += INFO_LINE_H_2X + 4;
+    (void)drawWrappedCnText(x, y, max_w, screen_h, g_cur_meaning.c_str(), INFO_LABEL_COLOR);
 }
 
 static bool rebuildIndexForDict(const int dict_idx) {

@@ -6,6 +6,24 @@
 
 ---
 
+## 2026-08-13
+
+### 新增
+
+- **Radio**（`r`）：Grove FM 收音机，**TEA5767** 与 **RDA5807M** 共用一套 UI；电台列表 / 自动搜台（`S`）/ 长按连续调谐；RDA 支持音量、Tuner 设置与 RDS
+- **Vocab**（`l`）：英语单词学习；LittleFS `/vocabulary` 多词库；顺序 / 随机未会词；`O`/`K` 标记已会并自动保存
+- **词库**：内置四级乱序词汇表 `data/vocabulary/3 四级-乱序.txt`
+
+### 改进
+
+- **Radio / Vocab Help**：Time 风格全屏 Help；ESC 先关 Help / 电台列表 / 搜台，不直接退出 App
+- **I2C**：InI2 / ExI2 展示 Grove / EXT 引脚图（彩色焊盘 + 白字）；扫描列表按芯片名实际宽度排 role，避免 `RDA5807M` / `TEA5767` 等长名被截断；ExI2C 补收音机芯片提示
+- **Vocab UI**：中文标题 / 释义按字体宽度手动折行（行距 +2px）；`line` / `known` 同一行，下方进度条显示已会比例
+- **Mini Games / Hardware Test**：任意页可用字母快捷键直接打开子项
+- **文档**：同步 I2C / Hardware Test / Mini Games 中英文页
+
+---
+
 ## 2026-08-12
 
 ### 改进
