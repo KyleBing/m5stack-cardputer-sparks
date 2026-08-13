@@ -2356,6 +2356,9 @@ static constexpr int I2C_SCREEN_W = 240;
 static constexpr int I2C_SCREEN_H = 135;
 // GND / GPIO / 未知设备灰：比 DARKGREY 更亮，黑底上更易读
 static constexpr uint16_t I2C_COLOR_GRAY = 0xC618; // ~#C5C5C5
+// 常规口焊盘（GND / GPIO）：暗于 WHITE，突出 5V / SDA / SCL
+static constexpr uint16_t I2C_COLOR_PAD_MUTED = 0x8410; // ~#808080
+static constexpr int I2C_GROVE_PAD_GAP = 1;             // Ex Grove 插口间距
 
 // 端子外框+插口都用引脚色；标签一律白色
 static void drawI2cPinPad(const int px, const int py, const uint16_t color) {
@@ -2400,41 +2403,57 @@ static void drawI2cPinLead(const int pad_x, const int pad_y, const int label_x, 
 static int drawI2cGrovePinout(const int x, const int y) {
     auto& d = M5Cardputer.Display;
     constexpr int rows = 4;
-    static constexpr const char* kLabels[rows] = {"GND", "5V", "G2", "G1"};
-    // G2=SDA 青、G1=SCL 黄，与 EXT 一致
-    static constexpr uint16_t kColors[rows] = {
-        WHITE, APP_COLOR_ERROR, CYAN, YELLOW};
+    // gpio 白字；func 与焊盘同色（G2=SDA 青、G1=SCL 黄）
+    struct GrovePin {
+        const char* gpio;
+        const char* func;
+        uint16_t pad;
+        uint16_t func_color;
+    };
+    static constexpr GrovePin kPins[rows] = {
+        {"GND", nullptr, I2C_COLOR_PAD_MUTED, WHITE},
+        {"5V", nullptr, APP_COLOR_ERROR, WHITE},
+        {"G2", "SDA", CYAN, CYAN},
+        {"G1", "SCL", YELLOW, YELLOW},
+    };
 
     d.setTextSize(1);
     int max_tw = 0;
-    int tws[rows]{};
     for (int i = 0; i < rows; ++i) {
-        tws[i] = d.textWidth(kLabels[i]);
-        if (tws[i] > max_tw) {
-            max_tw = tws[i];
+        int tw = d.textWidth(kPins[i].gpio);
+        if (kPins[i].func != nullptr) {
+            tw += d.textWidth(" ") + d.textWidth(kPins[i].func);
+        }
+        if (tw > max_tw) {
+            max_tw = tw;
         }
     }
 
     const int label_x = x + I2C_PIN_CELL + I2C_PIN_LEAD_CLEAR;
+    const int stride = I2C_PIN_CELL + I2C_GROVE_PAD_GAP;
     for (int i = 0; i < rows; ++i) {
-        const int py = y + i * I2C_PIN_CELL;
-        const int pad_cx = x + I2C_PIN_CELL / 2;
+        const int py = y + i * stride;
         const int pad_cy = py + I2C_PIN_CELL / 2;
         const int text_y = pad_cy - I2C_PIN_FONT_H / 2;
-        const uint16_t c = kColors[i];
+        const uint16_t c = kPins[i].pad;
 
         drawI2cPinPad(x, py, c);
         // 从焊盘右缘中点 → 标签左缘中点（可斜）
         drawI2cPinLead(x + I2C_PIN_CELL - 1, pad_cy, label_x, text_y + I2C_PIN_FONT_H / 2, c);
         d.setTextColor(WHITE, BLACK);
         d.setCursor(label_x, text_y);
-        d.print(kLabels[i]);
+        d.print(kPins[i].gpio);
+        if (kPins[i].func != nullptr) {
+            d.print(" ");
+            d.setTextColor(kPins[i].func_color, BLACK);
+            d.print(kPins[i].func);
+        }
     }
     return I2C_PIN_CELL + I2C_PIN_LEAD_CLEAR + max_tw;
 }
 
 static int i2cGrovePinoutHeight() {
-    return 4 * I2C_PIN_CELL;
+    return 4 * I2C_PIN_CELL + 3 * I2C_GROVE_PAD_GAP;
 }
 
 // InI2：俯视 EXT 2.54-14P（双排 7×2，水平居中）；返回占用高度
@@ -2458,7 +2477,7 @@ static int drawI2cExt14Pinout(const int y) {
         if (strcmp(name, "SCL") == 0) {
             return YELLOW;
         }
-        return WHITE;
+        return I2C_COLOR_PAD_MUTED; // GND / GPIO 暗灰，突出电源与 I2C
     };
 
     d.setTextSize(1);
