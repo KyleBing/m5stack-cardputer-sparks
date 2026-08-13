@@ -24,6 +24,20 @@ enum class RadioView {
     Main,
     Stations,
     Rename,
+    Tuner,
+};
+
+enum class TunerItem : uint8_t {
+    Band = 0,
+    Deemph,
+    SeekMode,
+    SeekStop,
+    Injection,
+    SoftMute,
+    HighCut,
+    Snc,
+    ChMute,
+    Count,
 };
 
 static Tea5767 g_radio;
@@ -34,16 +48,39 @@ static int g_canvas_h = 0;
 static bool g_ready = false;
 static bool g_help = false;
 static int g_help_page = 0;
-static constexpr int RADIO_HELP_PAGES = 2;
+static constexpr int RADIO_HELP_PAGES = 3;
 static RadioView g_view = RadioView::Main;
 static bool g_muted = false;
 static bool g_mono = false;
 static bool g_seeking = false;
+static bool g_auto_scanning = false;
+static bool g_seek_up = true;
+static bool g_seek_hw = false;
+static bool g_seek_wrapped = false;
 static uint16_t g_freq = 9850; // 98.50 MHz
 static uint8_t g_rssi = 0;
+static uint8_t g_if_counter = 0;
+static uint8_t g_chip_id = 0;
 static bool g_stereo = false;
 static uint32_t g_seek_anim_ms = 0;
+static uint32_t g_seek_settle_ms = 0;
+static uint32_t g_seek_hw_start_ms = 0;
+static uint16_t g_seek_origin = 0;
 static int g_seek_frame = 0;
+static int g_scan_found_count = 0;
+static uint16_t g_scan_last_found = 0;
+static constexpr uint32_t RADIO_SEEK_SETTLE_MS = 60;
+static constexpr uint32_t RADIO_HW_SEEK_TIMEOUT_MS = 8000;
+static bool g_japan = false;
+static bool g_deemph75 = false;
+static bool g_hw_seek_pref = false; // false=软件步进，true=芯片 SM
+static bool g_hlsi_high = true;
+static bool g_soft_mute = true;
+static bool g_hcc = true;
+static bool g_snc = true;
+static Tea5767::SeekStop g_ssl = Tea5767::SeekStop::Mid;
+static Tea5767::ChannelMute g_ch_mute = Tea5767::ChannelMute::Off;
+static int g_tuner_sel = 0;
 static RadioPreset g_presets[RADIO_PRESET_COUNT]{};
 static int g_sel_slot = 0;
 static int g_active_slot = -1;
@@ -54,9 +91,34 @@ static uint32_t g_tune_repeat_last_ms = 0;
 static constexpr uint32_t RADIO_TUNE_REPEAT_DELAY_MS = 320;
 static constexpr uint32_t RADIO_TUNE_REPEAT_RATE_MS = 90;
 
+static uint16_t radioFreqMin() {
+    return g_japan ? Tea5767::FREQ_JP_MIN : Tea5767::FREQ_EU_MIN;
+}
+
+static uint16_t radioFreqMax() {
+    return g_japan ? Tea5767::FREQ_JP_MAX : Tea5767::FREQ_EU_MAX;
+}
+
+static uint8_t seekRssiThreshold() {
+    switch (g_ssl) {
+        case Tea5767::SeekStop::Low:
+            return 5;
+        case Tea5767::SeekStop::High:
+            return 10;
+        case Tea5767::SeekStop::Mid:
+        default:
+            return 7;
+    }
+}
+
 static int mapFreqToX(const int x0, const int w, const uint16_t freq_centi) {
     const long in = static_cast<long>(freq_centi);
-    return x0 + static_cast<int>((in - Tea5767::FREQ_MIN) * w / (Tea5767::FREQ_MAX - Tea5767::FREQ_MIN));
+    const long lo = radioFreqMin();
+    const long span = static_cast<long>(radioFreqMax()) - lo;
+    if (span <= 0) {
+        return x0;
+    }
+    return x0 + static_cast<int>((in - lo) * w / span);
 }
 
 static void formatFreqText(const uint16_t freq_centi, char* out, const size_t out_len) {
@@ -66,7 +128,7 @@ static void formatFreqText(const uint16_t freq_centi, char* out, const size_t ou
 }
 
 static bool isPresetValid(const RadioPreset& preset) {
-    return preset.freq >= Tea5767::FREQ_MIN && preset.freq <= Tea5767::FREQ_MAX;
+    return preset.freq >= radioFreqMin() && preset.freq <= radioFreqMax();
 }
 
 static void presetLabel(const RadioPreset& preset, char* out, const size_t out_len) {
@@ -114,6 +176,78 @@ static void saveRadioPreset(const int idx) {
     snprintf(key, sizeof(key), "n%d", idx);
     prefs.putString(key, g_presets[idx].name);
     prefs.end();
+}
+
+static void loadTunerSettings() {
+    Preferences prefs;
+    if (!prefs.begin("radio", true)) {
+        return;
+    }
+    g_japan = prefs.getBool("jp", false);
+    g_deemph75 = prefs.getBool("dtc75", false);
+    g_hw_seek_pref = prefs.getBool("hwseek", false);
+    g_hlsi_high = prefs.getBool("hlsi", true);
+    g_soft_mute = prefs.getBool("smute", true);
+    g_hcc = prefs.getBool("hcc", true);
+    g_snc = prefs.getBool("snc", true);
+    const uint8_t ssl = prefs.getUChar("ssl", 2);
+    if (ssl == 1) {
+        g_ssl = Tea5767::SeekStop::Low;
+    } else if (ssl == 3) {
+        g_ssl = Tea5767::SeekStop::High;
+    } else {
+        g_ssl = Tea5767::SeekStop::Mid;
+    }
+    const uint8_t ch = prefs.getUChar("chmute", 0);
+    if (ch == 1) {
+        g_ch_mute = Tea5767::ChannelMute::Left;
+    } else if (ch == 2) {
+        g_ch_mute = Tea5767::ChannelMute::Right;
+    } else {
+        g_ch_mute = Tea5767::ChannelMute::Off;
+    }
+    prefs.end();
+}
+
+static void saveTunerSettings() {
+    Preferences prefs;
+    if (!prefs.begin("radio", false)) {
+        return;
+    }
+    prefs.putBool("jp", g_japan);
+    prefs.putBool("dtc75", g_deemph75);
+    prefs.putBool("hwseek", g_hw_seek_pref);
+    prefs.putBool("hlsi", g_hlsi_high);
+    prefs.putBool("smute", g_soft_mute);
+    prefs.putBool("hcc", g_hcc);
+    prefs.putBool("snc", g_snc);
+    prefs.putUChar("ssl", static_cast<uint8_t>(g_ssl));
+    prefs.putUChar("chmute", static_cast<uint8_t>(g_ch_mute));
+    prefs.end();
+}
+
+static void applyTunerToChip() {
+    if (!g_ready) {
+        return;
+    }
+    g_radio.setJapanBand(g_japan);
+    g_radio.setDeemphasis75(g_deemph75);
+    g_radio.setHighSideInjection(g_hlsi_high);
+    g_radio.setSoftMute(g_soft_mute);
+    g_radio.setHighCut(g_hcc);
+    g_radio.setStereoNoiseCancel(g_snc);
+    g_radio.setSeekStop(g_ssl);
+    g_radio.setChannelMute(g_ch_mute);
+    g_radio.setMute(g_muted);
+    g_radio.setMono(g_mono);
+}
+
+static void clampFreqToBand() {
+    const uint16_t lo = radioFreqMin();
+    const uint16_t hi = radioFreqMax();
+    if (g_freq < lo || g_freq > hi) {
+        g_freq = static_cast<uint16_t>((static_cast<uint32_t>(lo) + hi) / 2);
+    }
 }
 
 // 点阵字绘制到离屏 canvas（与 drawDotText 同风格）
@@ -169,9 +303,11 @@ static void drawDial(const uint16_t freq_centi) {
     radioCanvas.drawFastHLine(0, dial_y, dial_w, APP_COLOR_MUTED);
     radioCanvas.drawFastHLine(0, dial_bottom, dial_w, APP_COLOR_MUTED);
 
-    for (int mhz = 88; mhz <= 108; ++mhz) {
+    const int mhz_lo = static_cast<int>(radioFreqMin() / 100);
+    const int mhz_hi = static_cast<int>(radioFreqMax() / 100);
+    for (int mhz = mhz_lo; mhz <= mhz_hi; ++mhz) {
         const uint16_t tick_freq = static_cast<uint16_t>(mhz * 100);
-        if (tick_freq < Tea5767::FREQ_MIN || tick_freq > Tea5767::FREQ_MAX) {
+        if (tick_freq < radioFreqMin() || tick_freq > radioFreqMax()) {
             continue;
         }
         const bool major = (mhz % 2 == 0);
@@ -283,6 +419,20 @@ static void drawStatusBadges(const int x, const int y) {
         radioCanvas.setTextColor(APP_COLOR_HINT, BLACK);
         return;
     }
+    if (g_muted) {
+        cx += drawTextBadgeOnCanvas(cx, y, "MUTE", 1) + 2;
+        radioCanvas.setTextSize(1);
+        radioCanvas.setTextColor(APP_COLOR_HINT, BLACK);
+    } else if (g_ch_mute == Tea5767::ChannelMute::Left) {
+        cx += drawTextBadgeOnCanvas(cx, y, "ML", 1) + 2;
+        radioCanvas.setTextSize(1);
+        radioCanvas.setTextColor(APP_COLOR_HINT, BLACK);
+    } else if (g_ch_mute == Tea5767::ChannelMute::Right) {
+        cx += drawTextBadgeOnCanvas(cx, y, "MR", 1) + 2;
+        radioCanvas.setTextSize(1);
+        radioCanvas.setTextColor(APP_COLOR_HINT, BLACK);
+    }
+
     if (g_stereo && !g_mono) {
         cx += drawTextBadgeOnCanvas(cx, y, "ST", 1) + 2;
         radioCanvas.setTextSize(1);
@@ -293,10 +443,16 @@ static void drawStatusBadges(const int x, const int y) {
         radioCanvas.setTextColor(APP_COLOR_HINT, BLACK);
     }
 
+    if (g_japan) {
+        cx += drawTextBadgeOnCanvas(cx, y, "JP", 1) + 2;
+        radioCanvas.setTextSize(1);
+        radioCanvas.setTextColor(APP_COLOR_HINT, BLACK);
+    }
+
     if (g_seeking) {
         radioCanvas.setTextColor(APP_COLOR_LABEL, BLACK);
         radioCanvas.setCursor(cx + 4, y + 1);
-        radioCanvas.print("SEEK");
+        radioCanvas.print(g_seek_hw ? "SEEK HW" : "SEEK");
     }
 }
 
@@ -336,7 +492,7 @@ static void drawNoModuleHint() {
     radioCanvas.print("No TEA5767");
     radioCanvas.setTextColor(APP_COLOR_HINT, BLACK);
     radioCanvas.setCursor(RADIO_UI_LEFT, 94);
-    radioCanvas.print("Connect to Ex I2C Port A");
+    radioCanvas.print("Grove G2/G1 or EXT G8/G9");
 }
 
 static void drawStationsList() {
@@ -426,9 +582,108 @@ static void drawRadioMain() {
     pushRadioFrame();
 }
 
+static const char* tunerItemLabel(const TunerItem item) {
+    switch (item) {
+        case TunerItem::Band:
+            return "Band";
+        case TunerItem::Deemph:
+            return "De-emph";
+        case TunerItem::SeekMode:
+            return "Seek";
+        case TunerItem::SeekStop:
+            return "Stop";
+        case TunerItem::Injection:
+            return "Inject";
+        case TunerItem::SoftMute:
+            return "SMute";
+        case TunerItem::HighCut:
+            return "HiCut";
+        case TunerItem::Snc:
+            return "SNC";
+        case TunerItem::ChMute:
+            return "MuteLR";
+        default:
+            return "";
+    }
+}
+
+static const char* tunerItemValue(const TunerItem item) {
+    switch (item) {
+        case TunerItem::Band:
+            return g_japan ? "JP 76-91" : "EU 87.5-108";
+        case TunerItem::Deemph:
+            return g_deemph75 ? "75us US" : "50us EU";
+        case TunerItem::SeekMode:
+            return g_hw_seek_pref ? "Chip SM" : "Soft";
+        case TunerItem::SeekStop:
+            if (g_ssl == Tea5767::SeekStop::Low) {
+                return "Lo ADC5";
+            }
+            if (g_ssl == Tea5767::SeekStop::High) {
+                return "Hi ADC10";
+            }
+            return "Mid ADC7";
+        case TunerItem::Injection:
+            return g_hlsi_high ? "High" : "Low";
+        case TunerItem::SoftMute:
+            return g_soft_mute ? "On" : "Off";
+        case TunerItem::HighCut:
+            return g_hcc ? "On" : "Off";
+        case TunerItem::Snc:
+            return g_snc ? "On" : "Off";
+        case TunerItem::ChMute:
+            if (g_ch_mute == Tea5767::ChannelMute::Left) {
+                return "Left";
+            }
+            if (g_ch_mute == Tea5767::ChannelMute::Right) {
+                return "Right";
+            }
+            return "Off";
+        default:
+            return "";
+    }
+}
+
+static void drawTunerSettings() {
+    radioCanvas.fillSprite(BLACK);
+    radioCanvas.setTextSize(1);
+    radioCanvas.setTextColor(APP_COLOR_LABEL, BLACK);
+    constexpr int title_y = 2;
+    radioCanvas.setCursor(RADIO_UI_LEFT, title_y);
+    radioCanvas.print("Tuner");
+
+    constexpr int row_h = 11;
+    constexpr int list_y = title_y + 11;
+    const int n = static_cast<int>(TunerItem::Count);
+    for (int i = 0; i < n; ++i) {
+        const int y = list_y + i * row_h;
+        const bool sel = (i == g_tuner_sel);
+        if (sel) {
+            radioCanvas.fillRect(0, y - 1, g_canvas_w, row_h, APP_COLOR_LABEL);
+        }
+        radioCanvas.setTextColor(sel ? BLACK : APP_COLOR_HINT, sel ? APP_COLOR_LABEL : BLACK);
+        radioCanvas.setCursor(RADIO_UI_LEFT, y);
+        radioCanvas.print(tunerItemLabel(static_cast<TunerItem>(i)));
+        radioCanvas.setCursor(RADIO_UI_LEFT + 52, y);
+        radioCanvas.print(tunerItemValue(static_cast<TunerItem>(i)));
+    }
+
+    radioCanvas.setTextColor(APP_COLOR_MUTED, BLACK);
+    radioCanvas.setCursor(RADIO_UI_LEFT, g_canvas_h - 10);
+    char footer[32];
+    snprintf(footer, sizeof(footer), "IF %u  ID %u  ` close", static_cast<unsigned>(g_if_counter),
+             static_cast<unsigned>(g_chip_id));
+    radioCanvas.print(footer);
+}
+
 static void drawRadioChrome() {
     if (g_view == RadioView::Stations || g_view == RadioView::Rename) {
         drawStationsList();
+        pushRadioFrame();
+        return;
+    }
+    if (g_view == RadioView::Tuner) {
+        drawTunerSettings();
         pushRadioFrame();
         return;
     }
@@ -439,21 +694,29 @@ static void drawHelpPage() {
     int y = drawAppHelpBegin("Radio");
     constexpr int x = APP_HELP_CONTENT_X;
     if (g_help_page == 0) {
-        y = drawAppHelpBadge(x, y, "- =", "tune 0.1 MHz");
+        y = drawAppHelpBadge(x, y, "-=", "tune 0.1 MHz");
         y = drawAppHelpArrows(x, y, "tune 0.1 MHz");
         y = drawAppHelpBadge(x, y, "[]", "seek station");
         y = drawAppHelpKey(x, y, 's', "auto scan + save");
-        y = drawAppHelpKey(x, y, 'm', "mute");
+        y = drawAppHelpBadge(x, y, "m o", "mute / mono");
         y = drawAppHelpBadge(x, y, "1-0", "recall preset");
-        y = drawAppHelpKey(x, y, 'l', "station list");
-    } else {
+        y = drawAppHelpBadge(x, y, "l t", "list / tuner");
+    } else if (g_help_page == 1) {
         y = drawAppHelpKey(x, y, 'r', "rename preset");
         y = drawAppHelpBadge(x, y, "=", "save freq to slot");
         y = drawAppHelpTextColored(x, y, "Dial", APP_COLOR_LABEL);
         y = drawAppHelpLabelText(x, y, "green", APP_COLOR_OK, " = saved preset");
         y = drawAppHelpLabelText(x, y, "cyan", APP_COLOR_LABEL, " = active preset");
+        y = drawAppHelpText(x, y, "Tuner: Enter cycles value");
         y = drawAppHelpText(x, y, "Audio out: module jack");
-        y = drawAppHelpText(x, y, "Antenna: module ANT");
+    } else {
+        y = drawAppHelpTextColored(x, y, "TEA5767", APP_COLOR_LABEL);
+        y = drawAppHelpText(x, y, "Band EU 87.5-108 / JP 76-91");
+        y = drawAppHelpText(x, y, "Seek Soft step or Chip SM");
+        y = drawAppHelpText(x, y, "Stop Lo/Mid/Hi = SSL");
+        y = drawAppHelpText(x, y, "HCC SNC SMute in tuner");
+        y = drawAppHelpText(x, y, "No volume register");
+        y = drawAppHelpText(x, y, "I2C Grove G2/G1 or EXT G8/G9");
     }
     drawAppHelpFooter(g_help_page, RADIO_HELP_PAGES);
 }
@@ -462,8 +725,13 @@ static void applyFrequency(const uint16_t freq_centi) {
     g_freq = freq_centi;
     if (g_ready) {
         g_radio.setFrequency(g_freq);
-        g_rssi = g_radio.getRssi();
-        g_stereo = g_radio.isStereo();
+        Tea5767::Status st{};
+        if (g_radio.readStatus(st)) {
+            g_rssi = st.rssi;
+            g_stereo = st.stereo;
+            g_if_counter = st.if_counter;
+            g_chip_id = st.chip_id;
+        }
     }
 }
 
@@ -472,34 +740,233 @@ static void tuneBySteps(const int steps) {
         return;
     }
     int next = static_cast<int>(g_freq) + steps * static_cast<int>(Tea5767::FREQ_STEP);
-    if (next < Tea5767::FREQ_MIN) {
-        next = Tea5767::FREQ_MIN;
+    if (next < static_cast<int>(radioFreqMin())) {
+        next = static_cast<int>(radioFreqMin());
     }
-    if (next > Tea5767::FREQ_MAX) {
-        next = Tea5767::FREQ_MAX;
+    if (next > static_cast<int>(radioFreqMax())) {
+        next = static_cast<int>(radioFreqMax());
     }
     applyFrequency(static_cast<uint16_t>(next));
     drawRadioChrome();
 }
 
-static void runSeek(const bool up) {
+static uint16_t nextSeekFreq(const uint16_t freq, const bool up) {
+    if (up) {
+        if (freq >= radioFreqMax()) {
+            return radioFreqMin();
+        }
+        return static_cast<uint16_t>(freq + Tea5767::FREQ_STEP);
+    }
+    if (freq <= radioFreqMin()) {
+        return radioFreqMax();
+    }
+    return static_cast<uint16_t>(freq - Tea5767::FREQ_STEP);
+}
+
+static void seekTuneTo(const uint16_t freq) {
+    g_freq = freq;
+    if (g_ready) {
+        g_radio.setFrequency(g_freq, false);
+    }
+    g_seek_settle_ms = millis();
+    drawRadioChrome();
+}
+
+static void finishSeek(const bool refresh_status = true) {
+    if (g_ready && g_radio.isSearching()) {
+        g_radio.abortSearch();
+    }
+    g_seeking = false;
+    g_auto_scanning = false;
+    g_seek_hw = false;
+    if (refresh_status && g_ready) {
+        Tea5767::Status st{};
+        if (g_radio.readStatus(st)) {
+            g_rssi = st.rssi;
+            g_stereo = st.stereo;
+            g_if_counter = st.if_counter;
+            g_chip_id = st.chip_id;
+            if (st.freq_centi >= radioFreqMin() && st.freq_centi <= radioFreqMax()) {
+                g_freq = st.freq_centi;
+            }
+        }
+    }
+    drawRadioChrome();
+}
+
+// 自动扫描收下当前频点；满 10 个返回 true
+static bool acceptScanStation(const uint16_t freq) {
+    if (g_scan_last_found != 0) {
+        const int diff = static_cast<int>(freq) - static_cast<int>(g_scan_last_found);
+        if (diff < static_cast<int>(Tea5767::FREQ_STEP) * 2) {
+            return false;
+        }
+    }
+    if (g_scan_found_count >= RADIO_PRESET_COUNT) {
+        return true;
+    }
+    g_presets[g_scan_found_count].freq = freq;
+    g_presets[g_scan_found_count].name[0] = '\0';
+    saveRadioPreset(g_scan_found_count);
+    g_scan_last_found = freq;
+    g_scan_found_count++;
+    return g_scan_found_count >= RADIO_PRESET_COUNT;
+}
+
+static void persistEmptyScanSlots() {
+    for (int i = g_scan_found_count; i < RADIO_PRESET_COUNT; ++i) {
+        saveRadioPreset(i);
+    }
+}
+
+static void completeAutoScan() {
+    persistEmptyScanSlots();
+    if (g_scan_found_count > 0) {
+        g_active_slot = 0;
+        g_sel_slot = 0;
+        applyFrequency(g_presets[0].freq);
+        finishSeek(false);
+        return;
+    }
+    g_active_slot = -1;
+    g_sel_slot = 0;
+    finishSeek(true);
+}
+
+// PLL 稳定后读 RSSI；够强则停（自动扫描则记台后继续）
+static void onSeekSettled() {
+    if (!g_ready) {
+        finishSeek(false);
+        return;
+    }
+    g_rssi = g_radio.getRssi();
+    g_stereo = g_radio.isStereo();
+
+    if (g_auto_scanning) {
+        if (g_rssi >= seekRssiThreshold()) {
+            if (acceptScanStation(g_freq)) {
+                completeAutoScan();
+                return;
+            }
+        }
+        const uint16_t nxt = nextSeekFreq(g_freq, true);
+        if (nxt == g_seek_origin) {
+            completeAutoScan();
+            return;
+        }
+        seekTuneTo(nxt);
+        return;
+    }
+
+    if (g_rssi >= seekRssiThreshold()) {
+        finishSeek(false);
+        return;
+    }
+    const uint16_t nxt = nextSeekFreq(g_freq, g_seek_up);
+    if (nxt == g_seek_origin) {
+        finishSeek(true);
+        return;
+    }
+    seekTuneTo(nxt);
+}
+
+static void startHwSearch(const bool up) {
+    g_seek_hw = true;
+    g_seek_up = up;
+    g_seek_hw_start_ms = millis();
+    g_seek_settle_ms = g_seek_hw_start_ms;
+    if (g_ready) {
+        g_radio.startSearch(up);
+    }
+    drawRadioChrome();
+}
+
+static void onHwSeekTick() {
+    if (!g_ready) {
+        finishSeek(false);
+        return;
+    }
+    Tea5767::Status st{};
+    if (!g_radio.readStatus(st)) {
+        return;
+    }
+    if (st.freq_centi >= radioFreqMin() && st.freq_centi <= radioFreqMax() &&
+        st.freq_centi != g_freq) {
+        g_freq = st.freq_centi;
+        drawRadioChrome();
+    }
+    g_rssi = st.rssi;
+    g_stereo = st.stereo;
+    g_if_counter = st.if_counter;
+    g_chip_id = st.chip_id;
+
+    const uint32_t now = millis();
+    if (now - g_seek_hw_start_ms < 80) {
+        return; // 刚启动时 RF 可能仍是上一次调谐就绪
+    }
+    const bool timeout = (now - g_seek_hw_start_ms >= RADIO_HW_SEEK_TIMEOUT_MS);
+    if (!st.ready && !st.band_limit && !timeout) {
+        return;
+    }
+
+    g_radio.abortSearch();
+    if (timeout) {
+        finishSeek(true);
+        return;
+    }
+    if (st.band_limit) {
+        if (g_auto_scanning) {
+            completeAutoScan();
+            return;
+        }
+        if (!g_seek_wrapped) {
+            g_seek_wrapped = true;
+            g_freq = g_seek_up ? radioFreqMin() : radioFreqMax();
+            g_radio.setFrequency(g_freq, false);
+            startHwSearch(g_seek_up);
+            return;
+        }
+        finishSeek(true);
+        return;
+    }
+
+    if (st.freq_centi >= radioFreqMin() && st.freq_centi <= radioFreqMax()) {
+        g_freq = st.freq_centi;
+    }
+    if (g_auto_scanning) {
+        if (acceptScanStation(g_freq)) {
+            completeAutoScan();
+            return;
+        }
+        const uint16_t nxt = nextSeekFreq(g_freq, true);
+        if (nxt == g_seek_origin || nxt < g_freq) {
+            completeAutoScan();
+            return;
+        }
+        g_radio.setFrequency(nxt, false);
+        g_freq = nxt;
+        startHwSearch(true);
+        return;
+    }
+    finishSeek(true);
+}
+
+static void beginSeek(const bool up) {
     if (!g_ready || g_seeking) {
         return;
     }
     g_seeking = true;
+    g_auto_scanning = false;
+    g_seek_up = up;
+    g_seek_origin = g_freq;
+    g_seek_wrapped = false;
     g_seek_anim_ms = millis();
-    drawRadioChrome();
-
-    const bool found = g_radio.seek(up);
-    g_freq = g_radio.getFrequency();
-    if (g_freq < Tea5767::FREQ_MIN) {
-        g_freq = 9850;
+    if (g_hw_seek_pref) {
+        startHwSearch(up);
+        return;
     }
-    g_rssi = g_radio.getRssi();
-    g_stereo = g_radio.isStereo();
-    g_seeking = false;
-    drawRadioChrome();
-    (void)found;
+    g_seek_hw = false;
+    seekTuneTo(nextSeekFreq(g_freq, up));
 }
 
 static bool isTuneDirectionStillHeld(const int dir) {
@@ -516,63 +983,33 @@ static bool isTuneDirectionStillHeld(const int dir) {
     return false;
 }
 
-// 自动扫频：从 87.5 往上搜，把结果写入 1-0 槽位
-static void runAutoScanAndSavePresets() {
+// 自动扫频：从 87.5 往上搜，把结果写入 1-0 槽位（非阻塞，由 update 步进）
+static void beginAutoScan() {
     if (!g_ready || g_seeking) {
         return;
     }
-    g_seeking = true;
-    g_seek_anim_ms = millis();
-    drawRadioChrome();
-
     for (int i = 0; i < RADIO_PRESET_COUNT; ++i) {
         g_presets[i].freq = 0;
         g_presets[i].name[0] = '\0';
     }
-
-    g_radio.setFrequency(Tea5767::FREQ_MIN);
-    uint16_t last_found = 0;
-    int found_count = 0;
-    for (int attempt = 0; attempt < 220 && found_count < RADIO_PRESET_COUNT; ++attempt) {
-        if (!g_radio.seek(true)) {
-            break;
-        }
-        const uint16_t found_freq = g_radio.getFrequency();
-        if (found_freq < Tea5767::FREQ_MIN || found_freq > Tea5767::FREQ_MAX) {
-            continue;
-        }
-        // 频点太近通常是同一电台，跳过；回绕到更小频率则结束。
-        if (last_found != 0) {
-            if (found_freq <= last_found) {
-                break;
-            }
-            const int diff = static_cast<int>(found_freq) - static_cast<int>(last_found);
-            if (diff < static_cast<int>(Tea5767::FREQ_STEP) * 2) {
-                continue;
-            }
-        }
-        g_presets[found_count].freq = found_freq;
-        g_presets[found_count].name[0] = '\0';
-        saveRadioPreset(found_count);
-        last_found = found_freq;
-        found_count++;
+    g_seeking = true;
+    g_auto_scanning = true;
+    g_seek_up = true;
+    g_seek_origin = radioFreqMin();
+    g_seek_wrapped = false;
+    g_scan_found_count = 0;
+    g_scan_last_found = 0;
+    g_active_slot = -1;
+    g_sel_slot = 0;
+    g_seek_anim_ms = millis();
+    if (g_hw_seek_pref) {
+        g_freq = radioFreqMin();
+        g_radio.setFrequency(g_freq, false);
+        startHwSearch(true);
+        return;
     }
-    for (int i = found_count; i < RADIO_PRESET_COUNT; ++i) {
-        saveRadioPreset(i);
-    }
-
-    if (found_count > 0) {
-        g_active_slot = 0;
-        g_sel_slot = 0;
-        applyFrequency(g_presets[0].freq);
-    } else {
-        g_active_slot = -1;
-        g_sel_slot = 0;
-        g_rssi = g_radio.getRssi();
-        g_stereo = g_radio.isStereo();
-    }
-    g_seeking = false;
-    drawRadioChrome();
+    g_seek_hw = false;
+    seekTuneTo(radioFreqMin());
 }
 
 static void toggleMute() {
@@ -592,6 +1029,121 @@ static void toggleMono() {
     g_radio.setMono(g_mono);
     g_stereo = g_radio.isStereo();
     drawRadioChrome();
+}
+
+static void cycleTunerItem(const int dir) {
+    const int d = (dir < 0) ? -1 : 1;
+    switch (static_cast<TunerItem>(g_tuner_sel)) {
+        case TunerItem::Band:
+            g_japan = !g_japan;
+            clampFreqToBand();
+            break;
+        case TunerItem::Deemph:
+            g_deemph75 = !g_deemph75;
+            break;
+        case TunerItem::SeekMode:
+            g_hw_seek_pref = !g_hw_seek_pref;
+            break;
+        case TunerItem::SeekStop: {
+            int v = static_cast<int>(g_ssl) + d;
+            if (v < 1) {
+                v = 3;
+            }
+            if (v > 3) {
+                v = 1;
+            }
+            g_ssl = static_cast<Tea5767::SeekStop>(v);
+            break;
+        }
+        case TunerItem::Injection:
+            g_hlsi_high = !g_hlsi_high;
+            break;
+        case TunerItem::SoftMute:
+            g_soft_mute = !g_soft_mute;
+            break;
+        case TunerItem::HighCut:
+            g_hcc = !g_hcc;
+            break;
+        case TunerItem::Snc:
+            g_snc = !g_snc;
+            break;
+        case TunerItem::ChMute: {
+            int v = static_cast<int>(g_ch_mute) + d;
+            if (v < 0) {
+                v = 2;
+            }
+            if (v > 2) {
+                v = 0;
+            }
+            g_ch_mute = static_cast<Tea5767::ChannelMute>(v);
+            break;
+        }
+        default:
+            break;
+    }
+    applyTunerToChip();
+    if (g_ready && (static_cast<TunerItem>(g_tuner_sel) == TunerItem::Band ||
+                    static_cast<TunerItem>(g_tuner_sel) == TunerItem::Injection)) {
+        g_radio.setFrequency(g_freq, true);
+        Tea5767::Status st{};
+        if (g_radio.readStatus(st)) {
+            g_rssi = st.rssi;
+            g_stereo = st.stereo;
+            g_if_counter = st.if_counter;
+            g_chip_id = st.chip_id;
+        }
+    }
+    saveTunerSettings();
+    drawRadioChrome();
+}
+
+static void openTunerSettings() {
+    g_view = RadioView::Tuner;
+    if (g_ready) {
+        Tea5767::Status st{};
+        if (g_radio.readStatus(st)) {
+            g_rssi = st.rssi;
+            g_stereo = st.stereo;
+            g_if_counter = st.if_counter;
+            g_chip_id = st.chip_id;
+        }
+    }
+    drawRadioChrome();
+}
+
+static void closeTunerSettingsToMain() {
+    g_view = RadioView::Main;
+    M5Cardputer.Display.fillScreen(BLACK);
+    drawRadioChrome();
+}
+
+static bool handleTunerInput(const Keyboard_Class::KeysState& status, const String& key) {
+    if (key == "t" || key == "T") {
+        closeTunerSettingsToMain();
+        return true;
+    }
+    const int nav = getMenuNavDelta(status);
+    if (nav != 0) {
+        const int n = static_cast<int>(TunerItem::Count);
+        g_tuner_sel = (g_tuner_sel + nav + n) % n;
+        drawRadioChrome();
+        return true;
+    }
+    if (status.enter || status.space) {
+        cycleTunerItem(1);
+        return true;
+    }
+    for (const char c : status.word) {
+        if (c == '-') {
+            cycleTunerItem(-1);
+            return true;
+        }
+        if (c == '=' || c == '+') {
+            cycleTunerItem(1);
+            return true;
+        }
+    }
+    return true;
 }
 
 static void loadPresetSlot(const int idx) {
@@ -825,10 +1377,15 @@ void enterRadioApp() {
     g_muted = false;
     g_mono = false;
     g_seeking = false;
+    g_auto_scanning = false;
+    g_seek_hw = false;
     g_freq = 9850;
     g_rssi = 0;
+    g_if_counter = 0;
+    g_chip_id = 0;
     g_stereo = false;
     g_sel_slot = 0;
+    g_tuner_sel = 0;
     g_active_slot = -1;
     g_rename_buf[0] = '\0';
     g_tune_repeat_dir = 0;
@@ -836,17 +1393,28 @@ void enterRadioApp() {
     g_tune_repeat_last_ms = 0;
 
     loadRadioPresets();
+    loadTunerSettings();
+    clampFreqToBand();
     M5Cardputer.Display.wakeup();
     M5Cardputer.Display.powerSaveOff();
     M5Cardputer.Display.fillScreen(BLACK);
 
+    // Ex_I2C 启动时可能尚未 init；找不到再试内部总线（EXT 排针 G8/G9）
+    M5Cardputer.Ex_I2C.begin();
     g_ready = g_radio.begin(M5Cardputer.Ex_I2C);
+    if (!g_ready) {
+        g_ready = g_radio.begin(M5Cardputer.In_I2C);
+    }
     if (g_ready) {
+        applyTunerToChip();
         g_radio.setFrequency(g_freq);
-        g_radio.setMute(false);
-        g_radio.setMono(false);
-        g_rssi = g_radio.getRssi();
-        g_stereo = g_radio.isStereo();
+        Tea5767::Status st{};
+        if (g_radio.readStatus(st)) {
+            g_rssi = st.rssi;
+            g_stereo = st.stereo;
+            g_if_counter = st.if_counter;
+            g_chip_id = st.chip_id;
+        }
     }
 
     if (!ensureRadioCanvas()) {
@@ -863,8 +1431,12 @@ void leaveRadioApp() {
     g_help = false;
     g_view = RadioView::Main;
     g_rename_buf[0] = '\0';
+    g_seeking = false;
+    g_auto_scanning = false;
+    g_seek_hw = false;
     if (g_ready) {
-        g_radio.setMute(true);
+        g_radio.abortSearch();
+        g_radio.setStandby(true); // TEA 待机，比单纯 mute 更省电
     }
     g_ready = false;
     if (g_canvas_ok) {
@@ -894,7 +1466,26 @@ bool closeRadioStations() {
         closeStationsListToMain();
         return true;
     }
+    if (g_view == RadioView::Tuner) {
+        closeTunerSettingsToMain();
+        return true;
+    }
     return false;
+}
+
+bool closeRadioSeek() {
+    if (!g_seeking) {
+        return false;
+    }
+    if (g_auto_scanning) {
+        if (g_scan_found_count > 0) {
+            persistEmptyScanSlots();
+        } else {
+            loadRadioPresets(); // 一个都没扫到则恢复原预设
+        }
+    }
+    finishSeek(true);
+    return true;
 }
 
 void updateRadioApp() {
@@ -908,6 +1499,11 @@ void updateRadioApp() {
             g_seek_anim_ms = now;
             g_seek_frame = (g_seek_frame + 1) % 5;
             drawRadioChrome();
+        }
+        if (g_seek_hw) {
+            onHwSeekTick();
+        } else if (now - g_seek_settle_ms >= RADIO_SEEK_SETTLE_MS) {
+            onSeekSettled();
         }
         return;
     }
@@ -929,12 +1525,15 @@ void updateRadioApp() {
     static uint32_t last_poll_ms = 0;
     if (now - last_poll_ms >= 200) {
         last_poll_ms = now;
-        const uint8_t rssi = g_radio.getRssi();
-        const bool stereo = g_radio.isStereo();
-        if (rssi != g_rssi || stereo != g_stereo) {
-            g_rssi = rssi;
-            g_stereo = stereo;
-            drawRadioChrome();
+        Tea5767::Status st{};
+        if (g_radio.readStatus(st)) {
+            if (st.rssi != g_rssi || st.stereo != g_stereo || st.if_counter != g_if_counter) {
+                g_rssi = st.rssi;
+                g_stereo = st.stereo;
+                g_if_counter = st.if_counter;
+                g_chip_id = st.chip_id;
+                drawRadioChrome();
+            }
         }
     }
 }
@@ -945,7 +1544,7 @@ void handleRadioApp(const Keyboard_Class::KeysState& status) {
     if (key == "h" || key == "H") {
         if (g_help) {
             restoreMainAfterHelp();
-        } else if (g_view == RadioView::Main) {
+        } else if (g_view == RadioView::Main || g_view == RadioView::Tuner) {
             g_help = true;
             g_help_page = 0;
             drawHelpPage();
@@ -965,13 +1564,26 @@ void handleRadioApp(const Keyboard_Class::KeysState& status) {
         (void)handleStationsInput(status, key);
         return;
     }
+    if (g_view == RadioView::Tuner) {
+        (void)handleTunerInput(status, key);
+        return;
+    }
+
+    // 搜台中只允许 ESC 取消（main 里 closeRadioSeek），其它键忽略
+    if (g_seeking) {
+        return;
+    }
 
     if (key == "l" || key == "L") {
         openStationsList();
         return;
     }
+    if (key == "t" || key == "T") {
+        openTunerSettings();
+        return;
+    }
     if (key == "s" || key == "S") {
-        runAutoScanAndSavePresets();
+        beginAutoScan();
         return;
     }
 
@@ -1012,8 +1624,8 @@ void handleRadioApp(const Keyboard_Class::KeysState& status) {
 
     const int seek_delta = getSeekDelta(status);
     if (seek_delta < 0) {
-        runSeek(false);
+        beginSeek(false);
     } else if (seek_delta > 0) {
-        runSeek(true);
+        beginSeek(true);
     }
 }

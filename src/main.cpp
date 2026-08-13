@@ -2271,58 +2271,171 @@ void handleLedApp(const String& key) {
 
 // ===== IN I2C =====
 
+// In 总线：Cardputer Adv 板载地址已确定；Ex 总线为常见模块猜测
+struct I2cDevHint {
+    uint8_t addr;
+    const char* chip;
+    const char* role;
+};
+
+static constexpr I2cDevHint kI2cInDevs[] = {
+    {0x18, "ES8311", "codec"},
+    {0x34, "TCA8418", "keyboard"},
+    {0x68, "BMI270", "IMU"},
+    {0x69, "BMI270", "IMU"},
+};
+
+static constexpr I2cDevHint kI2cExDevs[] = {
+    {0x18, "ES8311", "codec"},
+    {0x23, "BH1750", "light"},
+    {0x26, "MiniScale", "weight"},
+    {0x29, "VL53L0X", "ToF"},
+    {0x34, "TCA8418", "keyboard"},
+    {0x3C, "SSD1306", "OLED"},
+    {0x3D, "SSD1306", "OLED"},
+    {0x41, "8Encoder", "encoder"},
+    {0x43, "8Angle", "angle"},
+    {0x44, "SHT3x", "ENV"},
+    {0x48, "ADS1115", "ADC"},
+    {0x50, "EEPROM", "memory"},
+    {0x51, "BM8563", "RTC"},
+    {0x57, "UnitUS", "sonar"},
+    {0x5A, "MLX90614", "NCIR"},
+    {0x5F, "CardKB", "keyboard"},
+    {0x60, "TEA5767", "radio"},
+    {0x61, "PbHub", "hub"},
+    {0x68, "BMI270", "IMU"},
+    {0x69, "BMI270", "IMU"},
+    {0x70, "QMP6988", "ENV"},
+    {0x76, "BMP280", "ENV"},
+    {0x77, "BMP280", "ENV"},
+};
+
+static const I2cDevHint* findI2cDevHint(const uint8_t addr, const bool internal_bus) {
+    const I2cDevHint* table = internal_bus ? kI2cInDevs : kI2cExDevs;
+    const int n = internal_bus ? static_cast<int>(sizeof(kI2cInDevs) / sizeof(kI2cInDevs[0]))
+                               : static_cast<int>(sizeof(kI2cExDevs) / sizeof(kI2cExDevs[0]));
+    for (int i = 0; i < n; ++i) {
+        if (table[i].addr == addr) {
+            return &table[i];
+        }
+    }
+    return nullptr;
+}
+
 static void drawI2cHelpPage(const bool internal_bus) {
-    int y = drawAppHelpBegin(internal_bus ? "IN I2C" : "EX I2C");
+    int y = drawAppHelpBegin(internal_bus ? "InI2" : "ExI2");
     constexpr int x = APP_HELP_CONTENT_X;
-    y = drawAppHelpText(x, y, internal_bus ? "scan internal I2C" : "scan external I2C");
-    y = drawAppHelpText(x, y, internal_bus ? "internal bus debug" : "HY2.0 Port A bus");
-    y = drawAppHelpText(x, y, "show SDA/SCL pins");
-    y = drawAppHelpText(x, y, "scan address 1-119");
-    y = drawAppHelpText(x, y, "list found devices");
+    y = drawAppHelpKey(x, y, 'r', "rescan bus");
+    if (internal_bus) {
+        y = drawAppHelpText(x, y, "onboard chips, confirmed:");
+        y = drawAppHelpLabelText(x, y, "0x18", APP_COLOR_LABEL, " ES8311  codec");
+        y = drawAppHelpLabelText(x, y, "0x34", APP_COLOR_LABEL, " TCA8418 keyboard");
+        y = drawAppHelpLabelText(x, y, "0x68", APP_COLOR_LABEL, " BMI270  IMU");
+        y = drawAppHelpText(x, y, "SDA/SCL shown on main");
+    } else {
+        y = drawAppHelpText(x, y, "Grove G2=SDA G1=SCL");
+        y = drawAppHelpText(x, y, "EXT  G8=SDA G9=SCL");
+        y = drawAppHelpText(x, y, "names are likely matches");
+        y = drawAppHelpLabelText(x, y, "0x60", APP_COLOR_LABEL, " TEA5767 radio");
+        y = drawAppHelpText(x, y, "unknown addr shows as --");
+    }
     drawHelpHintRight("close");
 }
 
-// 绘制 I2C 扫描结果（IN I2C / EX I2C 共用）
-void drawI2cScanApp(m5::I2C_Class& bus, const char* title) {
+static void drawI2cScanApp(m5::I2C_Class& bus, const char* title, const bool internal_bus) {
     bool found[120]{};
     if (bus.isEnabled()) {
+        bus.begin(); // Ex_I2C 默认未 init，扫描前补上
         bus.scanID(found);
     }
 
-    M5Cardputer.Display.clear();
-    drawAppScreenHeader(title);
+    clearAppHeaderStatusRefresh();
+    M5Cardputer.Display.fillScreen(BLACK);
+
+    constexpr int x = APP_HELP_CONTENT_X;
+    constexpr int title_y = APP_HELP_EDGE;
     M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setCursor(APP_CONTENT_X, APP_CONTENT_INSET_Y);
+    M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
+    M5Cardputer.Display.setCursor(x, title_y);
+    M5Cardputer.Display.print(title);
+
+    // 标题右侧：SDA/SCL（与 Help 副标题同一行）
+    if (bus.isEnabled()) {
+        char pins[24];
+        snprintf(pins, sizeof(pins), "SDA %d  SCL %d", bus.getSDA(), bus.getSCL());
+        const int title_w = M5Cardputer.Display.textWidth(title);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(x + title_w + APP_HELP_SUBTITLE_GAP, title_y + 4);
+        M5Cardputer.Display.print(pins);
+    }
+
+    int y = title_y + 16 + 7;
+    M5Cardputer.Display.setTextSize(1);
 
     if (!bus.isEnabled()) {
-        M5Cardputer.Display.println("bus disabled");
+        M5Cardputer.Display.setTextColor(APP_COLOR_ERROR, BLACK);
+        M5Cardputer.Display.setCursor(x, y);
+        M5Cardputer.Display.print("bus disabled");
         drawHelpHintRight("help");
-        updateAppHeaderStatus();
         return;
     }
 
-    M5Cardputer.Display.printf("SDA:%d SCL:%d\n", bus.getSDA(), bus.getSCL());
-
+    constexpr int row_h = 12;
+    constexpr int addr_w = 36;
+    constexpr int role_x = 148;
+    constexpr int list_max = 7;
     int count = 0;
-    for (int addr = 1; addr < 120; addr++) {
+    int shown = 0;
+    for (int addr = 8; addr < 0x78; ++addr) {
         if (!found[addr]) {
             continue;
         }
-        M5Cardputer.Display.printf("0x%02X ", addr);
-        count++;
-        if (count % 5 == 0) {
-            M5Cardputer.Display.println();
+        ++count;
+        if (shown >= list_max) {
+            continue;
         }
+        char addr_text[8];
+        snprintf(addr_text, sizeof(addr_text), "0x%02X", addr);
+        M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
+        M5Cardputer.Display.setCursor(x, y);
+        M5Cardputer.Display.print(addr_text);
+
+        const I2cDevHint* hint = findI2cDevHint(static_cast<uint8_t>(addr), internal_bus);
+        M5Cardputer.Display.setTextColor(internal_bus ? APP_COLOR_VALUE : APP_COLOR_HINT, BLACK);
+        M5Cardputer.Display.setCursor(x + addr_w, y);
+        M5Cardputer.Display.print(hint != nullptr ? hint->chip : "--");
+
+        M5Cardputer.Display.setTextColor(APP_COLOR_MUTED, BLACK);
+        M5Cardputer.Display.setCursor(role_x, y);
+        M5Cardputer.Display.print(hint != nullptr ? hint->role : "unknown");
+        y += row_h;
+        ++shown;
     }
     if (count == 0) {
-        M5Cardputer.Display.println("no device");
+        M5Cardputer.Display.setTextColor(APP_COLOR_MUTED, BLACK);
+        M5Cardputer.Display.setCursor(x, y);
+        M5Cardputer.Display.print("no device");
+    } else if (count > list_max) {
+        char more[16];
+        snprintf(more, sizeof(more), "+%d more", count - list_max);
+        M5Cardputer.Display.setTextColor(APP_COLOR_MUTED, BLACK);
+        M5Cardputer.Display.setCursor(x, y);
+        M5Cardputer.Display.print(more);
     }
     drawHelpHintRight("help");
-    updateAppHeaderStatus();
 }
 
 static void handleI2cScanApp(const String& key, m5::I2C_Class& bus, const char* title,
                              const bool internal_bus) {
+    if (key == "r" || key == "R") {
+        if (g_i2c_help_visible) {
+            return;
+        }
+        drawI2cScanApp(bus, title, internal_bus);
+        return;
+    }
     if (key != "h" && key != "H") {
         return;
     }
@@ -2330,12 +2443,12 @@ static void handleI2cScanApp(const String& key, m5::I2C_Class& bus, const char* 
     if (g_i2c_help_visible) {
         drawI2cHelpPage(internal_bus);
     } else {
-        drawI2cScanApp(bus, title);
+        drawI2cScanApp(bus, title, internal_bus);
     }
 }
 
 // ===== EX I2C =====
-// 使用 drawI2cScanApp(M5Cardputer.Ex_I2C, "EX I2C")
+// 使用 drawI2cScanApp(M5Cardputer.Ex_I2C, "ExI2", false)
 
 // ===== MIJIA =====
 // 见 app_mijia.cpp
@@ -2627,10 +2740,10 @@ static void selectHardwareTest(const HardwareTestMode mode) {
         enterBleApp();
     } else if (mode == HardwareTestMode::IN_I2C) {
         g_i2c_help_visible = false;
-        drawI2cScanApp(M5Cardputer.In_I2C, "InI2");
+        drawI2cScanApp(M5Cardputer.In_I2C, "InI2", true);
     } else if (mode == HardwareTestMode::EX_I2C) {
         g_i2c_help_visible = false;
-        drawI2cScanApp(M5Cardputer.Ex_I2C, "ExI2");
+        drawI2cScanApp(M5Cardputer.Ex_I2C, "ExI2", false);
     } else if (mode == HardwareTestMode::MIC) {
         enterMicApp();
     }
@@ -3034,11 +3147,11 @@ void enterApp(const AppState state) {
             break;
         case AppState::IN_I2C:
             g_i2c_help_visible = false;
-            drawI2cScanApp(M5Cardputer.In_I2C, "InI2");
+            drawI2cScanApp(M5Cardputer.In_I2C, "InI2", true);
             break;
         case AppState::EX_I2C:
             g_i2c_help_visible = false;
-            drawI2cScanApp(M5Cardputer.Ex_I2C, "ExI2");
+            drawI2cScanApp(M5Cardputer.Ex_I2C, "ExI2", false);
             break;
         case AppState::WIFI:
             enterWifiApp();
@@ -3110,6 +3223,8 @@ void setup() {
     const uint32_t t0 = millis();
     const auto cfg = M5.config();
     M5Cardputer.begin(cfg);
+    // Ex_I2C 启动时只 setPort，未 init；不 begin 则 Grove G1/G2 扫描全空
+    M5Cardputer.Ex_I2C.begin();
     const uint32_t t_begin = millis();
     // 开机拉低喇叭 I2S 脚，避免 NS4168 悬空嗡嗡；需要出声时再 begin
     releaseSpeakerQuiet();
@@ -3214,7 +3329,10 @@ static bool tryCloseCurrentAppHelp() {
             if (closeRadioStations()) {
                 return true;
             }
-            return closeRadioHelp();
+            if (closeRadioHelp()) {
+                return true;
+            }
+            return closeRadioSeek();
         case AppState::VOCAB:
             return closeVocabHelp();
         case AppState::ICONS:
@@ -3231,14 +3349,14 @@ static bool tryCloseCurrentAppHelp() {
                 return false;
             }
             g_i2c_help_visible = false;
-            drawI2cScanApp(M5Cardputer.In_I2C, "InI2");
+            drawI2cScanApp(M5Cardputer.In_I2C, "InI2", true);
             return true;
         case AppState::EX_I2C:
             if (!g_i2c_help_visible) {
                 return false;
             }
             g_i2c_help_visible = false;
-            drawI2cScanApp(M5Cardputer.Ex_I2C, "ExI2");
+            drawI2cScanApp(M5Cardputer.Ex_I2C, "ExI2", false);
             return true;
         case AppState::HARDWARE_TESTS:
             if (hardwareTestMode == HardwareTestMode::LED && g_led_help_visible) {
@@ -3248,12 +3366,12 @@ static bool tryCloseCurrentAppHelp() {
             }
             if (hardwareTestMode == HardwareTestMode::IN_I2C && g_i2c_help_visible) {
                 g_i2c_help_visible = false;
-                drawI2cScanApp(M5Cardputer.In_I2C, "InI2");
+                drawI2cScanApp(M5Cardputer.In_I2C, "InI2", true);
                 return true;
             }
             if (hardwareTestMode == HardwareTestMode::EX_I2C && g_i2c_help_visible) {
                 g_i2c_help_visible = false;
-                drawI2cScanApp(M5Cardputer.Ex_I2C, "ExI2");
+                drawI2cScanApp(M5Cardputer.Ex_I2C, "ExI2", false);
                 return true;
             }
             if (hardwareTestMode == HardwareTestMode::MIC) {

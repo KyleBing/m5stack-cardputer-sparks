@@ -5,7 +5,10 @@ Main menu keys:
 - `n` — **InI2C** internal bus  
 - `e` — **ExI2C** external bus  
 
-Scans addresses 1–119, lists responding devices, and shows the SDA / SCL pins in use.
+No header. Scans addresses 8–119 and lists each hit as `0x` address, chip name, and role, with SDA / SCL beside the title.
+
+- **InI2**: onboard chips (Adv: `0x18` ES8311 codec, `0x34` TCA8418 keyboard, `0x68` BMI270 IMU).
+- **ExI2**: Grove / EXT peripherals; chip names are likely matches (e.g. `0x60` TEA5767).
 
 ## Screenshots
 
@@ -22,12 +25,13 @@ Scans addresses 1–119, lists responding devices, and shows the SDA / SCL pins 
 
 | Key | Action |
 |-----|--------|
-| `h` | Help (scan range and pins) |
+| `h` | Help (In: known chips; Ex: pins and likely names) |
+| `r` | Rescan |
 
-Entering the App runs a scan; leave and re-enter to scan again.
+Entering the App runs a scan; press `r` to scan again without leaving.
 
 ## Usage
 
-1. **InI2C**: confirm onboard peripheral addresses (e.g. IMU).  
-2. **ExI2C**: troubleshoot Grove / external I2C devices.  
-3. No devices → empty list; poor contact can make scans flaky.
+1. **InI2**: confirm onboard I2C (keyboard / IMU / codec).  
+2. **ExI2**: Grove (G2=SDA G1=SCL) or EXT (G8=SDA G9=SCL) troubleshooting.  
+3. Empty bus → `no device`; unknown address → `--` / `unknown`.

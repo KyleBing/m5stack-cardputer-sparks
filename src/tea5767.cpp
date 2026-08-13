@@ -6,165 +6,262 @@ namespace {
 static constexpr uint32_t QUARTZ = 32768;
 static constexpr uint32_t FILTER = 225000;
 
-static constexpr uint8_t REG_1 = 0;
-static constexpr uint8_t REG_3 = 2;
-static constexpr uint8_t REG_4 = 3;
-
 static constexpr uint8_t REG_1_MUTE = 0x80;
+static constexpr uint8_t REG_1_SM = 0x40;
+
+static constexpr uint8_t REG_3_SUD = 0x80;
+static constexpr uint8_t REG_3_HLSI = 0x10;
 static constexpr uint8_t REG_3_MS = 0x08;
+static constexpr uint8_t REG_3_MR = 0x04;
+static constexpr uint8_t REG_3_ML = 0x02;
+static constexpr uint8_t REG_3_SWP1 = 0x01;
+
+static constexpr uint8_t REG_4_SWP2 = 0x80;
+static constexpr uint8_t REG_4_STBY = 0x40;
+static constexpr uint8_t REG_4_BL = 0x20;
 static constexpr uint8_t REG_4_XTAL = 0x10;
 static constexpr uint8_t REG_4_SMUTE = 0x08;
+static constexpr uint8_t REG_4_HCC = 0x04;
+static constexpr uint8_t REG_4_SNC = 0x02;
+static constexpr uint8_t REG_4_SI = 0x01;
 
-static constexpr uint8_t STAT_3 = 2;
-static constexpr uint8_t STAT_3_STEREO = 0x80;
-static constexpr uint8_t STAT_4 = 3;
-static constexpr uint8_t STAT_4_ADC = 0xF0;
+static constexpr uint8_t REG_5_DTC = 0x40; // 1=75µs，0=50µs；PLLREF=0（32.768 晶振）
+
+static constexpr uint8_t STAT_RF = 0x80;
+static constexpr uint8_t STAT_BLF = 0x40;
+static constexpr uint8_t STAT_STEREO = 0x80;
+static constexpr uint8_t STAT_ADC = 0xF0;
+static constexpr uint8_t STAT_CHIP = 0x0F;
 
 } // namespace
 
-bool Tea5767::begin(m5::I2C_Class& bus) {
-    bus_ = &bus;
-    if (!bus_->isEnabled()) {
-        return false;
+uint16_t Tea5767::clampFreq(const uint16_t freq_centi) const {
+    const uint16_t lo = freqMin();
+    const uint16_t hi = freqMax();
+    if (freq_centi < lo) {
+        return lo;
     }
-
-    regs_[0] = 0x00;
-    regs_[1] = 0x00;
-    regs_[2] = 0xB0;
-    regs_[3] = REG_4_XTAL | REG_4_SMUTE;
-    regs_[4] = 0x00; // 欧洲 50 ms 去加重
-    muted_ = false;
-    mono_ = false;
-    return probe();
+    if (freq_centi > hi) {
+        return hi;
+    }
+    return freq_centi;
 }
 
-bool Tea5767::probe() const {
-    if (!bus_ || !bus_->isEnabled()) {
-        return false;
+uint32_t Tea5767::pllFromFreq(const uint16_t freq_centi) const {
+    const uint32_t hz = static_cast<uint32_t>(freq_centi) * 10000UL;
+    if (hlsi_high_) {
+        return 4UL * (hz + FILTER) / QUARTZ;
     }
-    bool found[120]{};
-    bus_->scanID(found);
-    return found[I2C_ADDR];
+    return 4UL * (hz - FILTER) / QUARTZ;
+}
+
+uint16_t Tea5767::freqFromPll(const uint32_t pll) const {
+    uint32_t hz;
+    if (hlsi_high_) {
+        hz = (pll * QUARTZ / 4) - FILTER;
+    } else {
+        hz = (pll * QUARTZ / 4) + FILTER;
+    }
+    return static_cast<uint16_t>(hz / 10000UL);
+}
+
+void Tea5767::packRegs() {
+    const uint32_t pll = pllFromFreq(freq_);
+    regs_[0] = static_cast<uint8_t>((muted_ ? REG_1_MUTE : 0) | (searching_ ? REG_1_SM : 0) |
+                                    ((pll >> 8) & 0x3F));
+    regs_[1] = static_cast<uint8_t>(pll & 0xFF);
+
+    const uint8_t ssl_bits = static_cast<uint8_t>(static_cast<uint8_t>(ssl_) & 0x03) << 5;
+    regs_[2] = static_cast<uint8_t>(
+        (search_up_ ? REG_3_SUD : 0) | ssl_bits | (hlsi_high_ ? REG_3_HLSI : 0) |
+        (mono_ ? REG_3_MS : 0) | (ch_mute_ == ChannelMute::Right ? REG_3_MR : 0) |
+        (ch_mute_ == ChannelMute::Left ? REG_3_ML : 0) | (port1_ ? REG_3_SWP1 : 0));
+
+    regs_[3] = static_cast<uint8_t>(
+        (port2_ ? REG_4_SWP2 : 0) | (standby_ ? REG_4_STBY : 0) | (japan_ ? REG_4_BL : 0) |
+        REG_4_XTAL | (soft_mute_ ? REG_4_SMUTE : 0) | (hcc_ ? REG_4_HCC : 0) |
+        (snc_ ? REG_4_SNC : 0) | (search_ind_ ? REG_4_SI : 0));
+
+    regs_[4] = static_cast<uint8_t>(deemph75_ ? REG_5_DTC : 0);
 }
 
 bool Tea5767::writeRegs() {
     if (!bus_ || !bus_->isEnabled()) {
         return false;
     }
+    packRegs();
     if (!bus_->start(I2C_ADDR, false, 100000)) {
         return false;
     }
-    if (bus_->write(regs_, sizeof(regs_)) != sizeof(regs_)) {
-        bus_->stop();
-        return false;
-    }
+    // M5Unified write() 返回 bool，不是字节数
+    const bool ok = bus_->write(regs_, sizeof(regs_));
     bus_->stop();
-    return true;
+    return ok;
 }
 
-bool Tea5767::readStatus(uint8_t out[5]) {
+bool Tea5767::readRaw(uint8_t out[5]) {
     if (!bus_ || !bus_->isEnabled()) {
         return false;
     }
     if (!bus_->start(I2C_ADDR, true, 100000)) {
         return false;
     }
-    if (bus_->read(out, 5) != 5) {
-        bus_->stop();
+    const bool ok = bus_->read(out, 5);
+    bus_->stop();
+    return ok;
+}
+
+bool Tea5767::begin(m5::I2C_Class& bus) {
+    bus_ = &bus;
+    if (!bus_->isEnabled()) {
         return false;
     }
-    bus_->stop();
+    searching_ = false;
+    search_ind_ = false;
+    standby_ = false;
+    if (!probe()) {
+        return false;
+    }
+    freq_ = clampFreq(freq_);
+    writeRegs(); // 探测到即视为就绪；写失败仍可稍后重试
     return true;
 }
 
-void Tea5767::applyFrequencyWord(const uint16_t freq_centi) {
-    const uint32_t pll = 4UL * (static_cast<uint32_t>(freq_centi) * 10000UL + FILTER) / QUARTZ;
-    regs_[REG_1] = static_cast<uint8_t>((regs_[REG_1] & REG_1_MUTE) | ((pll >> 8) & 0x3F));
-    regs_[1] = static_cast<uint8_t>(pll & 0xFF);
+bool Tea5767::probe() const {
+    if (!bus_ || !bus_->isEnabled()) {
+        return false;
+    }
+    return bus_->scanID(I2C_ADDR);
 }
 
-void Tea5767::setFrequency(const uint16_t freq_centi) {
-    uint16_t clamped = freq_centi;
-    if (clamped < FREQ_MIN) {
-        clamped = FREQ_MIN;
-    }
-    if (clamped > FREQ_MAX) {
-        clamped = FREQ_MAX;
-    }
-    applyFrequencyWord(clamped);
+void Tea5767::setFrequency(const uint16_t freq_centi, const bool wait_settle) {
+    searching_ = false;
+    search_ind_ = false;
+    freq_ = clampFreq(freq_centi);
     writeRegs();
-    delay(60);
+    if (wait_settle) {
+        delay(60); // 手动调台：等 PLL 锁住再读 RSSI
+    }
 }
 
 uint16_t Tea5767::getFrequency() {
-    uint8_t status[5]{};
-    if (!readStatus(status)) {
-        return 0;
+    Status st{};
+    if (!readStatus(st) || st.freq_centi == 0) {
+        return freq_;
     }
-    uint32_t pll = ((status[REG_1] & 0x3F) << 8) | status[1];
-    pll = ((pll * QUARTZ / 4) - FILTER) / 10000;
-    return static_cast<uint16_t>(pll);
+    freq_ = st.freq_centi;
+    return freq_;
 }
 
 void Tea5767::setMute(const bool on) {
     muted_ = on;
-    if (on) {
-        regs_[REG_1] |= REG_1_MUTE;
-    } else {
-        regs_[REG_1] &= static_cast<uint8_t>(~REG_1_MUTE);
-    }
     writeRegs();
 }
 
 void Tea5767::setMono(const bool on) {
     mono_ = on;
-    if (on) {
-        regs_[REG_3] |= REG_3_MS;
-    } else {
-        regs_[REG_3] &= static_cast<uint8_t>(~REG_3_MS);
-    }
     writeRegs();
 }
 
+void Tea5767::setSoftMute(const bool on) {
+    soft_mute_ = on;
+    writeRegs();
+}
+
+void Tea5767::setHighCut(const bool on) {
+    hcc_ = on;
+    writeRegs();
+}
+
+void Tea5767::setStereoNoiseCancel(const bool on) {
+    snc_ = on;
+    writeRegs();
+}
+
+void Tea5767::setJapanBand(const bool on) {
+    japan_ = on;
+    freq_ = clampFreq(freq_);
+    writeRegs();
+}
+
+void Tea5767::setDeemphasis75(const bool on) {
+    deemph75_ = on;
+    writeRegs();
+}
+
+void Tea5767::setHighSideInjection(const bool on) {
+    hlsi_high_ = on;
+    writeRegs();
+}
+
+void Tea5767::setSeekStop(const SeekStop level) {
+    ssl_ = level;
+    writeRegs();
+}
+
+void Tea5767::setChannelMute(const ChannelMute ch) {
+    ch_mute_ = ch;
+    writeRegs();
+}
+
+void Tea5767::setStandby(const bool on) {
+    standby_ = on;
+    searching_ = false;
+    search_ind_ = false;
+    writeRegs();
+}
+
+void Tea5767::setPort1(const bool high) {
+    port1_ = high;
+    writeRegs();
+}
+
+void Tea5767::setPort2(const bool high) {
+    port2_ = high;
+    writeRegs();
+}
+
+bool Tea5767::readStatus(Status& out) {
+    uint8_t raw[5]{};
+    if (!readRaw(raw)) {
+        return false;
+    }
+    const uint32_t pll = (static_cast<uint32_t>(raw[0] & 0x3F) << 8) | raw[1];
+    out.freq_centi = freqFromPll(pll);
+    out.ready = (raw[0] & STAT_RF) != 0;
+    out.band_limit = (raw[0] & STAT_BLF) != 0;
+    out.stereo = (raw[2] & STAT_STEREO) != 0;
+    out.if_counter = static_cast<uint8_t>(raw[2] & 0x7F);
+    out.rssi = static_cast<uint8_t>((raw[3] & STAT_ADC) >> 4);
+    out.chip_id = static_cast<uint8_t>(raw[3] & STAT_CHIP);
+    return true;
+}
+
 uint8_t Tea5767::getRssi() {
-    uint8_t status[5]{};
-    if (!readStatus(status)) {
+    Status st{};
+    if (!readStatus(st)) {
         return 0;
     }
-    return (status[STAT_4] & STAT_4_ADC) >> 4;
+    return st.rssi;
 }
 
 bool Tea5767::isStereo() {
-    uint8_t status[5]{};
-    if (!readStatus(status)) {
+    Status st{};
+    if (!readStatus(st)) {
         return false;
     }
-    return (status[STAT_3] & STAT_3_STEREO) != 0;
+    return st.stereo;
 }
 
-bool Tea5767::seek(const bool up, const uint8_t rssi_threshold) {
-    uint16_t freq = getFrequency();
-    if (freq < FREQ_MIN) {
-        freq = 9850;
-    }
+void Tea5767::startSearch(const bool up) {
+    searching_ = true;
+    search_up_ = up;
+    search_ind_ = true; // 搜台期间 SWPORT1 输出就绪（模块接了灯才会亮）
+    writeRegs();
+}
 
-    for (int step = 0; step < 220; ++step) {
-        if (up) {
-            freq = static_cast<uint16_t>(freq + FREQ_STEP);
-            if (freq > FREQ_MAX) {
-                freq = FREQ_MIN;
-            }
-        } else {
-            if (freq <= FREQ_MIN) {
-                freq = FREQ_MAX;
-            } else {
-                freq = static_cast<uint16_t>(freq - FREQ_STEP);
-            }
-        }
-        setFrequency(freq);
-        if (getRssi() >= rssi_threshold) {
-            return true;
-        }
-    }
-    return false;
+void Tea5767::abortSearch() {
+    searching_ = false;
+    search_ind_ = false;
+    writeRegs();
 }
