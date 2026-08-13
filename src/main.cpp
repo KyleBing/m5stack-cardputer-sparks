@@ -2361,7 +2361,7 @@ static constexpr int I2C_SCREEN_H = 135;
 static constexpr uint16_t I2C_COLOR_GRAY = 0xC618; // ~#C5C5C5
 // 常规口焊盘（GND / GPIO）：暗于 WHITE，突出 5V / SDA / SCL
 static constexpr uint16_t I2C_COLOR_PAD_MUTED = 0x8410; // ~#808080
-static constexpr int I2C_GROVE_PAD_GAP = 1;             // Ex Grove 插口间距
+static constexpr int I2C_PAD_GAP = 2; // In/Ex 焊盘间距
 
 // 端子外框+插口都用引脚色；标签一律白色
 static void drawI2cPinPad(const int px, const int py, const uint16_t color) {
@@ -2433,7 +2433,7 @@ static int drawI2cGrovePinout(const int x, const int y) {
     }
 
     const int label_x = x + I2C_PIN_CELL + I2C_PIN_LEAD_CLEAR;
-    const int stride = I2C_PIN_CELL + I2C_GROVE_PAD_GAP;
+    const int stride = I2C_PIN_CELL + I2C_PAD_GAP;
     for (int i = 0; i < rows; ++i) {
         const int py = y + i * stride;
         const int pad_cy = py + I2C_PIN_CELL / 2;
@@ -2456,7 +2456,7 @@ static int drawI2cGrovePinout(const int x, const int y) {
 }
 
 static int i2cGrovePinoutHeight() {
-    return 4 * I2C_PIN_CELL + 3 * I2C_GROVE_PAD_GAP;
+    return 4 * I2C_PIN_CELL + 3 * I2C_PAD_GAP;
 }
 
 // InI2：俯视 EXT 2.54-14P（双排 7×2，水平居中）；返回占用高度
@@ -2484,7 +2484,8 @@ static int drawI2cExt14Pinout(const int y) {
     };
 
     d.setTextSize(1);
-    const int grid_w = cols * I2C_PIN_CELL;
+    const int stride = I2C_PIN_CELL + I2C_PAD_GAP;
+    const int grid_w = cols * I2C_PIN_CELL + (cols - 1) * I2C_PAD_GAP;
     const int x = (I2C_SCREEN_W - grid_w) / 2;
 
     struct PinLabel {
@@ -2496,7 +2497,7 @@ static int drawI2cExt14Pinout(const int y) {
     PinLabel bot_lbl[cols]{};
 
     for (int i = 0; i < cols; ++i) {
-        const int pad_cx = x + (cols - 1 - i) * I2C_PIN_CELL + I2C_PIN_CELL / 2;
+        const int pad_cx = x + (cols - 1 - i) * stride + I2C_PIN_CELL / 2;
         top_lbl[i].pad_cx = pad_cx;
         top_lbl[i].tw = d.textWidth(kTop[i]);
         bot_lbl[i].pad_cx = pad_cx;
@@ -2531,11 +2532,11 @@ static int drawI2cExt14Pinout(const int y) {
 
     const int top_text_y = y;
     const int top_pad_y = top_text_y + I2C_PIN_FONT_H + I2C_PIN_LEAD_CLEAR;
-    const int bot_pad_y = top_pad_y + I2C_PIN_CELL;
+    const int bot_pad_y = top_pad_y + I2C_PIN_CELL + I2C_PAD_GAP;
     const int bot_text_y = bot_pad_y + I2C_PIN_CELL + I2C_PIN_LEAD_CLEAR;
 
     for (int i = 0; i < cols; ++i) {
-        const int px = x + (cols - 1 - i) * I2C_PIN_CELL;
+        const int px = x + (cols - 1 - i) * stride;
         const uint16_t top_c = pinColor(kTop[i]);
         const uint16_t bot_c = pinColor(kBot[i]);
         const int top_lcx = top_lbl[i].text_x + top_lbl[i].tw / 2;

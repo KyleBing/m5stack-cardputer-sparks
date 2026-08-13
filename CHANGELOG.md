@@ -19,7 +19,7 @@
 
 - **Font**：去掉 Header / 底栏 tip；左上角 Font2 显示序号与名称；右上角红框标出单字占用，框下 5px 显示宽×高；正文为数字 + pangram；上下滚动、左右 / `[ ]` 翻字体；Time 风格 Help；列表只保留实测可用字体
 - **Radio / Vocab Help**：Time 风格全屏 Help；ESC 先关 Help / 电台列表 / 搜台，不直接退出 App
-- **I2C**：InI2 / ExI2 展示 Grove / EXT 引脚图（彩色焊盘 + 白字）；扫描列表按芯片名实际宽度排 role，避免 `RDA5807M` / `TEA5767` 等长名被截断；ExI2C 补收音机芯片提示
+- **I2C**：InI2 / ExI2 展示 Grove / EXT 引脚图（彩色焊盘 + 白字）；焊盘间隔 2px；扫描列表按芯片名实际宽度排 role，避免 `RDA5807M` / `TEA5767` 等长名被截断；ExI2C 补收音机芯片提示
 - **Vocab UI**：主页不显示词库名；`line` / `known` 与进度条改到底栏；主单词 FreeMono 12；释义按宽度折行（行距 +2px）；`i` 概览顶栏 known 左侧、词库名贴右；未标识格子改暗灰
 - **Vocab 操作**：`Tab` 等同 `r` 随机未会词；标记已会后 2 秒自动切词（跟随上次 Random / 顺序）；加载文案从左上角 5px 起
 - **Mini Games / Hardware Test**：任意页可用字母快捷键直接打开子项
