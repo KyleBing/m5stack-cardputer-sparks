@@ -133,8 +133,8 @@ static const MenuItem MENU_ITEMS[] = {
 
     // 系统功能测试
     {'k', "KB", "KEYBOARD", AppState::HID_KEYBOARD},
-    {'g', "Game", "MINI GAMES", AppState::GAMES},
-    {'h', "Test", "HARDWARE TEST", AppState::HARDWARE_TESTS},
+    {'g', "Game", "Mini Games", AppState::GAMES},
+    {'h', "Test", "Hardware Test", AppState::HARDWARE_TESTS},
 };
 
 static const int MENU_ITEM_COUNT = sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0]);
@@ -2332,15 +2332,207 @@ static void drawI2cHelpPage(const bool internal_bus) {
         y = drawAppHelpLabelText(x, y, "0x18", APP_COLOR_LABEL, " ES8311  codec");
         y = drawAppHelpLabelText(x, y, "0x34", APP_COLOR_LABEL, " TCA8418 keyboard");
         y = drawAppHelpLabelText(x, y, "0x68", APP_COLOR_LABEL, " BMI270  IMU");
-        y = drawAppHelpText(x, y, "SDA/SCL shown on main");
+        y = drawAppHelpText(x, y, "EXT14 top-down: 5V red");
+        y = drawAppHelpText(x, y, "SDA cyan  SCL yellow");
     } else {
-        y = drawAppHelpText(x, y, "Grove G2=SDA G1=SCL");
-        y = drawAppHelpText(x, y, "EXT  G8=SDA G9=SCL");
+        y = drawAppHelpText(x, y, "left Grove: GND 5V G2 G1");
+        y = drawAppHelpText(x, y, "G2=SDA  G1=SCL");
         y = drawAppHelpText(x, y, "names are likely matches");
         y = drawAppHelpLabelText(x, y, "0x60", APP_COLOR_LABEL, " TEA5767 radio");
         y = drawAppHelpText(x, y, "unknown addr shows as --");
     }
     drawHelpHintRight("close");
+}
+
+// I2C 引脚图共用：16×16 格 + 8×8 插口；短 stub + 斜线/折线到标签
+static constexpr int I2C_PIN_CELL = 16;
+static constexpr int I2C_PIN_SOCK = 8;
+static constexpr int I2C_PIN_FONT_H = 8;
+static constexpr int I2C_PIN_LEAD_CLEAR = 12; // 标签与焊盘边缘间距
+static constexpr int I2C_PIN_LEAD_STUB = 4;   // 出焊盘短 stub，再接斜线
+static constexpr int I2C_PIN_LABEL_GAP = 6;   // 标签之间间隔
+static constexpr int I2C_PIN_LEAD_GAP = 3;    // 线条终点与 label 间距
+static constexpr int I2C_SCREEN_W = 240;
+static constexpr int I2C_SCREEN_H = 135;
+// GND / GPIO / 未知设备灰：比 DARKGREY 更亮，黑底上更易读
+static constexpr uint16_t I2C_COLOR_GRAY = 0xC618; // ~#C5C5C5
+
+// 端子外框+插口都用引脚色；标签一律白色
+static void drawI2cPinPad(const int px, const int py, const uint16_t color) {
+    auto& d = M5Cardputer.Display;
+    constexpr int off = (I2C_PIN_CELL - I2C_PIN_SOCK) / 2;
+    d.drawRect(px, py, I2C_PIN_CELL, I2C_PIN_CELL, color);
+    d.fillRect(px + off, py + off, I2C_PIN_SOCK, I2C_PIN_SOCK, color);
+}
+
+// 段1：出焊盘 stub；段2：斜线到距 label I2C_PIN_LEAD_GAP 处停下
+static void drawI2cPinLead(const int pad_x, const int pad_y, const int label_x, const int label_y,
+                           const uint16_t color) {
+    auto& d = M5Cardputer.Display;
+    const int dx = label_x - pad_x;
+    const int dy = label_y - pad_y;
+    if (dx == 0 && dy == 0) {
+        return;
+    }
+    // 沿主方向出一小段 stub，避免斜线贴着焊盘
+    int stub_x = pad_x;
+    int stub_y = pad_y;
+    if (abs(dy) >= abs(dx)) {
+        stub_y += (dy > 0) ? I2C_PIN_LEAD_STUB : -I2C_PIN_LEAD_STUB;
+    } else {
+        stub_x += (dx > 0) ? I2C_PIN_LEAD_STUB : -I2C_PIN_LEAD_STUB;
+    }
+
+    // 终点沿主方向相对 label 回退，留出与文字的空隙
+    int end_x = label_x;
+    int end_y = label_y;
+    if (abs(dy) >= abs(dx)) {
+        end_y -= (dy > 0) ? I2C_PIN_LEAD_GAP : -I2C_PIN_LEAD_GAP;
+    } else {
+        end_x -= (dx > 0) ? I2C_PIN_LEAD_GAP : -I2C_PIN_LEAD_GAP;
+    }
+
+    d.drawLine(pad_x, pad_y, stub_x, stub_y, color);
+    d.drawLine(stub_x, stub_y, end_x, end_y, color);
+}
+
+// ExI2：Grove HY2.0-4P（上→下 GND 5V G2 G1），16×16 格；返回占用宽度
+static int drawI2cGrovePinout(const int x, const int y) {
+    auto& d = M5Cardputer.Display;
+    constexpr int rows = 4;
+    static constexpr const char* kLabels[rows] = {"GND", "5V", "G2", "G1"};
+    // G2=SDA 青、G1=SCL 黄，与 EXT 一致
+    static constexpr uint16_t kColors[rows] = {
+        WHITE, APP_COLOR_ERROR, CYAN, YELLOW};
+
+    d.setTextSize(1);
+    int max_tw = 0;
+    int tws[rows]{};
+    for (int i = 0; i < rows; ++i) {
+        tws[i] = d.textWidth(kLabels[i]);
+        if (tws[i] > max_tw) {
+            max_tw = tws[i];
+        }
+    }
+
+    const int label_x = x + I2C_PIN_CELL + I2C_PIN_LEAD_CLEAR;
+    for (int i = 0; i < rows; ++i) {
+        const int py = y + i * I2C_PIN_CELL;
+        const int pad_cx = x + I2C_PIN_CELL / 2;
+        const int pad_cy = py + I2C_PIN_CELL / 2;
+        const int text_y = pad_cy - I2C_PIN_FONT_H / 2;
+        const uint16_t c = kColors[i];
+
+        drawI2cPinPad(x, py, c);
+        // 从焊盘右缘中点 → 标签左缘中点（可斜）
+        drawI2cPinLead(x + I2C_PIN_CELL - 1, pad_cy, label_x, text_y + I2C_PIN_FONT_H / 2, c);
+        d.setTextColor(WHITE, BLACK);
+        d.setCursor(label_x, text_y);
+        d.print(kLabels[i]);
+    }
+    return I2C_PIN_CELL + I2C_PIN_LEAD_CLEAR + max_tw;
+}
+
+static int i2cGrovePinoutHeight() {
+    return 4 * I2C_PIN_CELL;
+}
+
+// InI2：俯视 EXT 2.54-14P（双排 7×2，水平居中）；返回占用高度
+// 上排右→左：5VIN GND 5VOUT SDA SCL G13 G15
+// 下排右→左：G3 G4 G6 G40 G14 G39 G5
+static int drawI2cExt14Pinout(const int y) {
+    auto& d = M5Cardputer.Display;
+    constexpr int cols = 7;
+
+    // 索引 0 = 最右侧（与实物俯视一致）
+    static constexpr const char* kTop[cols] = {"5VIN", "GND", "5VOUT", "SDA", "SCL", "G13", "G15"};
+    static constexpr const char* kBot[cols] = {"G3", "G4", "G6", "G40", "G14", "G39", "G5"};
+
+    auto pinColor = [](const char* name) -> uint16_t {
+        if (name[0] == '5') {
+            return APP_COLOR_ERROR; // 5VIN / 5VOUT 红
+        }
+        if (strcmp(name, "SDA") == 0) {
+            return CYAN;
+        }
+        if (strcmp(name, "SCL") == 0) {
+            return YELLOW;
+        }
+        return WHITE;
+    };
+
+    d.setTextSize(1);
+    const int grid_w = cols * I2C_PIN_CELL;
+    const int x = (I2C_SCREEN_W - grid_w) / 2;
+
+    struct PinLabel {
+        int pad_cx;
+        int text_x;
+        int tw;
+    };
+    PinLabel top_lbl[cols]{};
+    PinLabel bot_lbl[cols]{};
+
+    for (int i = 0; i < cols; ++i) {
+        const int pad_cx = x + (cols - 1 - i) * I2C_PIN_CELL + I2C_PIN_CELL / 2;
+        top_lbl[i].pad_cx = pad_cx;
+        top_lbl[i].tw = d.textWidth(kTop[i]);
+        bot_lbl[i].pad_cx = pad_cx;
+        bot_lbl[i].tw = d.textWidth(kBot[i]);
+    }
+
+    // 上下标签各挤成一排，相对焊盘居中（写不下就靠斜线指示）
+    auto packRow = [&](PinLabel* lbls) {
+        int total = 0;
+        for (int i = 0; i < cols; ++i) {
+            total += lbls[i].tw + I2C_PIN_LABEL_GAP;
+        }
+        total -= I2C_PIN_LABEL_GAP;
+        int cursor = x + (grid_w - total) / 2;
+        if (cursor < 0) {
+            cursor = 0;
+        }
+        if (cursor + total > I2C_SCREEN_W - 1) {
+            cursor = I2C_SCREEN_W - 1 - total;
+            if (cursor < 0) {
+                cursor = 0;
+            }
+        }
+        for (int vis = 0; vis < cols; ++vis) {
+            const int i = cols - 1 - vis;
+            lbls[i].text_x = cursor;
+            cursor += lbls[i].tw + I2C_PIN_LABEL_GAP;
+        }
+    };
+    packRow(top_lbl);
+    packRow(bot_lbl);
+
+    const int top_text_y = y;
+    const int top_pad_y = top_text_y + I2C_PIN_FONT_H + I2C_PIN_LEAD_CLEAR;
+    const int bot_pad_y = top_pad_y + I2C_PIN_CELL;
+    const int bot_text_y = bot_pad_y + I2C_PIN_CELL + I2C_PIN_LEAD_CLEAR;
+
+    for (int i = 0; i < cols; ++i) {
+        const int px = x + (cols - 1 - i) * I2C_PIN_CELL;
+        const uint16_t top_c = pinColor(kTop[i]);
+        const uint16_t bot_c = pinColor(kBot[i]);
+        const int top_lcx = top_lbl[i].text_x + top_lbl[i].tw / 2;
+        const int bot_lcx = bot_lbl[i].text_x + bot_lbl[i].tw / 2;
+
+        drawI2cPinLead(top_lbl[i].pad_cx, top_pad_y, top_lcx, top_text_y + I2C_PIN_FONT_H, top_c);
+        drawI2cPinPad(px, top_pad_y, top_c);
+        drawI2cPinPad(px, bot_pad_y, bot_c);
+        drawI2cPinLead(bot_lbl[i].pad_cx, bot_pad_y + I2C_PIN_CELL - 1, bot_lcx, bot_text_y, bot_c);
+
+        d.setTextColor(WHITE, BLACK);
+        d.setCursor(top_lbl[i].text_x, top_text_y);
+        d.print(kTop[i]);
+        d.setTextColor(WHITE, BLACK);
+        d.setCursor(bot_lbl[i].text_x, bot_text_y);
+        d.print(kBot[i]);
+    }
+
+    return bot_text_y + I2C_PIN_FONT_H - y;
 }
 
 static void drawI2cScanApp(m5::I2C_Class& bus, const char* title, const bool internal_bus) {
@@ -2353,39 +2545,49 @@ static void drawI2cScanApp(m5::I2C_Class& bus, const char* title, const bool int
     clearAppHeaderStatusRefresh();
     M5Cardputer.Display.fillScreen(BLACK);
 
-    constexpr int x = APP_HELP_CONTENT_X;
-    constexpr int title_y = APP_HELP_EDGE;
-    M5Cardputer.Display.setTextSize(2);
+    constexpr int edge = APP_HELP_EDGE;
+    constexpr int chart_list_gap = 10;
+    constexpr int title_h = 8;
+
+    // 小标题（无大 header / 无底栏 tip）
+    M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-    M5Cardputer.Display.setCursor(x, title_y);
+    M5Cardputer.Display.setCursor(edge, edge);
     M5Cardputer.Display.print(title);
 
-    // 标题右侧：SDA/SCL（与 Help 副标题同一行）
-    if (bus.isEnabled()) {
-        char pins[24];
-        snprintf(pins, sizeof(pins), "SDA %d  SCL %d", bus.getSDA(), bus.getSCL());
-        const int title_w = M5Cardputer.Display.textWidth(title);
-        M5Cardputer.Display.setTextSize(1);
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(x + title_w + APP_HELP_SUBTITLE_GAP, title_y + 4);
-        M5Cardputer.Display.print(pins);
-    }
+    int x = edge;
+    int y = edge + title_h + 2;
+    int list_max = 7;
 
-    int y = title_y + 16 + 7;
+    if (internal_bus) {
+        // In：居中 EXT14，下列表
+        const int chart_y = y;
+        y = chart_y + drawI2cExt14Pinout(chart_y) + chart_list_gap;
+        list_max = 3;
+    } else {
+        // Ex：左侧 Grove 纵向屏幕居中，右侧设备列表
+        const int grove_h = i2cGrovePinoutHeight();
+        const int grove_y = (I2C_SCREEN_H - grove_h) / 2;
+        const int grove_w = drawI2cGrovePinout(edge, grove_y);
+        x = edge + grove_w + chart_list_gap;
+        y = edge + title_h + 2;
+        list_max = 8;
+    }
     M5Cardputer.Display.setTextSize(1);
 
     if (!bus.isEnabled()) {
         M5Cardputer.Display.setTextColor(APP_COLOR_ERROR, BLACK);
         M5Cardputer.Display.setCursor(x, y);
         M5Cardputer.Display.print("bus disabled");
-        drawHelpHintRight("help");
         return;
     }
 
     constexpr int row_h = 12;
+    constexpr int dot_size = 4; // 行前 4x4 圆点
+    const int text_x = x + dot_size + 4;
     constexpr int addr_w = 36;
-    constexpr int role_x = 148;
-    constexpr int list_max = 7;
+    // Ex 右侧列窄一些：芯片名缩短占位
+    const int role_x = internal_bus ? (text_x + addr_w + 52) : (text_x + addr_w + 44);
     int count = 0;
     int shown = 0;
     for (int addr = 8; addr < 0x78; ++addr) {
@@ -2396,35 +2598,38 @@ static void drawI2cScanApp(m5::I2C_Class& bus, const char* title, const bool int
         if (shown >= list_max) {
             continue;
         }
+        const I2cDevHint* hint = findI2cDevHint(static_cast<uint8_t>(addr), internal_bus);
+        // 有已知芯片映射用绿，未知用灰
+        const uint16_t dot_color = hint != nullptr ? APP_COLOR_OK : I2C_COLOR_GRAY;
+        M5Cardputer.Display.fillCircle(x + dot_size / 2, y + 3, dot_size / 2, dot_color);
+
         char addr_text[8];
         snprintf(addr_text, sizeof(addr_text), "0x%02X", addr);
         M5Cardputer.Display.setTextColor(APP_COLOR_LABEL, BLACK);
-        M5Cardputer.Display.setCursor(x, y);
+        M5Cardputer.Display.setCursor(text_x, y);
         M5Cardputer.Display.print(addr_text);
 
-        const I2cDevHint* hint = findI2cDevHint(static_cast<uint8_t>(addr), internal_bus);
         M5Cardputer.Display.setTextColor(internal_bus ? APP_COLOR_VALUE : APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(x + addr_w, y);
+        M5Cardputer.Display.setCursor(text_x + addr_w, y);
         M5Cardputer.Display.print(hint != nullptr ? hint->chip : "--");
 
-        M5Cardputer.Display.setTextColor(APP_COLOR_MUTED, BLACK);
+        M5Cardputer.Display.setTextColor(I2C_COLOR_GRAY, BLACK);
         M5Cardputer.Display.setCursor(role_x, y);
         M5Cardputer.Display.print(hint != nullptr ? hint->role : "unknown");
         y += row_h;
         ++shown;
     }
     if (count == 0) {
-        M5Cardputer.Display.setTextColor(APP_COLOR_MUTED, BLACK);
+        M5Cardputer.Display.setTextColor(I2C_COLOR_GRAY, BLACK);
         M5Cardputer.Display.setCursor(x, y);
         M5Cardputer.Display.print("no device");
     } else if (count > list_max) {
         char more[16];
         snprintf(more, sizeof(more), "+%d more", count - list_max);
-        M5Cardputer.Display.setTextColor(APP_COLOR_MUTED, BLACK);
+        M5Cardputer.Display.setTextColor(I2C_COLOR_GRAY, BLACK);
         M5Cardputer.Display.setCursor(x, y);
         M5Cardputer.Display.print(more);
     }
-    drawHelpHintRight("help");
 }
 
 static void handleI2cScanApp(const String& key, m5::I2C_Class& bus, const char* title,
@@ -2616,18 +2821,19 @@ static constexpr int HW_HUB_ITEMS_PER_PAGE = 8;
 struct HardwareTestHubItem {
     const char* title;
     HardwareTestMode mode;
+    char letter; // 0 = 无字母快捷键；与页内数字并存，跨页直达
 };
 
 static constexpr HardwareTestHubItem HW_HUB_ITEMS[] = {
-    {"DISPLAY", HardwareTestMode::SCREEN},
-    {"IMU", HardwareTestMode::IMU},
-    {"FONT", HardwareTestMode::FONT},
-    {"ICONS", HardwareTestMode::ICONS},
-    {"RGB LED", HardwareTestMode::LED},
-    {"BLE", HardwareTestMode::BLE},
-    {"INI2", HardwareTestMode::IN_I2C},
-    {"EXI2", HardwareTestMode::EX_I2C},
-    {"MIC", HardwareTestMode::MIC},
+    {"DISPLAY", HardwareTestMode::SCREEN, 'd'},
+    {"IMU", HardwareTestMode::IMU, 'g'},
+    {"FONT", HardwareTestMode::FONT, 'f'},
+    {"ICONS", HardwareTestMode::ICONS, 'a'},
+    {"RGB LED", HardwareTestMode::LED, '\0'},
+    {"BLE", HardwareTestMode::BLE, 'b'},
+    {"INI2", HardwareTestMode::IN_I2C, 'i'},
+    {"EXI2", HardwareTestMode::EX_I2C, 'e'},
+    {"MIC", HardwareTestMode::MIC, 'r'},
 };
 static constexpr int HW_HUB_ITEM_COUNT =
     static_cast<int>(sizeof(HW_HUB_ITEMS) / sizeof(HW_HUB_ITEMS[0]));
@@ -2771,11 +2977,20 @@ static void handleHardwareTestsApp(const Keyboard_Class::KeysState& status) {
             showHardwareTestsHubScreen();
             return;
         }
-        for (const char c : status.word) {
+        for (const char raw : status.word) {
+            const char c =
+                (raw >= 'A' && raw <= 'Z') ? static_cast<char>(raw - 'A' + 'a') : raw;
             if (c >= '1' && c <= '8') {
                 const int item = hardwareTestHubPage * HW_HUB_ITEMS_PER_PAGE + (c - '1');
                 if (item < HW_HUB_ITEM_COUNT) {
                     selectHardwareTest(HW_HUB_ITEMS[item].mode);
+                    return;
+                }
+            }
+            // 字母快捷键：不依赖当前页
+            for (int i = 0; i < HW_HUB_ITEM_COUNT; ++i) {
+                if (HW_HUB_ITEMS[i].letter != '\0' && HW_HUB_ITEMS[i].letter == c) {
+                    selectHardwareTest(HW_HUB_ITEMS[i].mode);
                     return;
                 }
             }
@@ -3326,10 +3541,11 @@ static bool tryCloseCurrentAppHelp() {
         case AppState::CALENDAR:
             return closeCalendarHelp();
         case AppState::RADIO:
-            if (closeRadioStations()) {
+            // Help 优先于退出 Stations/Tuner / 取消搜台
+            if (closeRadioHelp()) {
                 return true;
             }
-            if (closeRadioHelp()) {
+            if (closeRadioStations()) {
                 return true;
             }
             return closeRadioSeek();

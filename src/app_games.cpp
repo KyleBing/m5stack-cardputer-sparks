@@ -59,23 +59,25 @@ static constexpr int GAMES_HUB_ITEMS_PER_PAGE = 8;
 struct GamesHubItem {
     const char* title;
     GameMode mode;
+    char letter; // 0 = 无字母快捷键；与页内数字并存，跨页直达
 };
 
 static constexpr GamesHubItem GAMES_HUB_ITEMS[] = {
-    {"COIN", GameMode::COIN},
-    {"CHAOS", GameMode::DOUBLE_PENDULUM},
-    {"WHEEL", GameMode::WHEEL},
-    {"DICE", GameMode::DICE},
-    {"PHYS", GameMode::NEWTON_CRADLE},
-    {"NEON FX", GameMode::NEON_FX},
-    {"CURVES", GameMode::CURVES},
-    {"MINES", GameMode::MINESWEEPER},
-    {"SNAKE", GameMode::SNAKE},
-    {"LIFE", GameMode::LIFE},
-    {"MATRIX", GameMode::MATRIX_RAIN},
-    {"WAVE", GameMode::BEZIER_WAVE},
-    {"PCLOCK", GameMode::PARTICLE_CLOCK},
-    {"LISSA", GameMode::LISSAJOUS},
+    {"COIN", GameMode::COIN, 'c'},
+    {"CHAOS", GameMode::DOUBLE_PENDULUM, '\0'},
+    {"WHEEL", GameMode::WHEEL, 'w'},
+    {"DICE", GameMode::DICE, 'd'},
+    {"PHYS", GameMode::NEWTON_CRADLE, '\0'},
+    {"NEON FX", GameMode::NEON_FX, '\0'},
+    {"CURVES", GameMode::CURVES, '\0'},
+    {"MINES", GameMode::MINESWEEPER, 'm'},
+    {"SNAKE", GameMode::SNAKE, 's'},
+    {"LIFE", GameMode::LIFE, 'l'},
+    {"MATRIX", GameMode::MATRIX_RAIN, 'x'},
+    // w 已给 WHEEL，WAVE 用相邻键 v
+    {"WAVE", GameMode::BEZIER_WAVE, 'v'},
+    {"PCLOCK", GameMode::PARTICLE_CLOCK, 't'},
+    {"LISSA", GameMode::LISSAJOUS, '\0'},
 };
 static constexpr int GAMES_HUB_ITEM_COUNT =
     static_cast<int>(sizeof(GAMES_HUB_ITEMS) / sizeof(GAMES_HUB_ITEMS[0]));
@@ -232,7 +234,7 @@ static const char* modeName() {
         case GameMode::LISSAJOUS:
             return "LISSAJOUS";
         default:
-            return "MINI GAMES";
+            return "Mini Games";
     }
 }
 
@@ -930,7 +932,7 @@ static void drawHubCards() {
 }
 
 static void showGamesHubScreen() {
-    beginAppHubScreen("MINI GAMES", gamesHubBg(), g_hub_page, getGamesHubPageCount());
+    beginAppHubScreen("Mini Games", gamesHubBg(), g_hub_page, getGamesHubPageCount());
     drawHubCards();
 }
 
@@ -1406,11 +1408,20 @@ void handleGamesApp(const Keyboard_Class::KeysState& status) {
         if (g_help) {
             continue;
         }
-        if (g_mode == GameMode::HUB && c >= '1' && c <= '8') {
-            const int item = g_hub_page * GAMES_HUB_ITEMS_PER_PAGE + (c - '1');
-            if (item < GAMES_HUB_ITEM_COUNT) {
-                selectMode(GAMES_HUB_ITEMS[item].mode);
-                return;
+        if (g_mode == GameMode::HUB) {
+            if (c >= '1' && c <= '8') {
+                const int item = g_hub_page * GAMES_HUB_ITEMS_PER_PAGE + (c - '1');
+                if (item < GAMES_HUB_ITEM_COUNT) {
+                    selectMode(GAMES_HUB_ITEMS[item].mode);
+                    return;
+                }
+            }
+            // 字母快捷键：不依赖当前页（h 已在上方作 help）
+            for (int i = 0; i < GAMES_HUB_ITEM_COUNT; ++i) {
+                if (GAMES_HUB_ITEMS[i].letter != '\0' && GAMES_HUB_ITEMS[i].letter == c) {
+                    selectMode(GAMES_HUB_ITEMS[i].mode);
+                    return;
+                }
             }
         }
         if (c == ' ' && g_mode == GameMode::COIN && !g_coin_tossing) {

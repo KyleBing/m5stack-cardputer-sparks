@@ -2,6 +2,7 @@
 #include "app_colors.h"
 #include "app_common.h"
 #include "app_header.h"
+#include "app_icons.h"
 #include "tea5767.h"
 #include <Preferences.h>
 #include <cstdio>
@@ -9,14 +10,30 @@
 
 namespace {
 
-static constexpr int RADIO_PRESET_COUNT = 10;
+static constexpr int RADIO_HOTKEY_COUNT = 10; // 1-0 数字快捷槽数量
+static constexpr int RADIO_STATION_MAX = 64;  // 列表可存任意个（有上限）
 static constexpr int RADIO_NAME_MAX = 16;
 static constexpr int DIAL_MARGIN = 14; // 两端留空，MHz 数字不被裁切
 static constexpr int RADIO_UI_LEFT = APP_CONTENT_X;
 static constexpr int RADIO_UI_TOP = APP_CONTENT_INSET_Y;
+static constexpr int RADIO_FREQ_Y = 66; // 刻度下方，较原先再下移 10px
+static constexpr int RADIO_FREQ_SCALE = 3;
+static constexpr int RADIO_PLAY_SIZE = 40;
+static constexpr int RADIO_METER_Y = 112;
+static constexpr int RADIO_NO_MOD_Y = RADIO_METER_Y - 14; // 未连接提示在信号条上方
+static constexpr int RADIO_TITLE_H = 16; // size-2 标题高度
+static constexpr int RADIO_TITLE_GAP = 5; // 标题与内容间距
+static constexpr int RADIO_LIST_ROW_H = 11;
+static constexpr int RADIO_LIST_TIP_H = 12; // 底栏提示预留
+static constexpr int RADIO_DIAL_REGION_H = 52; // 刻度+MHz 数字（局部刷新）
+static constexpr uint8_t RADIO_DIRTY_DIAL = 1u << 0;
+static constexpr uint8_t RADIO_DIRTY_FREQ = 1u << 1;
+static constexpr uint8_t RADIO_DIRTY_METER = 1u << 2;
+static constexpr uint8_t RADIO_DIRTY_LIVE =
+    RADIO_DIRTY_DIAL | RADIO_DIRTY_FREQ | RADIO_DIRTY_METER;
 
 struct RadioPreset {
-    uint16_t freq; // 0 = 空槽
+    uint16_t freq; // 0 = 空
     char name[RADIO_NAME_MAX + 1];
 };
 
@@ -24,6 +41,13 @@ enum class RadioView {
     Main,
     Stations,
     Rename,
+    Tuner,
+};
+
+enum class RadioHelpKind : uint8_t {
+    None = 0,
+    Main,
+    Stations,
     Tuner,
 };
 
@@ -46,9 +70,8 @@ static bool g_canvas_ok = false;
 static int g_canvas_w = 0;
 static int g_canvas_h = 0;
 static bool g_ready = false;
-static bool g_help = false;
+static RadioHelpKind g_help_kind = RadioHelpKind::None;
 static int g_help_page = 0;
-static constexpr int RADIO_HELP_PAGES = 3;
 static RadioView g_view = RadioView::Main;
 static bool g_muted = false;
 static bool g_mono = false;
@@ -62,14 +85,16 @@ static uint8_t g_rssi = 0;
 static uint8_t g_if_counter = 0;
 static uint8_t g_chip_id = 0;
 static bool g_stereo = false;
-static uint32_t g_seek_anim_ms = 0;
+static uint32_t g_seek_poll_ms = 0; // 扫描中轮询真实 RSSI/立体声
+static uint32_t g_rssi_kick_ms = 0; // 空闲时 kickAdc 时间戳
+static bool g_rssi_pending = false; // 已写 PLL，等待 ADC 稳定
 static uint32_t g_seek_settle_ms = 0;
 static uint32_t g_seek_hw_start_ms = 0;
 static uint16_t g_seek_origin = 0;
-static int g_seek_frame = 0;
 static int g_scan_found_count = 0;
 static uint16_t g_scan_last_found = 0;
 static constexpr uint32_t RADIO_SEEK_SETTLE_MS = 60;
+static constexpr uint32_t RADIO_RSSI_POLL_MS = 250; // 空闲信号刷新周期（kick + 60ms settle）
 static constexpr uint32_t RADIO_HW_SEEK_TIMEOUT_MS = 8000;
 static bool g_japan = false;
 static bool g_deemph75 = false;
@@ -81,8 +106,10 @@ static bool g_snc = true;
 static Tea5767::SeekStop g_ssl = Tea5767::SeekStop::Mid;
 static Tea5767::ChannelMute g_ch_mute = Tea5767::ChannelMute::Off;
 static int g_tuner_sel = 0;
-static RadioPreset g_presets[RADIO_PRESET_COUNT]{};
+static RadioPreset g_presets[RADIO_STATION_MAX]{};
+static int g_station_count = 0;
 static int g_sel_slot = 0;
+static int g_list_scroll = 0;
 static int g_active_slot = -1;
 static char g_rename_buf[RADIO_NAME_MAX + 1];
 static int8_t g_tune_repeat_dir = 0;
@@ -131,6 +158,11 @@ static bool isPresetValid(const RadioPreset& preset) {
     return preset.freq >= radioFreqMin() && preset.freq <= radioFreqMax();
 }
 
+// 存盘用：不依赖当前频段，只要像合法 FM 频点
+static bool isPresetStored(const RadioPreset& preset) {
+    return preset.freq >= Tea5767::FREQ_JP_MIN && preset.freq <= Tea5767::FREQ_EU_MAX;
+}
+
 static void presetLabel(const RadioPreset& preset, char* out, const size_t out_len) {
     if (preset.name[0] != '\0') {
         snprintf(out, out_len, "%s", preset.name);
@@ -145,37 +177,100 @@ static void presetLabel(const RadioPreset& preset, char* out, const size_t out_l
     snprintf(out, out_len, "Empty");
 }
 
-static void loadRadioPresets() {
-    Preferences prefs;
-    if (!prefs.begin("radio", true)) {
-        return;
+static void clearAllStations() {
+    g_station_count = 0;
+    g_sel_slot = 0;
+    g_list_scroll = 0;
+    g_active_slot = -1;
+    for (int i = 0; i < RADIO_STATION_MAX; ++i) {
+        g_presets[i].freq = 0;
+        g_presets[i].name[0] = '\0';
     }
-    for (int i = 0; i < RADIO_PRESET_COUNT; ++i) {
-        char key[4];
-        snprintf(key, sizeof(key), "f%d", i);
-        g_presets[i].freq = prefs.getUShort(key, 0);
-        snprintf(key, sizeof(key), "n%d", i);
-        const String name = prefs.getString(key, "");
-        strncpy(g_presets[i].name, name.c_str(), RADIO_NAME_MAX);
-        g_presets[i].name[RADIO_NAME_MAX] = '\0';
-    }
-    prefs.end();
 }
 
-static void saveRadioPreset(const int idx) {
-    if (idx < 0 || idx >= RADIO_PRESET_COUNT) {
-        return;
-    }
+static void saveAllStations() {
     Preferences prefs;
     if (!prefs.begin("radio", false)) {
         return;
     }
-    char key[4];
-    snprintf(key, sizeof(key), "f%d", idx);
-    prefs.putUShort(key, g_presets[idx].freq);
-    snprintf(key, sizeof(key), "n%d", idx);
-    prefs.putString(key, g_presets[idx].name);
+    prefs.putUChar("sc", static_cast<uint8_t>(g_station_count));
+    if (g_station_count > 0) {
+        prefs.putBytes("st", g_presets, sizeof(RadioPreset) * static_cast<size_t>(g_station_count));
+    } else {
+        prefs.remove("st");
+    }
+    // 清掉旧版 f0-n9 单槽键，避免下次误读
+    for (int i = 0; i < RADIO_HOTKEY_COUNT; ++i) {
+        char key[4];
+        snprintf(key, sizeof(key), "f%d", i);
+        prefs.remove(key);
+        snprintf(key, sizeof(key), "n%d", i);
+        prefs.remove(key);
+    }
     prefs.end();
+}
+
+static void loadRadioPresets() {
+    clearAllStations();
+    Preferences prefs;
+    if (!prefs.begin("radio", true)) {
+        return;
+    }
+
+    // 新格式：count + blob
+    const uint8_t sc = prefs.getUChar("sc", 0xFF);
+    if (sc != 0xFF) {
+        g_station_count = sc;
+        if (g_station_count > RADIO_STATION_MAX) {
+            g_station_count = RADIO_STATION_MAX;
+        }
+        if (g_station_count > 0) {
+            const size_t need = sizeof(RadioPreset) * static_cast<size_t>(g_station_count);
+            const size_t got = prefs.getBytes("st", g_presets, need);
+            if (got < need) {
+                g_station_count = static_cast<int>(got / sizeof(RadioPreset));
+            }
+        }
+        prefs.end();
+        // 丢掉完全非法的条目；跨频段的留给 isPresetValid 在 UI 里判断
+        int w = 0;
+        for (int i = 0; i < g_station_count; ++i) {
+            if (!isPresetStored(g_presets[i])) {
+                continue;
+            }
+            if (w != i) {
+                g_presets[w] = g_presets[i];
+            }
+            ++w;
+        }
+        for (int i = w; i < g_station_count; ++i) {
+            g_presets[i].freq = 0;
+            g_presets[i].name[0] = '\0';
+        }
+        g_station_count = w;
+        return;
+    }
+
+    // 旧格式迁移：f0-n9 固定 10 槽
+    for (int i = 0; i < RADIO_HOTKEY_COUNT; ++i) {
+        char key[4];
+        snprintf(key, sizeof(key), "f%d", i);
+        const uint16_t freq = prefs.getUShort(key, 0);
+        snprintf(key, sizeof(key), "n%d", i);
+        const String name = prefs.getString(key, "");
+        RadioPreset p{};
+        p.freq = freq;
+        strncpy(p.name, name.c_str(), RADIO_NAME_MAX);
+        p.name[RADIO_NAME_MAX] = '\0';
+        if (!isPresetStored(p)) {
+            continue;
+        }
+        g_presets[g_station_count++] = p;
+    }
+    prefs.end();
+    if (g_station_count > 0) {
+        saveAllStations(); // 写成新格式
+    }
 }
 
 static void loadTunerSettings() {
@@ -335,17 +430,16 @@ static void drawDial(const uint16_t freq_centi) {
         radioCanvas.print(label);
     }
 
-    // 已保存电台：刻度尺彩色标记（当前槽位用高亮色）
-    for (int i = 0; i < RADIO_PRESET_COUNT; ++i) {
+    // 已保存 / 扫描中已发现的电台：刻度上方 2x2 方块（当前槽位高亮）
+    for (int i = 0; i < g_station_count; ++i) {
         if (!isPresetValid(g_presets[i])) {
             continue;
         }
         const int px = mapFreqToX(inner_x, inner_w, g_presets[i].freq);
         const bool active = (i == g_active_slot);
         const uint16_t color = active ? APP_COLOR_LABEL : APP_COLOR_OK;
-        const int mark_h = active ? 10 : 7;
-        radioCanvas.drawFastVLine(px, dial_bottom - mark_h, mark_h, color);
-        radioCanvas.fillCircle(px, dial_y + 3, 2, color);
+        const int mx = constrain(px, 0, dial_w - 2);
+        radioCanvas.fillRect(mx, dial_y + 2, 2, 2, color);
     }
 
     const int px = mapFreqToX(inner_x, inner_w, freq_centi);
@@ -353,34 +447,35 @@ static void drawDial(const uint16_t freq_centi) {
     radioCanvas.fillRect(needle_x, dial_y + 1, 2, dial_h - 2, RED);
 }
 
+// 信号条始终按真实 RSSI 绘制（扫描中也不做假动画）
 static void drawSignalBars(const int x, const int y, const int bar_w, const int bar_gap, const int max_h,
-                           const uint8_t rssi, const bool seeking) {
+                           const uint8_t rssi) {
     constexpr int bars = 5;
     for (int i = 0; i < bars; ++i) {
         const int bx = x + i * (bar_w + bar_gap);
         const int bh = 6 + i * 3;
         const int by = y + max_h - bh;
-        radioCanvas.drawRect(bx, by, bar_w, bh, APP_COLOR_MUTED);
 
         int level = 0;
-        if (seeking) {
-            level = (g_seek_frame + i) % bars;
-        } else if (g_ready) {
+        if (g_ready) {
             level = static_cast<int>((rssi * bars + 14) / 15);
         }
         if (i < level) {
+            // active：实心占满原含 border 的整块，不再画边框
             uint16_t color = APP_COLOR_OK;
             if (i >= bars - 2) {
                 color = APP_COLOR_WARN;
             }
-            radioCanvas.fillRect(bx + 1, by + bh - (bh - 2), bar_w - 2, bh - 2, color);
+            radioCanvas.fillRect(bx, by, bar_w, bh, color);
+        } else {
+            radioCanvas.drawRect(bx, by, bar_w, bh, APP_COLOR_MUTED);
         }
     }
 }
 
-// 40×40 播放/停止图标：播放=绿色三角，停止=红色圆角方块
+// 播放/停止图标：播放=绿色三角，停止=红色圆角方块
 static void drawPlayPauseIcon(const int x, const int y) {
-    constexpr int size = 40;
+    constexpr int size = RADIO_PLAY_SIZE;
     const bool playing = g_ready && !g_muted;
     if (playing) {
         constexpr int pad = 9;
@@ -460,11 +555,11 @@ static void drawFrequencyDisplay(const uint16_t freq_centi) {
     char freq_text[12];
     formatFreqText(freq_centi, freq_text, sizeof(freq_text));
 
-    constexpr int scale = 3;
+    constexpr int scale = RADIO_FREQ_SCALE;
     const int text_w = measureDotTextWidth1x(freq_text) * scale;
     const int text_h = DOT_TEXT_H_1X * scale;
     const int freq_x = (g_canvas_w - text_w) / 2;
-    constexpr int freq_y = 56;
+    constexpr int freq_y = RADIO_FREQ_Y;
 
     drawDotTextOnCanvas(freq_text, freq_x, freq_y, scale, WHITE);
 
@@ -473,13 +568,78 @@ static void drawFrequencyDisplay(const uint16_t freq_centi) {
     radioCanvas.setCursor(freq_x + text_w + 4, freq_y + text_h - 10);
     radioCanvas.print("MHz");
 
-    if (g_active_slot >= 0 && g_active_slot < RADIO_PRESET_COUNT) {
-        char slot_text[6];
+    if (g_active_slot >= 0 && g_active_slot < g_station_count) {
+        const RadioPreset& preset = g_presets[g_active_slot];
+        const bool has_name = preset.name[0] != '\0'; // 未改名则只显示序号
+        constexpr int line_h = 8;
+        const int block_h = has_name ? (line_h * 2 + 1) : line_h;
+        const int block_y = freq_y + (text_h - block_h) / 2;
+
+        char slot_text[8];
         snprintf(slot_text, sizeof(slot_text), "#%d", g_active_slot + 1);
+        radioCanvas.setTextSize(1);
         radioCanvas.setTextColor(APP_COLOR_MUTED, BLACK);
-        radioCanvas.setCursor(RADIO_UI_LEFT, freq_y + 4);
+        radioCanvas.setCursor(RADIO_UI_LEFT, block_y);
         radioCanvas.print(slot_text);
+
+        if (has_name) {
+            // 名称不超过频率数字左缘，过长则截断
+            const int max_w = freq_x - RADIO_UI_LEFT - 4;
+            char shown[RADIO_NAME_MAX + 1];
+            strncpy(shown, preset.name, sizeof(shown) - 1);
+            shown[sizeof(shown) - 1] = '\0';
+            while (shown[0] != '\0' && radioCanvas.textWidth(shown) > max_w) {
+                shown[strlen(shown) - 1] = '\0';
+            }
+            radioCanvas.setTextColor(APP_COLOR_HINT, BLACK);
+            radioCanvas.setCursor(RADIO_UI_LEFT, block_y + line_h + 1);
+            radioCanvas.print(shown);
+        }
     }
+}
+
+// 右下角电池；距边 5px（图标 API 不走 canvas，推屏时避开这块）
+static int g_bat_shown_level = -1;
+static bool g_bat_shown_charging = false;
+static bool g_bat_drawn = false;
+static uint32_t g_bat_sample_ms = 0;
+static constexpr uint32_t RADIO_BAT_SAMPLE_MS = 2000;
+
+static void radioBatteryRect(int* x, int* y, int* w, int* h) {
+    *w = getIconBatteryDisplayWidth(g_bat_shown_charging);
+    *h = getIconBatteryBodyHeight();
+    *x = g_canvas_w - *w - APP_HELP_EDGE;
+    *y = g_canvas_h - *h - APP_HELP_EDGE;
+}
+
+static int radioBatteryLeftX() {
+    return g_canvas_w - getIconBatteryDisplayWidth(g_bat_shown_charging) - APP_HELP_EDGE;
+}
+
+static void drawRadioBattery(const bool force_draw) {
+    const uint32_t now = millis();
+    const bool need_sample =
+        (g_bat_shown_level < 0) || (!g_seeking && now - g_bat_sample_ms >= RADIO_BAT_SAMPLE_MS);
+    bool changed = false;
+    if (need_sample) {
+        const int level = M5Cardputer.Power.getBatteryLevel();
+        const bool charging = isBatteryCharging();
+        changed = (level != g_bat_shown_level) || (charging != g_bat_shown_charging);
+        g_bat_shown_level = level;
+        g_bat_shown_charging = charging;
+        g_bat_sample_ms = now;
+    }
+    // 已画过且数值没变：不要擦了重画，否则会闪
+    if (!force_draw && g_bat_drawn && !changed) {
+        return;
+    }
+    int bat_x = 0;
+    int bat_y = 0;
+    int bat_w = 0;
+    int bat_h = 0;
+    radioBatteryRect(&bat_x, &bat_y, &bat_w, &bat_h);
+    drawIconBattery(bat_x, bat_y, g_bat_shown_level, g_bat_shown_charging);
+    g_bat_drawn = true;
 }
 
 static void drawNoModuleHint() {
@@ -488,45 +648,98 @@ static void drawNoModuleHint() {
     }
     radioCanvas.setTextSize(1);
     radioCanvas.setTextColor(APP_COLOR_ERROR, BLACK);
-    radioCanvas.setCursor(RADIO_UI_LEFT, 82);
+    radioCanvas.setCursor(RADIO_UI_LEFT, RADIO_NO_MOD_Y);
     radioCanvas.print("No TEA5767");
-    radioCanvas.setTextColor(APP_COLOR_HINT, BLACK);
-    radioCanvas.setCursor(RADIO_UI_LEFT, 94);
-    radioCanvas.print("Grove G2/G1 or EXT G8/G9");
+}
+
+static int stationsListTopY() {
+    return APP_HELP_EDGE + RADIO_TITLE_H + RADIO_TITLE_GAP;
+}
+
+static int stationsVisibleRows() {
+    const int avail = g_canvas_h - stationsListTopY() - RADIO_LIST_TIP_H;
+    const int rows = avail / RADIO_LIST_ROW_H;
+    return rows < 1 ? 1 : rows;
+}
+
+static void ensureStationVisible() {
+    if (g_station_count <= 0) {
+        g_list_scroll = 0;
+        g_sel_slot = 0;
+        return;
+    }
+    if (g_sel_slot < 0) {
+        g_sel_slot = 0;
+    }
+    if (g_sel_slot >= g_station_count) {
+        g_sel_slot = g_station_count - 1;
+    }
+    const int vis = stationsVisibleRows();
+    if (g_sel_slot < g_list_scroll) {
+        g_list_scroll = g_sel_slot;
+    }
+    if (g_sel_slot >= g_list_scroll + vis) {
+        g_list_scroll = g_sel_slot - vis + 1;
+    }
+    const int max_scroll = g_station_count > vis ? (g_station_count - vis) : 0;
+    if (g_list_scroll < 0) {
+        g_list_scroll = 0;
+    }
+    if (g_list_scroll > max_scroll) {
+        g_list_scroll = max_scroll;
+    }
 }
 
 static void drawStationsList() {
     radioCanvas.fillSprite(BLACK);
-    radioCanvas.setTextSize(1);
-    radioCanvas.setTextColor(APP_COLOR_LABEL, BLACK);
     // 列表是全屏子界面，不预留主界面的 header 高度。
-    constexpr int title_y = 2;
+    constexpr int title_y = APP_HELP_EDGE;
+    radioCanvas.setTextSize(2);
+    radioCanvas.setTextColor(APP_COLOR_LABEL, BLACK);
     radioCanvas.setCursor(RADIO_UI_LEFT, title_y);
     radioCanvas.print("Stations");
 
-    constexpr int row_h = 11;
-    constexpr int list_y = title_y + 11;
-    for (int i = 0; i < RADIO_PRESET_COUNT; ++i) {
-        const int y = list_y + i * row_h;
-        const bool sel = (i == g_sel_slot);
-        if (sel) {
-            radioCanvas.fillRect(0, y - 1, g_canvas_w, row_h, APP_COLOR_LABEL);
-        }
+    radioCanvas.setTextSize(1);
+    const int list_y = stationsListTopY();
+    const int vis = stationsVisibleRows();
+    ensureStationVisible();
 
-        char num[4];
-        snprintf(num, sizeof(num), "%d", i + 1);
-        radioCanvas.setTextColor(sel ? BLACK : APP_COLOR_HINT, sel ? APP_COLOR_LABEL : BLACK);
-        radioCanvas.setCursor(RADIO_UI_LEFT, y);
-        radioCanvas.print(num);
+    if (g_station_count <= 0) {
+        radioCanvas.setTextColor(APP_COLOR_MUTED, BLACK);
+        radioCanvas.setCursor(RADIO_UI_LEFT, list_y);
+        radioCanvas.print("Empty");
+    } else {
+        for (int row = 0; row < vis; ++row) {
+            const int i = g_list_scroll + row;
+            if (i >= g_station_count) {
+                break;
+            }
+            const int y = list_y + row * RADIO_LIST_ROW_H;
+            const bool sel = (i == g_sel_slot);
+            if (sel) {
+                radioCanvas.fillRect(0, y - 1, g_canvas_w, RADIO_LIST_ROW_H, APP_COLOR_LABEL);
+            }
 
-        radioCanvas.setCursor(RADIO_UI_LEFT + 14, y);
-        if (g_view == RadioView::Rename && sel) {
-            radioCanvas.print(g_rename_buf);
-            radioCanvas.print("_");
-        } else {
-            char label[RADIO_NAME_MAX + 8];
-            presetLabel(g_presets[i], label, sizeof(label));
-            radioCanvas.print(label);
+            char num[6];
+            // 快捷键槽位标 1-0，其余用序号
+            if (i < RADIO_HOTKEY_COUNT) {
+                snprintf(num, sizeof(num), "%d", (i + 1) % 10);
+            } else {
+                snprintf(num, sizeof(num), "%d", i + 1);
+            }
+            radioCanvas.setTextColor(sel ? BLACK : APP_COLOR_HINT, sel ? APP_COLOR_LABEL : BLACK);
+            radioCanvas.setCursor(RADIO_UI_LEFT, y);
+            radioCanvas.print(num);
+
+            radioCanvas.setCursor(RADIO_UI_LEFT + 18, y);
+            if (g_view == RadioView::Rename && sel) {
+                radioCanvas.print(g_rename_buf);
+                radioCanvas.print("_");
+            } else {
+                char label[RADIO_NAME_MAX + 8];
+                presetLabel(g_presets[i], label, sizeof(label));
+                radioCanvas.print(label);
+            }
         }
     }
 
@@ -551,35 +764,118 @@ static bool ensureRadioCanvas() {
     return true;
 }
 
+static void pushRadioRect(const int x, const int y, int w, int h) {
+    if (!g_canvas_ok || w <= 0 || h <= 0) {
+        return;
+    }
+    int px = x;
+    int py = y;
+    if (px < 0) {
+        w += px;
+        px = 0;
+    }
+    if (py < 0) {
+        h += py;
+        py = 0;
+    }
+    if (px + w > g_canvas_w) {
+        w = g_canvas_w - px;
+    }
+    if (py + h > g_canvas_h) {
+        h = g_canvas_h - py;
+    }
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    // clip 后 pushSprite 只传脏矩形，不整屏刷
+    M5Cardputer.Display.setClipRect(px, py, w, h);
+    radioCanvas.pushSprite(0, 0);
+    M5Cardputer.Display.clearClipRect();
+}
+
 static void pushRadioFrame() {
     if (g_canvas_ok) {
         radioCanvas.pushSprite(0, 0);
     }
 }
 
-static void drawRadioMain() {
+// 避开右下角电池：上半整宽 + 电池左侧
+static void pushRadioAvoidBattery() {
     if (!g_canvas_ok) {
         return;
     }
+    int bx = 0;
+    int by = 0;
+    int bw = 0;
+    int bh = 0;
+    radioBatteryRect(&bx, &by, &bw, &bh);
+    if (by > 0) {
+        pushRadioRect(0, 0, g_canvas_w, by);
+    }
+    if (bx > 0) {
+        pushRadioRect(0, by, bx, g_canvas_h - by);
+    }
+}
 
+static void paintRadioMainCanvas() {
     radioCanvas.fillSprite(BLACK);
     drawDial(g_freq);
     drawFrequencyDisplay(g_freq);
     drawNoModuleHint();
 
-    constexpr int icon_size = 40;
+    // 播放键与频率数字纵向居中对齐
+    constexpr int icon_size = RADIO_PLAY_SIZE;
+    const int freq_h = DOT_TEXT_H_1X * RADIO_FREQ_SCALE;
     const int icon_x = g_canvas_w - icon_size - RADIO_UI_LEFT;
-    drawPlayPauseIcon(icon_x, 54);
+    const int icon_y = RADIO_FREQ_Y + (freq_h - icon_size) / 2;
+    drawPlayPauseIcon(icon_x, icon_y);
 
-    constexpr int meter_y = 112;
+    constexpr int meter_y = RADIO_METER_Y;
     constexpr int bar_w = 5;
-    constexpr int bar_gap = 3;
+    constexpr int bar_gap = 2; // 信号条间距再贴近 1px
     constexpr int bars = 5;
+    constexpr int bars_h = 18;
+    constexpr int badge_h = 8 + 1 * 2; // text_size1 + pad_y
     const int bars_w = bars * bar_w + (bars - 1) * bar_gap;
-    drawSignalBars(RADIO_UI_LEFT, meter_y, bar_w, bar_gap, 18, g_rssi, g_seeking);
-    drawStatusBadges(RADIO_UI_LEFT + bars_w + 10, meter_y + 1);
+    // status 与信号条纵向居中对齐
+    const int status_y = meter_y + (bars_h - badge_h) / 2;
+    drawSignalBars(RADIO_UI_LEFT, meter_y, bar_w, bar_gap, bars_h, g_rssi);
+    drawStatusBadges(RADIO_UI_LEFT + bars_w + 10, status_y);
+}
 
-    pushRadioFrame();
+// 搜台/扫频：canvas 整帧绘制，只把脏区推到屏幕
+static void drawRadioMainPartial(const uint8_t dirty) {
+    if (!g_canvas_ok || dirty == 0) {
+        return;
+    }
+    paintRadioMainCanvas();
+
+    const int meter_y = RADIO_NO_MOD_Y - 1;
+    const bool dial = (dirty & RADIO_DIRTY_DIAL) != 0;
+    const bool freq = (dirty & RADIO_DIRTY_FREQ) != 0;
+    const bool meter = (dirty & RADIO_DIRTY_METER) != 0;
+
+    if (dial && freq) {
+        pushRadioRect(0, 0, g_canvas_w, meter_y);
+    } else if (dial) {
+        pushRadioRect(0, 0, g_canvas_w, RADIO_DIAL_REGION_H);
+    } else if (freq) {
+        pushRadioRect(0, RADIO_DIAL_REGION_H, g_canvas_w, meter_y - RADIO_DIAL_REGION_H);
+    }
+
+    if (meter) {
+        // 信号条在左，右侧留给电池不推
+        pushRadioRect(0, meter_y, radioBatteryLeftX(), g_canvas_h - meter_y);
+    }
+}
+
+static void drawRadioMain(const bool force_battery = false) {
+    if (!g_canvas_ok) {
+        return;
+    }
+    paintRadioMainCanvas();
+    pushRadioAvoidBattery();
+    drawRadioBattery(force_battery);
 }
 
 static const char* tunerItemLabel(const TunerItem item) {
@@ -587,7 +883,7 @@ static const char* tunerItemLabel(const TunerItem item) {
         case TunerItem::Band:
             return "Band";
         case TunerItem::Deemph:
-            return "De-emph";
+            return "Deemph";
         case TunerItem::SeekMode:
             return "Seek";
         case TunerItem::SeekStop:
@@ -607,73 +903,107 @@ static const char* tunerItemLabel(const TunerItem item) {
     }
 }
 
-static const char* tunerItemValue(const TunerItem item) {
+// 返回该设置的全部可选项；*out_sel 为当前选中下标
+static const char* const* tunerItemOptions(const TunerItem item, int* out_count, int* out_sel) {
+    static const char* kBand[] = {"EU", "JP"};
+    static const char* kDeemph[] = {"50us", "75us"};
+    static const char* kSeek[] = {"Soft", "Chip"};
+    static const char* kStop[] = {"Lo", "Mid", "Hi"};
+    static const char* kInject[] = {"High", "Low"};
+    static const char* kOnOff[] = {"On", "Off"};
+    static const char* kMute[] = {"Off", "L", "R"};
+
     switch (item) {
         case TunerItem::Band:
-            return g_japan ? "JP 76-91" : "EU 87.5-108";
+            *out_count = 2;
+            *out_sel = g_japan ? 1 : 0;
+            return kBand;
         case TunerItem::Deemph:
-            return g_deemph75 ? "75us US" : "50us EU";
+            *out_count = 2;
+            *out_sel = g_deemph75 ? 1 : 0;
+            return kDeemph;
         case TunerItem::SeekMode:
-            return g_hw_seek_pref ? "Chip SM" : "Soft";
+            *out_count = 2;
+            *out_sel = g_hw_seek_pref ? 1 : 0;
+            return kSeek;
         case TunerItem::SeekStop:
+            *out_count = 3;
             if (g_ssl == Tea5767::SeekStop::Low) {
-                return "Lo ADC5";
+                *out_sel = 0;
+            } else if (g_ssl == Tea5767::SeekStop::High) {
+                *out_sel = 2;
+            } else {
+                *out_sel = 1;
             }
-            if (g_ssl == Tea5767::SeekStop::High) {
-                return "Hi ADC10";
-            }
-            return "Mid ADC7";
+            return kStop;
         case TunerItem::Injection:
-            return g_hlsi_high ? "High" : "Low";
+            *out_count = 2;
+            *out_sel = g_hlsi_high ? 0 : 1;
+            return kInject;
         case TunerItem::SoftMute:
-            return g_soft_mute ? "On" : "Off";
+            *out_count = 2;
+            *out_sel = g_soft_mute ? 0 : 1;
+            return kOnOff;
         case TunerItem::HighCut:
-            return g_hcc ? "On" : "Off";
+            *out_count = 2;
+            *out_sel = g_hcc ? 0 : 1;
+            return kOnOff;
         case TunerItem::Snc:
-            return g_snc ? "On" : "Off";
+            *out_count = 2;
+            *out_sel = g_snc ? 0 : 1;
+            return kOnOff;
         case TunerItem::ChMute:
+            *out_count = 3;
             if (g_ch_mute == Tea5767::ChannelMute::Left) {
-                return "Left";
+                *out_sel = 1;
+            } else if (g_ch_mute == Tea5767::ChannelMute::Right) {
+                *out_sel = 2;
+            } else {
+                *out_sel = 0;
             }
-            if (g_ch_mute == Tea5767::ChannelMute::Right) {
-                return "Right";
-            }
-            return "Off";
+            return kMute;
         default:
-            return "";
+            *out_count = 0;
+            *out_sel = 0;
+            return nullptr;
     }
 }
 
 static void drawTunerSettings() {
     radioCanvas.fillSprite(BLACK);
-    radioCanvas.setTextSize(1);
+    constexpr int title_y = APP_HELP_EDGE;
+    radioCanvas.setTextSize(2);
     radioCanvas.setTextColor(APP_COLOR_LABEL, BLACK);
-    constexpr int title_y = 2;
     radioCanvas.setCursor(RADIO_UI_LEFT, title_y);
     radioCanvas.print("Tuner");
 
+    radioCanvas.setTextSize(1);
     constexpr int row_h = 11;
-    constexpr int list_y = title_y + 11;
+    constexpr int list_y = title_y + RADIO_TITLE_H + RADIO_TITLE_GAP;
+    constexpr int opts_x = RADIO_UI_LEFT + 48;
     const int n = static_cast<int>(TunerItem::Count);
     for (int i = 0; i < n; ++i) {
         const int y = list_y + i * row_h;
-        const bool sel = (i == g_tuner_sel);
-        if (sel) {
-            radioCanvas.fillRect(0, y - 1, g_canvas_w, row_h, APP_COLOR_LABEL);
-        }
-        radioCanvas.setTextColor(sel ? BLACK : APP_COLOR_HINT, sel ? APP_COLOR_LABEL : BLACK);
-        radioCanvas.setCursor(RADIO_UI_LEFT, y);
-        radioCanvas.print(tunerItemLabel(static_cast<TunerItem>(i)));
-        radioCanvas.setCursor(RADIO_UI_LEFT + 52, y);
-        radioCanvas.print(tunerItemValue(static_cast<TunerItem>(i)));
-    }
+        const bool focus = (i == g_tuner_sel);
+        const TunerItem item = static_cast<TunerItem>(i);
 
-    radioCanvas.setTextColor(APP_COLOR_MUTED, BLACK);
-    radioCanvas.setCursor(RADIO_UI_LEFT, g_canvas_h - 10);
-    char footer[32];
-    snprintf(footer, sizeof(footer), "IF %u  ID %u  ` close", static_cast<unsigned>(g_if_counter),
-             static_cast<unsigned>(g_chip_id));
-    radioCanvas.print(footer);
+        // 焦点行：标签高亮；当前取值用成功色，其余选项灰显
+        radioCanvas.setTextColor(focus ? APP_COLOR_LABEL : APP_COLOR_HINT, BLACK);
+        radioCanvas.setCursor(RADIO_UI_LEFT, y);
+        radioCanvas.print(tunerItemLabel(item));
+
+        int opt_count = 0;
+        int opt_sel = 0;
+        const char* const* opts = tunerItemOptions(item, &opt_count, &opt_sel);
+        int cx = opts_x;
+        for (int o = 0; o < opt_count; ++o) {
+            const bool on = (o == opt_sel);
+            radioCanvas.setTextColor(on ? APP_COLOR_OK : APP_COLOR_MUTED, BLACK);
+            radioCanvas.setCursor(cx, y);
+            radioCanvas.print(opts[o]);
+            cx += radioCanvas.textWidth(opts[o]) + 6;
+        }
+    }
 }
 
 static void drawRadioChrome() {
@@ -687,38 +1017,93 @@ static void drawRadioChrome() {
         pushRadioFrame();
         return;
     }
+    // 搜台/扫频只局部推屏，避开电池
+    if (g_seeking) {
+        drawRadioMainPartial(RADIO_DIRTY_LIVE);
+        return;
+    }
     drawRadioMain();
 }
 
+static int radioHelpPageCount() {
+    switch (g_help_kind) {
+        case RadioHelpKind::Main:
+            return 3;
+        case RadioHelpKind::Stations:
+            return 2;
+        case RadioHelpKind::Tuner:
+            return 1;
+        default:
+            return 1;
+    }
+}
+
 static void drawHelpPage() {
-    int y = drawAppHelpBegin("Radio");
     constexpr int x = APP_HELP_CONTENT_X;
-    if (g_help_page == 0) {
-        y = drawAppHelpBadge(x, y, "-=", "tune 0.1 MHz");
-        y = drawAppHelpArrows(x, y, "tune 0.1 MHz");
-        y = drawAppHelpBadge(x, y, "[]", "seek station");
-        y = drawAppHelpKey(x, y, 's', "auto scan + save");
-        y = drawAppHelpBadge(x, y, "m o", "mute / mono");
-        y = drawAppHelpBadge(x, y, "1-0", "recall preset");
-        y = drawAppHelpBadge(x, y, "l t", "list / tuner");
-    } else if (g_help_page == 1) {
-        y = drawAppHelpKey(x, y, 'r', "rename preset");
-        y = drawAppHelpBadge(x, y, "=", "save freq to slot");
-        y = drawAppHelpTextColored(x, y, "Dial", APP_COLOR_LABEL);
-        y = drawAppHelpLabelText(x, y, "green", APP_COLOR_OK, " = saved preset");
-        y = drawAppHelpLabelText(x, y, "cyan", APP_COLOR_LABEL, " = active preset");
-        y = drawAppHelpText(x, y, "Tuner: Enter cycles value");
-        y = drawAppHelpText(x, y, "Audio out: module jack");
-    } else {
-        y = drawAppHelpTextColored(x, y, "TEA5767", APP_COLOR_LABEL);
+    if (g_help_kind == RadioHelpKind::Stations) {
+        int y = drawAppHelpBegin("Stations");
+        if (g_help_page == 0) {
+            y = drawAppHelpArrows(x, y, "select station");
+            y = drawAppHelpBadge(x, y, "[]", "page up / down");
+            y = drawAppHelpBadge(x, y, "Ent", "tune + exit");
+            y = drawAppHelpKey(x, y, 'r', "rename");
+            y = drawAppHelpBadge(x, y, "=", "save freq here");
+            y = drawAppHelpKey(x, y, 'n', "add current freq");
+            y = drawAppHelpBadge(x, y, "d/Bk", "delete");
+        } else {
+            y = drawAppHelpKey(x, y, 'p', "pin to top");
+            y = drawAppHelpKey(x, y, 'l', "close list");
+            y = drawAppHelpText(x, y, "1-0 jump hotkey slot");
+        }
+        drawAppHelpFooter(g_help_page, radioHelpPageCount());
+        return;
+    }
+    if (g_help_kind == RadioHelpKind::Tuner) {
+        int y = drawAppHelpBegin("Tuner");
+        y = drawAppHelpArrows(x, y, "select setting");
+        y = drawAppHelpBadge(x, y, "Ent/=", "cycle value");
+        y = drawAppHelpKey(x, y, '-', "cycle prev");
+        y = drawAppHelpKey(x, y, 't', "close tuner");
         y = drawAppHelpText(x, y, "Band EU 87.5-108 / JP 76-91");
         y = drawAppHelpText(x, y, "Seek Soft step or Chip SM");
         y = drawAppHelpText(x, y, "Stop Lo/Mid/Hi = SSL");
-        y = drawAppHelpText(x, y, "HCC SNC SMute in tuner");
+        drawAppHelpFooter(g_help_page, radioHelpPageCount());
+        return;
+    }
+
+    int y = drawAppHelpBegin("Radio");
+    if (g_help_page == 0) {
+        y = drawAppHelpBadge(x, y, "-=", "tune 0.1 / stop scan");
+        y = drawAppHelpArrows(x, y, "seek / flip dir");
+        y = drawAppHelpBadge(x, y, "[]", "prev / next station");
+        y = drawAppHelpKey(x, y, 'a', "auto scan + save");
+        y = drawAppHelpBadge(x, y, "m o", "mute / mono");
+        y = drawAppHelpBadge(x, y, "1-0", "recall hotkey 1-10");
+        y = drawAppHelpBadge(x, y, "l t", "stations / tuner");
+    } else if (g_help_page == 1) {
+        // 主界面状态徽章含义
+        y = drawAppHelpTextColored(x, y, "Badges", APP_COLOR_LABEL);
+        y = drawAppHelpLabelText(x, y, "ST", APP_COLOR_LABEL, " = stereo signal");
+        y = drawAppHelpLabelText(x, y, "MONO", APP_COLOR_LABEL, " = mono (o force)");
+        y = drawAppHelpLabelText(x, y, "MUTE", APP_COLOR_LABEL, " = muted (m)");
+        y = drawAppHelpLabelText(x, y, "ML/MR", APP_COLOR_LABEL, " = mute L / R");
+        y = drawAppHelpLabelText(x, y, "JP", APP_COLOR_LABEL, " = Japan FM band");
+        y = drawAppHelpLabelText(x, y, "SEEK", APP_COLOR_LABEL, " = searching");
+    } else {
+        y = drawAppHelpTextColored(x, y, "Dial", APP_COLOR_LABEL);
+        y = drawAppHelpLabelText(x, y, "green", APP_COLOR_OK, " = saved station");
+        y = drawAppHelpLabelText(x, y, "cyan", APP_COLOR_LABEL, " = active station");
+        y = drawAppHelpText(x, y, "Audio out: module jack");
         y = drawAppHelpText(x, y, "No volume register");
         y = drawAppHelpText(x, y, "I2C Grove G2/G1 or EXT G8/G9");
+        y = drawAppHelpText(x, y, "NO MOD = chip not found");
     }
-    drawAppHelpFooter(g_help_page, RADIO_HELP_PAGES);
+    drawAppHelpFooter(g_help_page, radioHelpPageCount());
+}
+
+static void markRssiFresh() {
+    g_rssi_pending = false;
+    g_rssi_kick_ms = millis();
 }
 
 static void applyFrequency(const uint16_t freq_centi) {
@@ -732,6 +1117,7 @@ static void applyFrequency(const uint16_t freq_centi) {
             g_if_counter = st.if_counter;
             g_chip_id = st.chip_id;
         }
+        markRssiFresh(); // 刚写过 PLL，下一轮空闲刷新从现在起算
     }
 }
 
@@ -769,7 +1155,7 @@ static void seekTuneTo(const uint16_t freq) {
         g_radio.setFrequency(g_freq, false);
     }
     g_seek_settle_ms = millis();
-    drawRadioChrome();
+    drawRadioMainPartial(RADIO_DIRTY_LIVE); // 频率/指针/SEEK
 }
 
 static void finishSeek(const bool refresh_status = true) {
@@ -790,11 +1176,12 @@ static void finishSeek(const bool refresh_status = true) {
                 g_freq = st.freq_centi;
             }
         }
+        markRssiFresh();
     }
     drawRadioChrome();
 }
 
-// 自动扫描收下当前频点；满 10 个返回 true
+// 自动扫描收下当前频点；满上限返回 true
 static bool acceptScanStation(const uint16_t freq) {
     if (g_scan_last_found != 0) {
         const int diff = static_cast<int>(freq) - static_cast<int>(g_scan_last_found);
@@ -802,34 +1189,40 @@ static bool acceptScanStation(const uint16_t freq) {
             return false;
         }
     }
-    if (g_scan_found_count >= RADIO_PRESET_COUNT) {
+    if (g_scan_found_count >= RADIO_STATION_MAX) {
         return true;
     }
     g_presets[g_scan_found_count].freq = freq;
     g_presets[g_scan_found_count].name[0] = '\0';
-    saveRadioPreset(g_scan_found_count);
     g_scan_last_found = freq;
     g_scan_found_count++;
-    return g_scan_found_count >= RADIO_PRESET_COUNT;
+    g_station_count = g_scan_found_count; // 扫到即上刻度
+    drawRadioMainPartial(RADIO_DIRTY_DIAL); // 只补刻度方块
+    return g_scan_found_count >= RADIO_STATION_MAX;
 }
 
-static void persistEmptyScanSlots() {
-    for (int i = g_scan_found_count; i < RADIO_PRESET_COUNT; ++i) {
-        saveRadioPreset(i);
+static void persistScanStations() {
+    g_station_count = g_scan_found_count;
+    for (int i = g_station_count; i < RADIO_STATION_MAX; ++i) {
+        g_presets[i].freq = 0;
+        g_presets[i].name[0] = '\0';
     }
+    saveAllStations();
 }
 
 static void completeAutoScan() {
-    persistEmptyScanSlots();
+    persistScanStations();
     if (g_scan_found_count > 0) {
         g_active_slot = 0;
         g_sel_slot = 0;
+        g_list_scroll = 0;
         applyFrequency(g_presets[0].freq);
         finishSeek(false);
         return;
     }
     g_active_slot = -1;
     g_sel_slot = 0;
+    g_list_scroll = 0;
     finishSeek(true);
 }
 
@@ -878,7 +1271,7 @@ static void startHwSearch(const bool up) {
     if (g_ready) {
         g_radio.startSearch(up);
     }
-    drawRadioChrome();
+    drawRadioMainPartial(RADIO_DIRTY_LIVE);
 }
 
 static void onHwSeekTick() {
@@ -890,15 +1283,22 @@ static void onHwSeekTick() {
     if (!g_radio.readStatus(st)) {
         return;
     }
+    uint8_t dirty = 0;
     if (st.freq_centi >= radioFreqMin() && st.freq_centi <= radioFreqMax() &&
         st.freq_centi != g_freq) {
         g_freq = st.freq_centi;
-        drawRadioChrome();
+        dirty |= RADIO_DIRTY_DIAL | RADIO_DIRTY_FREQ;
     }
-    g_rssi = st.rssi;
-    g_stereo = st.stereo;
-    g_if_counter = st.if_counter;
+    if (st.rssi != g_rssi || st.stereo != g_stereo || st.if_counter != g_if_counter) {
+        g_rssi = st.rssi;
+        g_stereo = st.stereo;
+        g_if_counter = st.if_counter;
+        dirty |= RADIO_DIRTY_METER;
+    }
     g_chip_id = st.chip_id;
+    if (dirty != 0) {
+        drawRadioMainPartial(dirty);
+    }
 
     const uint32_t now = millis();
     if (now - g_seek_hw_start_ms < 80) {
@@ -960,7 +1360,7 @@ static void beginSeek(const bool up) {
     g_seek_up = up;
     g_seek_origin = g_freq;
     g_seek_wrapped = false;
-    g_seek_anim_ms = millis();
+    g_seek_poll_ms = millis();
     if (g_hw_seek_pref) {
         startHwSearch(up);
         return;
@@ -969,11 +1369,32 @@ static void beginSeek(const bool up) {
     seekTuneTo(nextSeekFreq(g_freq, up));
 }
 
+// 搜台中途改方向：重置起点，硬件搜则重启 SM
+static void redirectSeek(const bool up) {
+    if (!g_ready || !g_seeking || g_auto_scanning) {
+        return;
+    }
+    if (g_seek_up == up) {
+        return;
+    }
+    g_seek_up = up;
+    g_seek_origin = g_freq;
+    g_seek_wrapped = false;
+    g_seek_poll_ms = millis();
+    if (g_seek_hw) {
+        if (g_ready) {
+            g_radio.abortSearch();
+        }
+        startHwSearch(up);
+        return;
+    }
+    seekTuneTo(nextSeekFreq(g_freq, up));
+}
+
 static bool isTuneDirectionStillHeld(const int dir) {
     if (dir < 0) {
         return M5Cardputer.Keyboard.isKeyPressed('-') || M5Cardputer.Keyboard.isKeyPressed('e') ||
-               M5Cardputer.Keyboard.isKeyPressed('a') || M5Cardputer.Keyboard.isKeyPressed(';') ||
-               M5Cardputer.Keyboard.isKeyPressed(',');
+               M5Cardputer.Keyboard.isKeyPressed(';') || M5Cardputer.Keyboard.isKeyPressed(',');
     }
     if (dir > 0) {
         return M5Cardputer.Keyboard.isKeyPressed('=') || M5Cardputer.Keyboard.isKeyPressed('+') ||
@@ -983,15 +1404,12 @@ static bool isTuneDirectionStillHeld(const int dir) {
     return false;
 }
 
-// 自动扫频：从 87.5 往上搜，把结果写入 1-0 槽位（非阻塞，由 update 步进）
+// 自动扫频：从频段底往上搜，结果写入列表（非阻塞，由 update 步进）
 static void beginAutoScan() {
     if (!g_ready || g_seeking) {
         return;
     }
-    for (int i = 0; i < RADIO_PRESET_COUNT; ++i) {
-        g_presets[i].freq = 0;
-        g_presets[i].name[0] = '\0';
-    }
+    clearAllStations();
     g_seeking = true;
     g_auto_scanning = true;
     g_seek_up = true;
@@ -999,9 +1417,7 @@ static void beginAutoScan() {
     g_seek_wrapped = false;
     g_scan_found_count = 0;
     g_scan_last_found = 0;
-    g_active_slot = -1;
-    g_sel_slot = 0;
-    g_seek_anim_ms = millis();
+    g_seek_poll_ms = millis();
     if (g_hw_seek_pref) {
         g_freq = radioFreqMin();
         g_radio.setFrequency(g_freq, false);
@@ -1114,6 +1530,7 @@ static void openTunerSettings() {
 static void closeTunerSettingsToMain() {
     g_view = RadioView::Main;
     M5Cardputer.Display.fillScreen(BLACK);
+    g_bat_drawn = false;
     drawRadioChrome();
 }
 
@@ -1147,13 +1564,39 @@ static bool handleTunerInput(const Keyboard_Class::KeysState& status, const Stri
 }
 
 static void loadPresetSlot(const int idx) {
-    if (idx < 0 || idx >= RADIO_PRESET_COUNT || !isPresetValid(g_presets[idx])) {
+    if (idx < 0 || idx >= g_station_count || !isPresetValid(g_presets[idx])) {
         return;
     }
     g_active_slot = idx;
     g_sel_slot = idx;
     applyFrequency(g_presets[idx].freq);
     drawRadioChrome();
+}
+
+// [] 遍历全部已存电台；跳过空/无效
+static void cycleSavedPreset(const int delta) {
+    if (delta == 0 || g_station_count <= 0) {
+        return;
+    }
+    const int span = g_station_count;
+    int start = g_active_slot;
+    if (start < 0 || start >= span) {
+        for (int i = 0; i < span; ++i) {
+            const int idx = (delta > 0) ? i : (span - 1 - i);
+            if (isPresetValid(g_presets[idx])) {
+                loadPresetSlot(idx);
+                return;
+            }
+        }
+        return;
+    }
+    for (int step = 1; step <= span; ++step) {
+        const int idx = (start + delta * step + span * 2) % span;
+        if (isPresetValid(g_presets[idx])) {
+            loadPresetSlot(idx);
+            return;
+        }
+    }
 }
 
 static int presetIndexFromKey(const char c) {
@@ -1169,9 +1612,12 @@ static int presetIndexFromKey(const char c) {
 static void openStationsList() {
     g_view = RadioView::Stations;
     g_rename_buf[0] = '\0';
-    if (g_active_slot >= 0 && g_active_slot < RADIO_PRESET_COUNT) {
+    if (g_active_slot >= 0 && g_active_slot < g_station_count) {
         g_sel_slot = g_active_slot;
+    } else if (g_sel_slot >= g_station_count) {
+        g_sel_slot = g_station_count > 0 ? g_station_count - 1 : 0;
     }
+    ensureStationVisible();
     drawRadioChrome();
 }
 
@@ -1179,10 +1625,14 @@ static void closeStationsListToMain() {
     g_view = RadioView::Main;
     g_rename_buf[0] = '\0';
     M5Cardputer.Display.fillScreen(BLACK);
+    g_bat_drawn = false;
     drawRadioChrome();
 }
 
 static void beginRenamePreset() {
+    if (g_sel_slot < 0 || g_sel_slot >= g_station_count) {
+        return;
+    }
     g_view = RadioView::Rename;
     if (g_presets[g_sel_slot].name[0] != '\0') {
         strncpy(g_rename_buf, g_presets[g_sel_slot].name, sizeof(g_rename_buf) - 1);
@@ -1200,6 +1650,10 @@ static void cancelRenamePreset() {
 }
 
 static void commitRenamePreset() {
+    if (g_sel_slot < 0 || g_sel_slot >= g_station_count) {
+        cancelRenamePreset();
+        return;
+    }
     size_t start = 0;
     while (g_rename_buf[start] == ' ') {
         start++;
@@ -1216,21 +1670,89 @@ static void commitRenamePreset() {
         memcpy(g_presets[g_sel_slot].name, g_rename_buf + start, copy_n);
         g_presets[g_sel_slot].name[copy_n] = '\0';
     }
-    saveRadioPreset(g_sel_slot);
+    saveAllStations();
     g_view = RadioView::Stations;
     g_rename_buf[0] = '\0';
     drawRadioChrome();
 }
 
+static void appendCurrentFreq() {
+    if (g_station_count >= RADIO_STATION_MAX) {
+        return;
+    }
+    g_presets[g_station_count].freq = g_freq;
+    g_presets[g_station_count].name[0] = '\0';
+    g_sel_slot = g_station_count;
+    g_active_slot = g_station_count;
+    g_station_count++;
+    saveAllStations();
+    ensureStationVisible();
+    drawRadioChrome();
+}
+
 static void saveCurrentFreqToSelectedSlot() {
+    if (g_station_count <= 0) {
+        appendCurrentFreq();
+        return;
+    }
+    if (g_sel_slot < 0 || g_sel_slot >= g_station_count) {
+        return;
+    }
     g_presets[g_sel_slot].freq = g_freq;
-    saveRadioPreset(g_sel_slot);
     g_active_slot = g_sel_slot;
+    saveAllStations();
+    drawRadioChrome();
+}
+
+static void deleteSelectedStation() {
+    if (g_sel_slot < 0 || g_sel_slot >= g_station_count) {
+        return;
+    }
+    const int del = g_sel_slot;
+    if (del < g_station_count - 1) {
+        memmove(&g_presets[del], &g_presets[del + 1],
+                sizeof(RadioPreset) * static_cast<size_t>(g_station_count - del - 1));
+    }
+    g_station_count--;
+    g_presets[g_station_count].freq = 0;
+    g_presets[g_station_count].name[0] = '\0';
+    if (g_active_slot == del) {
+        g_active_slot = -1;
+    } else if (g_active_slot > del) {
+        g_active_slot--;
+    }
+    if (g_station_count <= 0) {
+        g_sel_slot = 0;
+        g_list_scroll = 0;
+    } else if (g_sel_slot >= g_station_count) {
+        g_sel_slot = g_station_count - 1;
+    }
+    saveAllStations();
+    ensureStationVisible();
+    drawRadioChrome();
+}
+
+// 选中项移到列表顶部（影响 1-0 快捷槽顺序）
+static void pinSelectedStation() {
+    if (g_sel_slot <= 0 || g_sel_slot >= g_station_count) {
+        return;
+    }
+    const RadioPreset moved = g_presets[g_sel_slot];
+    memmove(&g_presets[1], &g_presets[0], sizeof(RadioPreset) * static_cast<size_t>(g_sel_slot));
+    g_presets[0] = moved;
+    if (g_active_slot == g_sel_slot) {
+        g_active_slot = 0;
+    } else if (g_active_slot >= 0 && g_active_slot < g_sel_slot) {
+        g_active_slot++;
+    }
+    g_sel_slot = 0;
+    saveAllStations();
+    ensureStationVisible();
     drawRadioChrome();
 }
 
 static void loadSelectedPresetAndExit() {
-    if (isPresetValid(g_presets[g_sel_slot])) {
+    if (g_sel_slot >= 0 && g_sel_slot < g_station_count && isPresetValid(g_presets[g_sel_slot])) {
         g_active_slot = g_sel_slot;
         applyFrequency(g_presets[g_sel_slot].freq);
     }
@@ -1291,15 +1813,44 @@ static bool handleStationsInput(const Keyboard_Class::KeysState& status, const S
         return handleRenameInput(status);
     }
 
-    if (key == "l" || key == "L" || key == "h" || key == "H") {
+    if (key == "l" || key == "L") {
         closeStationsListToMain();
         return true;
     }
 
     const int nav = getMenuNavDelta(status);
     if (nav != 0) {
-        g_sel_slot = (g_sel_slot + nav + RADIO_PRESET_COUNT) % RADIO_PRESET_COUNT;
-        drawRadioChrome();
+        if (g_station_count > 0) {
+            g_sel_slot = (g_sel_slot + nav + g_station_count) % g_station_count;
+            ensureStationVisible();
+            drawRadioChrome();
+        }
+        return true;
+    }
+
+    // [] 按可见行数翻页
+    const int page_nav = getBracketNavDelta(status);
+    if (page_nav != 0) {
+        if (g_station_count > 0) {
+            const int vis = stationsVisibleRows();
+            const int max_scroll = g_station_count > vis ? (g_station_count - vis) : 0;
+            g_list_scroll += page_nav * vis;
+            if (g_list_scroll < 0) {
+                g_list_scroll = 0;
+            }
+            if (g_list_scroll > max_scroll) {
+                g_list_scroll = max_scroll;
+            }
+            if (g_sel_slot < g_list_scroll) {
+                g_sel_slot = g_list_scroll;
+            } else if (g_sel_slot >= g_list_scroll + vis) {
+                g_sel_slot = g_list_scroll + vis - 1;
+                if (g_sel_slot >= g_station_count) {
+                    g_sel_slot = g_station_count - 1;
+                }
+            }
+            drawRadioChrome();
+        }
         return true;
     }
 
@@ -1308,8 +1859,23 @@ static bool handleStationsInput(const Keyboard_Class::KeysState& status, const S
         return true;
     }
 
+    if (status.del || key == "d" || key == "D") {
+        deleteSelectedStation();
+        return true;
+    }
+
     if (key == "r" || key == "R") {
         beginRenamePreset();
+        return true;
+    }
+
+    if (key == "p" || key == "P") {
+        pinSelectedStation();
+        return true;
+    }
+
+    if (key == "n" || key == "N") {
+        appendCurrentFreq();
         return true;
     }
 
@@ -1320,8 +1886,10 @@ static bool handleStationsInput(const Keyboard_Class::KeysState& status, const S
 
     for (const char c : status.word) {
         const int idx = presetIndexFromKey(c);
-        if (idx >= 0) {
+        // 数字键只跳到快捷槽 1-10
+        if (idx >= 0 && idx < g_station_count && idx < RADIO_HOTKEY_COUNT) {
             g_sel_slot = idx;
+            ensureStationVisible();
             drawRadioChrome();
             return true;
         }
@@ -1329,7 +1897,7 @@ static bool handleStationsInput(const Keyboard_Class::KeysState& status, const S
     return true;
 }
 
-// -= / 方向键微调频率；[] 搜台
+// -= 微调频率
 static int getTuneDelta(const Keyboard_Class::KeysState& status) {
     for (const char c : status.word) {
         if (c == '-') {
@@ -1338,41 +1906,34 @@ static int getTuneDelta(const Keyboard_Class::KeysState& status) {
         if (c == '=' || c == '+') {
             return 1;
         }
-        // Cardputer 方向区：e/a 减频，d 增频（s 保留给自动搜台）
-        if (c == 'e' || c == 'a') {
-            return -1;
-        }
-        if (c == 'd') {
-            return 1;
-        }
-    }
-    for (const uint8_t hid : status.hid_keys) {
-        if (hid == 0x52 || hid == 0x50 || hid == 0x33 || hid == 0x36) {
-            return -1; // Up / Left / ; ,
-        }
-        if (hid == 0x51 || hid == 0x4F || hid == 0x37 || hid == 0x38) {
-            return 1; // Down / Right / . /
-        }
     }
     return 0;
 }
 
+// 方向键 / ;,./ 搜台
 static int getSeekDelta(const Keyboard_Class::KeysState& status) {
-    return getBracketNavDelta(status);
+    return getMenuNavDelta(status);
 }
 
-static void restoreMainAfterHelp() {
-    g_help = false;
+static void restoreAfterHelp() {
+    g_help_kind = RadioHelpKind::None;
     g_help_page = 0;
     M5Cardputer.Display.fillScreen(BLACK);
+    g_bat_drawn = false;
     drawRadioChrome();
+}
+
+static void openRadioHelp(const RadioHelpKind kind) {
+    g_help_kind = kind;
+    g_help_page = 0;
+    drawHelpPage();
 }
 
 } // namespace
 
 void enterRadioApp() {
     leaveRadioApp();
-    g_help = false;
+    g_help_kind = RadioHelpKind::None;
     g_view = RadioView::Main;
     g_muted = false;
     g_mono = false;
@@ -1385,15 +1946,21 @@ void enterRadioApp() {
     g_chip_id = 0;
     g_stereo = false;
     g_sel_slot = 0;
+    g_list_scroll = 0;
     g_tuner_sel = 0;
     g_active_slot = -1;
     g_rename_buf[0] = '\0';
     g_tune_repeat_dir = 0;
     g_tune_repeat_since_ms = 0;
     g_tune_repeat_last_ms = 0;
+    g_bat_shown_level = -1; // 进入时强制采一次电量
+    g_bat_drawn = false;
+    g_bat_sample_ms = 0;
+    g_rssi_pending = false;
+    g_rssi_kick_ms = 0;
 
+    loadTunerSettings(); // 先读频段，再装电台
     loadRadioPresets();
-    loadTunerSettings();
     clampFreqToBand();
     M5Cardputer.Display.wakeup();
     M5Cardputer.Display.powerSaveOff();
@@ -1405,6 +1972,7 @@ void enterRadioApp() {
     if (!g_ready) {
         g_ready = g_radio.begin(M5Cardputer.In_I2C);
     }
+
     if (g_ready) {
         applyTunerToChip();
         g_radio.setFrequency(g_freq);
@@ -1415,6 +1983,7 @@ void enterRadioApp() {
             g_if_counter = st.if_counter;
             g_chip_id = st.chip_id;
         }
+        markRssiFresh();
     }
 
     if (!ensureRadioCanvas()) {
@@ -1428,7 +1997,7 @@ void enterRadioApp() {
 }
 
 void leaveRadioApp() {
-    g_help = false;
+    g_help_kind = RadioHelpKind::None;
     g_view = RadioView::Main;
     g_rename_buf[0] = '\0';
     g_seeking = false;
@@ -1446,18 +2015,21 @@ void leaveRadioApp() {
 }
 
 bool isRadioHelpVisible() {
-    return g_help;
+    return g_help_kind != RadioHelpKind::None;
 }
 
 bool closeRadioHelp() {
-    if (!g_help) {
+    if (g_help_kind == RadioHelpKind::None) {
         return false;
     }
-    restoreMainAfterHelp();
+    restoreAfterHelp();
     return true;
 }
 
 bool closeRadioStations() {
+    if (g_help_kind != RadioHelpKind::None) {
+        return false; // Help 优先由 closeRadioHelp 处理
+    }
     if (g_view == RadioView::Rename) {
         cancelRenamePreset();
         return true;
@@ -1479,7 +2051,7 @@ bool closeRadioSeek() {
     }
     if (g_auto_scanning) {
         if (g_scan_found_count > 0) {
-            persistEmptyScanSlots();
+            persistScanStations();
         } else {
             loadRadioPresets(); // 一个都没扫到则恢复原预设
         }
@@ -1489,16 +2061,25 @@ bool closeRadioSeek() {
 }
 
 void updateRadioApp() {
-    if (g_help || g_view != RadioView::Main) {
+    if (g_help_kind != RadioHelpKind::None || g_view != RadioView::Main) {
         return;
     }
 
     const uint32_t now = millis();
     if (g_seeking) {
-        if (now - g_seek_anim_ms >= 30) {
-            g_seek_anim_ms = now;
-            g_seek_frame = (g_seek_frame + 1) % 5;
-            drawRadioChrome();
+        // 扫描中只刷新真实信号标识，不做动画轮转
+        if (g_ready && now - g_seek_poll_ms >= 100) {
+            g_seek_poll_ms = now;
+            Tea5767::Status st{};
+            if (g_radio.readStatus(st)) {
+                if (st.rssi != g_rssi || st.stereo != g_stereo || st.if_counter != g_if_counter) {
+                    g_rssi = st.rssi;
+                    g_stereo = st.stereo;
+                    g_if_counter = st.if_counter;
+                    g_chip_id = st.chip_id;
+                    drawRadioMainPartial(RADIO_DIRTY_METER); // 只刷新信号条/立体声
+                }
+            }
         }
         if (g_seek_hw) {
             onHwSeekTick();
@@ -1522,9 +2103,20 @@ void updateRadioApp() {
         return;
     }
 
-    static uint32_t last_poll_ms = 0;
-    if (now - last_poll_ms >= 200) {
-        last_poll_ms = now;
+    // 长按调谐时 PLL 在变，交给 applyFrequency，避免夹一次 kick
+    if (g_tune_repeat_dir != 0) {
+        return;
+    }
+
+    // TEA5767 电平 ADC / 立体声只在写寄存器后更新；周期 kick 再读
+    if (!g_rssi_pending) {
+        if (now - g_rssi_kick_ms >= RADIO_RSSI_POLL_MS) {
+            g_rssi_kick_ms = now;
+            g_radio.kickAdc();
+            g_rssi_pending = true;
+        }
+    } else if (now - g_rssi_kick_ms >= RADIO_SEEK_SETTLE_MS) {
+        g_rssi_pending = false;
         Tea5767::Status st{};
         if (g_radio.readStatus(st)) {
             if (st.rssi != g_rssi || st.stereo != g_stereo || st.if_counter != g_if_counter) {
@@ -1532,7 +2124,7 @@ void updateRadioApp() {
                 g_stereo = st.stereo;
                 g_if_counter = st.if_counter;
                 g_chip_id = st.chip_id;
-                drawRadioChrome();
+                drawRadioMainPartial(RADIO_DIRTY_METER);
             }
         }
     }
@@ -1541,20 +2133,23 @@ void updateRadioApp() {
 void handleRadioApp(const Keyboard_Class::KeysState& status) {
     const String key = getPressedKey();
 
-    if (key == "h" || key == "H") {
-        if (g_help) {
-            restoreMainAfterHelp();
-        } else if (g_view == RadioView::Main || g_view == RadioView::Tuner) {
-            g_help = true;
-            g_help_page = 0;
-            drawHelpPage();
+    // 重命名时 h 当作普通字符；其余界面 h 开/关对应 Help
+    if (g_view != RadioView::Rename && (key == "h" || key == "H")) {
+        if (g_help_kind != RadioHelpKind::None) {
+            restoreAfterHelp();
+        } else if (g_view == RadioView::Stations) {
+            openRadioHelp(RadioHelpKind::Stations);
+        } else if (g_view == RadioView::Tuner) {
+            openRadioHelp(RadioHelpKind::Tuner);
+        } else {
+            openRadioHelp(RadioHelpKind::Main);
         }
         return;
     }
-    if (g_help) {
+    if (g_help_kind != RadioHelpKind::None) {
         const int delta = getHelpNavDelta(status);
         if (delta != 0) {
-            g_help_page = applyHelpPageDelta(g_help_page, RADIO_HELP_PAGES, delta);
+            g_help_page = applyHelpPageDelta(g_help_page, radioHelpPageCount(), delta);
             drawHelpPage();
         }
         return;
@@ -1569,8 +2164,26 @@ void handleRadioApp(const Keyboard_Class::KeysState& status) {
         return;
     }
 
-    // 搜台中只允许 ESC 取消（main 里 closeRadioSeek），其它键忽略
+    // 搜台中：-= / [] 停在当前频点；方向键可改方向；ESC 取消（main 里 closeRadioSeek）
     if (g_seeking) {
+        if (getTuneDelta(status) != 0) {
+            (void)closeRadioSeek();
+            return;
+        }
+        const int preset_delta = getBracketNavDelta(status);
+        if (preset_delta != 0) {
+            (void)closeRadioSeek();
+            cycleSavedPreset(preset_delta); // 停扫后立刻切到上/下一台
+            return;
+        }
+        if (!g_auto_scanning) {
+            const int seek_delta = getSeekDelta(status);
+            if (seek_delta < 0) {
+                redirectSeek(false);
+            } else if (seek_delta > 0) {
+                redirectSeek(true);
+            }
+        }
         return;
     }
 
@@ -1582,7 +2195,7 @@ void handleRadioApp(const Keyboard_Class::KeysState& status) {
         openTunerSettings();
         return;
     }
-    if (key == "s" || key == "S") {
+    if (key == "a" || key == "A") {
         beginAutoScan();
         return;
     }
@@ -1602,6 +2215,13 @@ void handleRadioApp(const Keyboard_Class::KeysState& status) {
             loadPresetSlot(idx);
             return;
         }
+    }
+
+    // [] 切换全部已保存电台
+    const int preset_delta = getBracketNavDelta(status);
+    if (preset_delta != 0) {
+        cycleSavedPreset(preset_delta);
+        return;
     }
 
     if (status.fn) {

@@ -42,7 +42,7 @@ page = applyHelpPageDelta(page, page_count, delta);
 
 ## ESC / BtnGO 行为
 
-**Help 打开时，ESC（` / BtnGO）等同按 `h` 关闭 Help**，不得直接回主菜单或退出子界面。
+**Help 打开时，ESC 等同按 `h` 关闭 Help**，不得直接回主菜单或退出子界面。
 
 - 全局入口：`main.cpp` 的 `tryCloseCurrentAppHelp()`（在 leave app / `showMenu` 之前）
 - Sleep 倒计时：Help 打开时 ESC 只关 Help，不取消休眠

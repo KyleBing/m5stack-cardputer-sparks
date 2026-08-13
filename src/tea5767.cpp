@@ -245,6 +245,13 @@ uint8_t Tea5767::getRssi() {
     return st.rssi;
 }
 
+void Tea5767::kickAdc() {
+    if (searching_ || standby_) {
+        return;
+    }
+    writeRegs();
+}
+
 bool Tea5767::isStereo() {
     Status st{};
     if (!readStatus(st)) {

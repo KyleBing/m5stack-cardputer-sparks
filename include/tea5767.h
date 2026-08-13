@@ -77,6 +77,8 @@ class Tea5767 {
     uint8_t getRssi();
     bool isStereo();
     bool readStatus(Status& out);
+    // 同频再写一遍：复位 RF，启动新一轮电平 ADC（只读会拿到上次调谐的冻结值）
+    void kickAdc();
 
     // 芯片硬件搜台（SM/SUD/SSL）；结束后须 abortSearch 清 SM
     void startSearch(bool up);

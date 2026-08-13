@@ -5,7 +5,7 @@
 - 主菜单 `h` → Hardware Test `7` — **InI2C** 内部总线  
 - 主菜单 `h` → Hardware Test `8` — **ExI2C** 外部总线  
 
-无 header。扫描地址 8–119，按行列出 `0x` 地址、芯片名与用途，并在标题旁显示 SDA / SCL。
+无 header。扫描地址 8–119，按行列出 `0x` 地址、芯片名与用途，并在标题旁显示 SDA / SCL。行前 4x4 圆点：绿色=地址有已知映射，灰色=未知。
 
 - **InI2**：板载设备（Adv：`0x18` ES8311 codec、`0x34` TCA8418 键盘、`0x68` BMI270 IMU）。
 - **ExI2**：Grove / EXT 外设；芯片名为常见模块猜测（如 `0x60` TEA5767）。
