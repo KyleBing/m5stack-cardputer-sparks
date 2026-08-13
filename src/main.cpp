@@ -3580,6 +3580,8 @@ static bool tryCloseCurrentAppHelp() {
             return closeVocabHelp();
         case AppState::ICONS:
             return closeIconDemoHelp();
+        case AppState::FONT_DEMO:
+            return closeFontDemoHelp();
         case AppState::LED:
             if (!g_led_help_visible) {
                 return false;
@@ -3625,6 +3627,9 @@ static bool tryCloseCurrentAppHelp() {
             }
             if (hardwareTestMode == HardwareTestMode::ICONS) {
                 return closeIconDemoHelp();
+            }
+            if (hardwareTestMode == HardwareTestMode::FONT) {
+                return closeFontDemoHelp();
             }
             return false;
         default:

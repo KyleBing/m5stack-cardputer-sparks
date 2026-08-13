@@ -2,7 +2,7 @@
 
 Open with main menu `h`, then Hardware Test `3`.
 
-Page the font catalog and preview available sizes / glyphs.
+No header and no bottom tip. Top-left (Font2) shows the index and name; top-right draws a red one-glyph box with the size `WxH` 5px below it. Body preview is digits plus the pangram `The quick brown fox jumps over the lazy dog`. If it does not fit, scroll with up/down.
 
 ## Screenshots
 
@@ -19,8 +19,10 @@ Page the font catalog and preview available sizes / glyphs.
 
 | Key | Action |
 |-----|--------|
-| Arrow keys · `;,.` `/` | Page |
+| Left/Right · `,` `/` · `[` `]` | Previous / next font |
+| Up/Down · `;` `.` | Scroll sample |
+| `h` | Help |
 
 ## Usage
 
-For checking UI font rendering; no editing.
+For checking UI font rendering and glyph size. Font6 / 7 / 8 preview digits only. The list keeps only fonts that actually render. No editing.

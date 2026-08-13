@@ -17,7 +17,10 @@ static constexpr int VOCAB_MAX_DICT = 16;
 static constexpr int VOCAB_PATH_MAX = 96;
 static constexpr int VOCAB_NAME_MAX = 48;
 static constexpr uint32_t VOCAB_SAVE_DEBOUNCE_MS = 800;
+static constexpr uint32_t VOCAB_AUTO_NEXT_MS = 2000; // 标记已会后自动切词
 static constexpr int VOCAB_HELP_PAGES = 2;
+// 未标识格子：比 APP_COLOR_MUTED / DARKGREY 更暗，避免整图发灰。
+static constexpr uint16_t VOCAB_MAP_UNKNOWN = 0x4208;
 
 struct VocabDict {
     char path[VOCAB_PATH_MAX];
@@ -42,6 +45,10 @@ static bool g_dirty = false;
 static uint32_t g_dirty_ms = 0;
 static bool g_help = false;
 static int g_help_page = 0;
+static bool g_map = false; // 已会词在词库中的位置概览
+static bool g_last_nav_random = false; // 上一次切词是 Random 还是顺序
+static bool g_auto_next_pending = false;
+static uint32_t g_auto_next_ms = 0;
 
 static uint64_t* g_state_hashes = nullptr;
 static int g_state_hash_cap = 0;
@@ -305,19 +312,28 @@ static void loadCurrentLine() {
     }
 }
 
+static void cancelAutoNext() {
+    g_auto_next_pending = false;
+}
+
 static void drawVocabStatus(const char* message, const char* detail, const uint16_t color) {
-    M5Cardputer.Display.fillScreen(BLACK);
-    M5Cardputer.Display.setFont(&fonts::efontCN_14);
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(color, BLACK);
-    M5Cardputer.Display.setCursor(APP_HELP_CONTENT_X, 48);
-    M5Cardputer.Display.print(message);
+    auto& d = M5Cardputer.Display;
+    d.fillScreen(BLACK);
+    d.setFont(&fonts::efontCN_14);
+    d.setTextSize(1);
+    d.setTextColor(color, BLACK);
+    // 加载信息从左上角起，距边至少 5px。
+    constexpr int x = APP_HELP_EDGE;
+    int y = APP_HELP_EDGE;
+    d.setCursor(x, y);
+    d.print(message);
     if (detail != nullptr && detail[0] != '\0') {
-        M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
-        M5Cardputer.Display.setCursor(APP_HELP_CONTENT_X, 70);
-        M5Cardputer.Display.print(detail);
+        y += d.fontHeight() + APP_HELP_EDGE;
+        d.setTextColor(APP_COLOR_HINT, BLACK);
+        d.setCursor(x, y);
+        d.print(detail);
     }
-    M5Cardputer.Display.setTextFont(1);
+    d.setTextFont(1);
 }
 
 // 中文 14px 行高再加 2px，避免自动换行与英文字高重叠。
@@ -408,8 +424,9 @@ static void drawVocabHelp() {
     constexpr int x = APP_HELP_CONTENT_X;
     if (g_help_page == 0) {
         y = drawAppHelpBadge(x, y, "Arrows ,.", "previous / next word");
-        y = drawAppHelpBadge(x, y, "O/K", "toggle known");
-        y = drawAppHelpKey(x, y, 'r', "random unknown word");
+        y = drawAppHelpBadge(x, y, "Spc/Ent", "toggle known");
+        y = drawAppHelpBadge(x, y, "r/Tab", "random unknown word");
+        y = drawAppHelpKey(x, y, 'i', "known-word map");
         y = drawAppHelpBadge(x, y, "[]", "switch dictionary");
         y = drawAppHelpBadge(x, y, "BtnGO", "exit app");
         (void)drawAppHelpKey(x, y, 'h', "open / close help");
@@ -417,6 +434,8 @@ static void drawVocabHelp() {
         y = drawAppHelpTextColored(x, y, "Word status", APP_COLOR_LABEL);
         y = drawAppHelpLabelText(x, y, "green", APP_COLOR_OK, " = known");
         y = drawAppHelpLabelText(x, y, "white", APP_COLOR_VALUE, " = learning");
+        y = drawAppHelpTextColored(x, y, "Auto next", APP_COLOR_LABEL);
+        y = drawAppHelpText(x, y, "2s after known; follows last nav.");
         y = drawAppHelpTextColored(x, y, "Storage", APP_COLOR_LABEL);
         (void)drawAppHelpText(x, y, "Known words are saved automatically.");
     }
@@ -425,51 +444,192 @@ static void drawVocabHelp() {
 
 static void drawVocabApp(const bool full_init) {
     (void)full_init;
-    M5Cardputer.Display.fillScreen(BLACK);
+    auto& d = M5Cardputer.Display;
+    d.fillScreen(BLACK);
     g_screen_ready = true;
 
     const int x = APP_HELP_CONTENT_X;
-    const int screen_w = M5Cardputer.Display.width();
-    const int screen_h = M5Cardputer.Display.height();
+    const int screen_w = d.width();
+    const int screen_h = d.height();
     const int max_w = screen_w - x - APP_HELP_EDGE;
 
-    // 词库标题用黄字；中文行距与释义一致。
-    const char* title = (g_dict_count > 0) ? g_dicts[g_dict_idx].name : "no file";
-    int y = drawWrappedCnText(x, APP_HELP_EDGE, max_w, screen_h, title, YELLOW);
-
-    M5Cardputer.Display.setTextFont(1);
-    M5Cardputer.Display.setTextSize(1);
     char line_buf[24];
     snprintf(line_buf, sizeof(line_buf), "%d/%d", g_line_count > 0 ? g_cur_line + 1 : 0, g_line_count);
     char known_buf[24];
     const int pct = g_line_count > 0 ? (g_known_count * 100) / g_line_count : 0;
     snprintf(known_buf, sizeof(known_buf), "%d (%d%%)", g_known_count, pct);
 
-    // line / known 同一行，右侧进度条表示已会比例。
-    M5Cardputer.Display.setTextColor(INFO_LABEL_COLOR, BLACK);
-    M5Cardputer.Display.setCursor(x, y);
-    M5Cardputer.Display.print("line: ");
-    M5Cardputer.Display.setTextColor(INFO_VALUE_COLOR, BLACK);
-    M5Cardputer.Display.print(line_buf);
-    const int known_x = M5Cardputer.Display.getCursorX() + 10;
-    M5Cardputer.Display.setTextColor(INFO_LABEL_COLOR, BLACK);
-    M5Cardputer.Display.setCursor(known_x, y);
-    M5Cardputer.Display.print("known: ");
-    M5Cardputer.Display.setTextColor(INFO_VALUE_COLOR, BLACK);
-    M5Cardputer.Display.print(known_buf);
+    // 底栏：小字 line/known + 进度条，释义不得画进这一带。
+    const int bar_y = screen_h - APP_HELP_EDGE - VOCAB_KNOWN_BAR_H;
+    const int info_y = bar_y - INFO_LINE_H;
 
-    y += INFO_LINE_H;
-    drawPercentBar(x, y, max_w, VOCAB_KNOWN_BAR_H, pct,
+    // 主单词靠上：FreeMono 12pt，已会绿色 / 学习中白色。
+    d.setFont(&fonts::FreeMono12pt7b);
+    d.setTextSize(1);
+    d.setTextWrap(false, false);
+    d.setTextDatum(textdatum_t::top_left);
+    d.setTextColor(bitIsKnown(g_cur_line) ? APP_COLOR_OK : APP_COLOR_VALUE, BLACK);
+    const int word_h = d.fontHeight();
+    int y = APP_HELP_EDGE;
+    d.drawString(g_cur_word, x, y);
+    y += word_h + 4;
+    d.setTextDatum(textdatum_t::top_left);
+    d.setFont(&fonts::Font0);
+    d.setTextSize(1);
+
+    (void)drawWrappedCnText(x, y, max_w, info_y - VOCAB_KNOWN_BAR_GAP, g_cur_meaning.c_str(),
+                            INFO_LABEL_COLOR);
+
+    d.setTextFont(1);
+    d.setTextSize(1);
+    d.setTextColor(INFO_LABEL_COLOR, BLACK);
+    d.setCursor(x, info_y);
+    d.print("line: ");
+    d.setTextColor(INFO_VALUE_COLOR, BLACK);
+    d.print(line_buf);
+    const int known_x = d.getCursorX() + 10;
+    d.setTextColor(INFO_LABEL_COLOR, BLACK);
+    d.setCursor(known_x, info_y);
+    d.print("known: ");
+    d.setTextColor(INFO_VALUE_COLOR, BLACK);
+    d.print(known_buf);
+
+    drawPercentBar(x, bar_y, max_w, VOCAB_KNOWN_BAR_H, pct,
                    pct > 0 ? APP_COLOR_OK : APP_COLOR_MUTED);
-    y += VOCAB_KNOWN_BAR_H + VOCAB_KNOWN_BAR_GAP;
+}
 
-    M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setTextColor(bitIsKnown(g_cur_line) ? APP_COLOR_OK : APP_COLOR_VALUE, BLACK);
-    M5Cardputer.Display.setCursor(x, y);
-    M5Cardputer.Display.print(g_cur_word);
+// 接近正方形的格子数，使 cols*rows >= n。
+static int vocabCeilSqrt(const int n) {
+    if (n <= 0) {
+        return 0;
+    }
+    int c = 1;
+    while (c * c < n) {
+        c++;
+    }
+    return c;
+}
 
-    y += INFO_LINE_H_2X + 4;
-    (void)drawWrappedCnText(x, y, max_w, screen_h, g_cur_meaning.c_str(), INFO_LABEL_COLOR);
+static void drawVocabMap() {
+    auto& d = M5Cardputer.Display;
+    d.fillScreen(BLACK);
+    d.setFont(&fonts::Font0);
+    d.setTextSize(1);
+
+    const int screen_w = d.width();
+    const int screen_h = d.height();
+    constexpr int x = APP_HELP_EDGE;
+    int y = APP_HELP_EDGE;
+
+    char known_buf[28];
+    snprintf(known_buf, sizeof(known_buf), "%d/%d", g_known_count, g_line_count);
+    d.setTextColor(INFO_LABEL_COLOR, BLACK);
+    d.setCursor(x, y + 3); // Font0 与 14px 词库名大致齐中
+    d.print("known: ");
+    d.setTextColor(INFO_VALUE_COLOR, BLACK);
+    d.print(known_buf);
+    const int known_right = d.getCursorX();
+
+    // 词库名与 known 同一行贴右；过长时裁掉左侧，避免盖住 known。
+    const char* title = (g_dict_count > 0) ? g_dicts[g_dict_idx].name : "no file";
+    d.setFont(&fonts::efontCN_14);
+    d.setTextSize(1);
+    d.setTextColor(YELLOW, BLACK);
+    const int title_w = d.textWidth(title);
+    const int title_h = d.fontHeight();
+    const int title_x = screen_w - APP_HELP_EDGE - title_w;
+    const int title_min_x = known_right + 8;
+    if (title_x < title_min_x) {
+        const int clip_w = screen_w - APP_HELP_EDGE - title_min_x;
+        if (clip_w > 0) {
+            d.setClipRect(title_min_x, y, clip_w, title_h);
+        }
+    }
+    d.setCursor(title_x, y);
+    d.print(title);
+    d.clearClipRect();
+    d.setFont(&fonts::Font0);
+    d.setTextSize(1);
+    y += title_h + APP_HELP_EDGE;
+
+    // 底栏留出 i close，格子画在标题与 tip 之间。
+    const int hint_h = 12;
+    const int max_w = screen_w - APP_HELP_EDGE * 2;
+    const int max_h = screen_h - y - hint_h - APP_HELP_EDGE;
+    if (g_line_count <= 0 || max_w <= 0 || max_h <= 0) {
+        int cx = x;
+        cx += drawKeyBadge(cx, screen_h - hint_h, 'i', 1);
+        d.setTextSize(1);
+        d.setTextColor(APP_COLOR_HINT, BLACK);
+        d.setCursor(cx, screen_h - hint_h);
+        d.print("close");
+        return;
+    }
+
+    int cols = vocabCeilSqrt(g_line_count);
+    int rows = (g_line_count + cols - 1) / cols;
+    if (cols > max_w) {
+        cols = max_w;
+        rows = (g_line_count + cols - 1) / cols;
+    }
+    if (rows > max_h) {
+        rows = max_h;
+        cols = (g_line_count + rows - 1) / rows;
+        if (cols > max_w) {
+            cols = max_w;
+        }
+    }
+
+    int cell = max_w / cols;
+    const int cell_h = max_h / rows;
+    if (cell_h < cell) {
+        cell = cell_h;
+    }
+    if (cell < 1) {
+        cell = 1;
+    }
+    // 格子较大时留 1px 缝，便于分辨单个词。
+    const int gap = (cell >= 3) ? 1 : 0;
+    const int inner = cell - gap;
+    const int grid_w = cols * cell - gap;
+    const int grid_h = rows * cell - gap;
+    int ox = x + (max_w - grid_w) / 2;
+    int oy = y + (max_h - grid_h) / 2;
+    if (ox < APP_HELP_EDGE) {
+        ox = APP_HELP_EDGE;
+    }
+    if (oy < y) {
+        oy = y;
+    }
+
+    d.startWrite();
+    const int draw_n = (g_line_count < cols * rows) ? g_line_count : (cols * rows);
+    for (int i = 0; i < draw_n; i++) {
+        const int col = i % cols;
+        const int row = i / cols;
+        const int px = ox + col * cell;
+        const int py = oy + row * cell;
+        uint16_t color = VOCAB_MAP_UNKNOWN;
+        if (i == g_cur_line) {
+            color = APP_COLOR_MENU_KEY;
+        } else if (bitIsKnown(i)) {
+            color = APP_COLOR_OK;
+        }
+        if (inner <= 1) {
+            d.writePixel(px, py, color);
+        } else {
+            d.fillRect(px, py, inner, inner, color);
+        }
+    }
+    d.endWrite();
+
+    const int hint_y = screen_h - hint_h;
+    int cx = x;
+    cx += drawKeyBadge(cx, hint_y, 'i', 1);
+    d.setTextSize(1);
+    d.setTextColor(APP_COLOR_HINT, BLACK);
+    d.setCursor(cx, hint_y);
+    d.print("close");
 }
 
 static bool rebuildIndexForDict(const int dict_idx) {
@@ -729,6 +889,23 @@ static void jumpRandomUnknown() {
     }
 }
 
+static void toggleCurrentKnown() {
+    if (g_line_count <= 0) {
+        return;
+    }
+    const bool next = !bitIsKnown(g_cur_line);
+    bitSetKnown(g_cur_line, next);
+    markDirty();
+    if (next) {
+        // 标记已会后 2 秒自动切到下一个（跟随上次 Random / 顺序）。
+        g_auto_next_pending = true;
+        g_auto_next_ms = millis();
+    } else {
+        cancelAutoNext();
+    }
+    drawVocabApp(false);
+}
+
 static void switchDict(const int delta) {
     if (g_dict_count <= 1) {
         return;
@@ -743,6 +920,8 @@ static void switchDict(const int delta) {
     if (next == g_dict_idx) {
         return;
     }
+    cancelAutoNext();
+    g_map = false;
     if (g_dirty) {
         saveKnownStateNow();
     }
@@ -763,6 +942,9 @@ void enterVocabApp() {
     g_dirty_ms = 0;
     g_help = false;
     g_help_page = 0;
+    g_map = false;
+    g_last_nav_random = false;
+    cancelAutoNext();
 
     drawVocabStatus("载入词库...", nullptr, APP_COLOR_LABEL);
     if (!loadDictList()) {
@@ -787,25 +969,41 @@ void leaveVocabApp() {
     }
     g_help = false;
     g_help_page = 0;
+    g_map = false;
+    cancelAutoNext();
     freeCurrentIndex();
     freeStateHashes();
 }
 
 bool isVocabHelpVisible() {
-    return g_help;
+    return g_help || g_map;
 }
 
 bool closeVocabHelp() {
-    if (!g_help) {
-        return false;
+    if (g_help) {
+        g_help = false;
+        g_help_page = 0;
+        drawVocabApp(true);
+        return true;
     }
-    g_help = false;
-    g_help_page = 0;
-    drawVocabApp(true);
-    return true;
+    if (g_map) {
+        g_map = false;
+        drawVocabApp(true);
+        return true;
+    }
+    return false;
 }
 
 void updateVocabApp() {
+    if (g_auto_next_pending && !g_help && !g_map &&
+        (millis() - g_auto_next_ms >= VOCAB_AUTO_NEXT_MS)) {
+        g_auto_next_pending = false;
+        if (g_last_nav_random) {
+            jumpRandomUnknown();
+        } else {
+            stepLine(1);
+        }
+    }
     if (!g_dirty) {
         return;
     }
@@ -818,10 +1016,33 @@ void updateVocabApp() {
 void handleVocabApp(const Keyboard_Class::KeysState& status) {
     const String key = getPressedKey();
     if (key == "h" || key == "H") {
+        if (g_map) {
+            g_map = false;
+            g_help = true;
+            g_help_page = 0;
+            cancelAutoNext();
+            drawVocabHelp();
+            return;
+        }
         if (!closeVocabHelp()) {
             g_help = true;
             g_help_page = 0;
+            cancelAutoNext();
             drawVocabHelp();
+        }
+        return;
+    }
+    if (key == "i" || key == "I") {
+        if (g_help) {
+            g_help = false;
+            g_help_page = 0;
+        }
+        g_map = !g_map;
+        cancelAutoNext();
+        if (g_map) {
+            drawVocabMap();
+        } else {
+            drawVocabApp(true);
         }
         return;
     }
@@ -833,25 +1054,40 @@ void handleVocabApp(const Keyboard_Class::KeysState& status) {
         }
         return;
     }
+    if (g_map) {
+        return;
+    }
+
+    if (status.tab) {
+        g_last_nav_random = true;
+        cancelAutoNext();
+        jumpRandomUnknown();
+        return;
+    }
+    if (status.space || status.enter) {
+        toggleCurrentKnown();
+        return;
+    }
 
     bool handled = false;
     for (const char c : status.word) {
         if (c == ',') {
+            g_last_nav_random = false;
+            cancelAutoNext();
             stepLine(-1);
             handled = true;
         } else if (c == '.') {
+            g_last_nav_random = false;
+            cancelAutoNext();
             stepLine(1);
             handled = true;
         } else if (c == 'r' || c == 'R') {
+            g_last_nav_random = true;
+            cancelAutoNext();
             jumpRandomUnknown();
             handled = true;
         } else if (c == 'o' || c == 'O' || c == 'k' || c == 'K') {
-            if (g_line_count > 0) {
-                const bool next = !bitIsKnown(g_cur_line);
-                bitSetKnown(g_cur_line, next);
-                markDirty();
-                drawVocabApp(false);
-            }
+            toggleCurrentKnown();
             handled = true;
         } else if (c == '[') {
             switchDict(-1);
@@ -864,6 +1100,8 @@ void handleVocabApp(const Keyboard_Class::KeysState& status) {
     if (!handled) {
         const int nav = getMenuNavDelta(status);
         if (nav != 0) {
+            g_last_nav_random = false;
+            cancelAutoNext();
             stepLine(nav);
         }
     }
