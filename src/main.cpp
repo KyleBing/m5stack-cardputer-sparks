@@ -86,7 +86,7 @@ enum class AppState {
     INFO, // 系统信息 / 内存（字母 i）
     CALENDAR,
     AC_AUTO, // 空调自动化
-    RADIO,   // FM 收音机（TEA5767）
+    RADIO,   // FM 收音机（TEA5767 / RDA5807M）
     VOCAB,   // 单词学习
 };
 
@@ -2286,6 +2286,8 @@ static constexpr I2cDevHint kI2cInDevs[] = {
 };
 
 static constexpr I2cDevHint kI2cExDevs[] = {
+    {0x10, "RDA5807M", "radio"},
+    {0x11, "RDA5807M", "radio"},
     {0x18, "ES8311", "codec"},
     {0x23, "BH1750", "light"},
     {0x26, "MiniScale", "weight"},
@@ -2338,6 +2340,7 @@ static void drawI2cHelpPage(const bool internal_bus) {
         y = drawAppHelpText(x, y, "left Grove: GND 5V G2 G1");
         y = drawAppHelpText(x, y, "G2=SDA  G1=SCL");
         y = drawAppHelpText(x, y, "names are likely matches");
+        y = drawAppHelpLabelText(x, y, "10/11", APP_COLOR_LABEL, " RDA5807M radio");
         y = drawAppHelpLabelText(x, y, "0x60", APP_COLOR_LABEL, " TEA5767 radio");
         y = drawAppHelpText(x, y, "unknown addr shows as --");
     }

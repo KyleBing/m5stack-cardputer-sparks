@@ -8,7 +8,7 @@ Main menu keys:
 No header. Scans addresses 8–119 and lists each hit as `0x` address, chip name, and role, with SDA / SCL beside the title. A 4x4 dot precedes each row: green = known address map, gray = unknown.
 
 - **InI2**: onboard chips (Adv: `0x18` ES8311 codec, `0x34` TCA8418 keyboard, `0x68` BMI270 IMU).
-- **ExI2**: Grove / EXT peripherals; chip names are likely matches (e.g. `0x60` TEA5767).
+- **ExI2**: Grove / EXT peripherals; chip names are likely matches (for example, `0x10/0x11` RDA5807M or `0x60` TEA5767).
 
 ## Screenshots
 
