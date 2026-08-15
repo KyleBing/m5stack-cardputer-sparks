@@ -6,7 +6,7 @@
 
 ---
 
-## 2026-08-13
+## 2026-08-15 — v1.12
 
 ### 新增
 
@@ -23,6 +23,7 @@
 - **Vocab UI**：主页不显示词库名；`line` / `known` 与进度条改到底栏；主单词 FreeMono 12；释义按宽度折行（行距 +2px）；`i` 概览顶栏 known 左侧、词库名贴右；未标识格子改暗灰
 - **Vocab 操作**：`Tab` 等同 `r` 随机未会词；标记已会后 2 秒自动切词（跟随上次 Random / 顺序）；加载文案从左上角 5px 起
 - **Mini Games / Hardware Test**：任意页可用字母快捷键直接打开子项
+- **版本**：固件 / M5Burner / README 统一为 **v1.12**（`APP_VERSION` / `m5burner.json`）；`APP_UPDATE_TIME` → `2026.08.15`
 - **文档**：同步 I2C / Hardware Test / Mini Games 中英文页；新增 Radio 界面、TEA5767 接线说明与截图
 
 ---
