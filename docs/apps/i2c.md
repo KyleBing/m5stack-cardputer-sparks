@@ -33,5 +33,5 @@
 ## 使用说明
 
 1. **InI2**：确认板载 I2C（键盘 / IMU / codec）。  
-2. **ExI2**：Grove（G2=SDA G1=SCL）或 EXT（G8=SDA G9=SCL）外设排查。  
+2. **ExI2**：机身**左侧 Grove**（上→下 GND / 5V / G2=SDA / G1=SCL）或 EXT（G8=SDA G9=SCL）外设排查。收音机接线见 [Radio](./radio)。  
 3. 无设备显示 `no device`；未知地址显示 `--` / `unknown`。

@@ -22,9 +22,10 @@ static constexpr int RADIO_PLAY_SIZE = 40;
 static constexpr int RADIO_METER_Y = 112;
 static constexpr int RADIO_NO_MOD_Y = RADIO_METER_Y - 14; // 未连接提示在信号条上方
 static constexpr int RADIO_TITLE_H = 16; // size-2 标题高度
-static constexpr int RADIO_TITLE_GAP = 5; // 标题与内容间距
+static constexpr int RADIO_TITLE_GAP = 2; // 标题与列表间距（收紧以多显示行）
 static constexpr int RADIO_LIST_ROW_H = 11;
-static constexpr int RADIO_LIST_TIP_H = 12; // 底栏提示预留
+static constexpr int RADIO_LIST_TIP_H = 12; // 仅重命名时底栏提示
+static constexpr int RADIO_PAGER_SCALE = 2; // 条数/页码点阵字号
 static constexpr int RADIO_DIAL_REGION_H = 52; // 刻度+MHz 数字（局部刷新）
 static constexpr uint8_t RADIO_DIRTY_DIAL = 1u << 0;
 static constexpr uint8_t RADIO_DIRTY_FREQ = 1u << 1;
@@ -795,10 +796,46 @@ static int stationsListTopY() {
     return APP_HELP_EDGE + RADIO_TITLE_H + RADIO_TITLE_GAP;
 }
 
+static int stationsListTipH() {
+    // 平时不留底栏，列表可多 1～2 行；重命名才预留提示
+    return (g_view == RadioView::Rename) ? RADIO_LIST_TIP_H : 0;
+}
+
 static int stationsVisibleRows() {
-    const int avail = g_canvas_h - stationsListTopY() - RADIO_LIST_TIP_H;
+    const int avail = g_canvas_h - stationsListTopY() - stationsListTipH();
     const int rows = avail / RADIO_LIST_ROW_H;
     return rows < 1 ? 1 : rows;
+}
+
+// 列表页码：page 从 0 起；末页 scroll 可能不足一整页
+static void stationsListPager(int* page, int* page_count) {
+    const int vis = stationsVisibleRows();
+    const int count = g_station_count < 0 ? 0 : g_station_count;
+    int pages = vis > 0 ? ((count + vis - 1) / vis) : 1;
+    if (pages < 1) {
+        pages = 1;
+    }
+    int p = 0;
+    if (count > 0 && vis > 0) {
+        const int max_scroll = count > vis ? (count - vis) : 0;
+        if (g_list_scroll >= max_scroll && pages > 1) {
+            p = pages - 1;
+        } else {
+            p = g_list_scroll / vis;
+        }
+        if (p >= pages) {
+            p = pages - 1;
+        }
+        if (p < 0) {
+            p = 0;
+        }
+    }
+    if (page != nullptr) {
+        *page = p;
+    }
+    if (page_count != nullptr) {
+        *page_count = pages;
+    }
 }
 
 static void ensureStationVisible() {
@@ -837,6 +874,18 @@ static void drawStationsList() {
     radioCanvas.setTextColor(APP_COLOR_LABEL, BLACK);
     radioCanvas.setCursor(RADIO_UI_LEFT, title_y);
     radioCanvas.print("Stations");
+
+    // 标题右侧点阵字：总条数 + 当前页/总页
+    int page = 0;
+    int page_count = 1;
+    stationsListPager(&page, &page_count);
+    char pager[20];
+    snprintf(pager, sizeof(pager), "%d  %d/%d", g_station_count, page + 1, page_count);
+    radioCanvas.setFont(&fonts::Font0);
+    radioCanvas.setTextSize(1);
+    const int pager_w = radioCanvas.textWidth(pager) * RADIO_PAGER_SCALE;
+    const int pager_x = g_canvas_w - APP_HELP_EDGE - pager_w;
+    drawDotTextOnCanvas(pager, pager_x, title_y, RADIO_PAGER_SCALE, APP_COLOR_HINT);
 
     radioCanvas.setTextSize(1);
     const int list_y = stationsListTopY();

@@ -11,6 +11,10 @@ _The firmware UI is entirely in English, with many abbreviations — a solid Eng
 
 <img width="1774" height="2591" alt="screenshots v1 10" src="https://github.com/user-attachments/assets/c3c07475-57c3-471c-a2ab-6f1c4f39d3f7" />
 
+<img src="docs/public/shots/app_radio_playing.png" alt="Radio playing" />
+<img src="docs/public/shots/app_radio_no_module.png" alt="Radio no module" />
+<img src="docs/public/shots/app_radio_station_list.png" alt="Radio station list" />
+
 
 
 
@@ -39,6 +43,7 @@ On any screen, press `h` for Help if you're unsure how to use it.
 | Keyboard | HID Keyboard | `k` | Bluetooth & USB keyboard |
 | Mini Games | Mini Games | `g` | Minesweeper, Snake, Life, particle clock, and more (14) |
 | Hardware Test | Hardware Test | `h` | Display / IMU / Font / Icons / LED / BLE / I2C / Mic |
+| Radio | Radio | `r` | Grove FM radio (TEA5767 / RDA5807M) |
 
 
 ## 2. Documentation

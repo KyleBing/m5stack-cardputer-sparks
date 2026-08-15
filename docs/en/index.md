@@ -30,7 +30,7 @@ features:
   - title: System Info
     details: Uptime, Clock, countdown, stopwatch, battery curve, light / deep sleep
   - title: Utilities
-    details: Cursor usage, HID keyboard, IMU / Mic / LED / I2C hardware demos
+    details: Cursor usage, HID keyboard, FM radio, IMU / Mic / LED / I2C hardware demos
 ---
 
 ## About This Documentation

@@ -66,6 +66,15 @@
 | `c` | [Cursor](./cursor) | Cursor 用量摘要、日、星期、月用量图表 |
 | `k` | [Keyboard](./hid-keyboard) | USB / BLE HID 键盘 |
 | `j` | [Morse](./morse) | 摩斯电码发声、点划高亮与实时波形 |
+| `r` | [Radio](./radio) | Grove FM 收音机（TEA5767 / RDA5807M） |
+
+<div class="shot-row">
+
+![radio-playing](/shots/app_radio_playing.png)
+![radio-no-module](/shots/app_radio_no_module.png)
+![radio-stations](/shots/app_radio_station_list.png)
+
+</div>
 
 ## 系统与信息
 

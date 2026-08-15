@@ -382,6 +382,18 @@ pageClass: shots-page
 <figcaption>app_options_sound.png</figcaption>
 </figure>
 <figure class="shot-item">
+<img src="/shots/app_radio_no_module.png" alt="app_radio_no_module.png" />
+<figcaption>app_radio_no_module.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_radio_playing.png" alt="app_radio_playing.png" />
+<figcaption>app_radio_playing.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_radio_station_list.png" alt="app_radio_station_list.png" />
+<figcaption>app_radio_station_list.png</figcaption>
+</figure>
+<figure class="shot-item">
 <img src="/shots/app_sleep_deep.png" alt="app_sleep_deep.png" />
 <figcaption>app_sleep_deep.png</figcaption>
 </figure>

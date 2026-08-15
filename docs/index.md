@@ -30,7 +30,7 @@ features:
   - title: 系统信息
     details: 运行时长、时钟、倒计时、秒表、电池曲线、浅睡 / 深睡
   - title: 实用工具
-    details: Cursor 用量、HID 键盘、IMU / Mic / LED / I2C 等硬件演示
+    details: Cursor 用量、HID 键盘、FM 收音机、IMU / Mic / LED / I2C 等硬件演示
 ---
 
 ## 关于本版本文档

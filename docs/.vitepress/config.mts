@@ -169,6 +169,7 @@ export default defineConfig({
               { text: 'Cursor 用量', link: '/apps/cursor' },
               { text: 'Keyboard', link: '/apps/hid-keyboard' },
               { text: 'Morse 摩斯', link: '/apps/morse' },
+              { text: 'Radio 收音机', link: '/apps/radio' },
             ],
           },
           {
@@ -306,6 +307,7 @@ export default defineConfig({
               { text: 'Cursor Usage', link: '/en/apps/cursor' },
               { text: 'Keyboard', link: '/en/apps/hid-keyboard' },
               { text: 'Morse', link: '/en/apps/morse' },
+              { text: 'Radio', link: '/en/apps/radio' },
             ],
           },
           {

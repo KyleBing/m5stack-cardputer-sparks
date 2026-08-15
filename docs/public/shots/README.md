@@ -45,6 +45,9 @@ app_{app}_{子功能}.png
 - app_morse_001.png
 - app_mic_001.png / app_mic_002.png
 
+### Radio
+- app_radio_playing.png / app_radio_no_module.png / app_radio_station_list.png
+
 ### HID / IR
 - app_hidkeyboard_main.png / app_hidkeyboard_usb_mode.png / app_hidkeyboard_mouse_mode.png
 - app_hidkeyboard_pair_list.png / app_hidkeyboard_specailkey.png

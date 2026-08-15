@@ -66,6 +66,15 @@ More detail: [Getting Started · Main Menu](/en/guide/getting-started#main-menu)
 | `c` | [Cursor](./cursor) | Cursor usage Summary, day / week / month charts |
 | `k` | [Keyboard](./hid-keyboard) | USB / BLE HID keyboard |
 | `j` | [Morse](./morse) | Morse tones, symbol highlighting, and live waveform |
+| `r` | [Radio](./radio) | Grove FM radio (TEA5767 / RDA5807M) |
+
+<div class="shot-row">
+
+![radio-playing](/shots/app_radio_playing.png)
+![radio-no-module](/shots/app_radio_no_module.png)
+![radio-stations](/shots/app_radio_station_list.png)
+
+</div>
 
 ## System & Info
 

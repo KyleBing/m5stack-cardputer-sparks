@@ -33,5 +33,5 @@ Entering the App runs a scan; press `r` to scan again without leaving.
 ## Usage
 
 1. **InI2**: confirm onboard I2C (keyboard / IMU / codec).  
-2. **ExI2**: Grove (G2=SDA G1=SCL) or EXT (G8=SDA G9=SCL) troubleshooting.  
+2. **ExI2**: **left-side Grove** (top→bottom GND / 5V / G2=SDA / G1=SCL) or EXT (G8=SDA G9=SCL). Radio wiring: [Radio](./radio).  
 3. Empty bus → `no device`; unknown address → `--` / `unknown`.

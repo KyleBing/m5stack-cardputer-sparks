@@ -12,6 +12,10 @@ _该固件内容为全英文，英文缩写比较多，所以需要有良好的�
 
 <img width="1774" height="2591" alt="screenshots v1 10" src="https://github.com/user-attachments/assets/c3c07475-57c3-471c-a2ab-6f1c4f39d3f7" />
 
+<img src="docs/public/shots/app_radio_playing.png" alt="Radio playing" />
+<img src="docs/public/shots/app_radio_no_module.png" alt="Radio no module" />
+<img src="docs/public/shots/app_radio_station_list.png" alt="Radio station list" />
+
 
 ## 一、功能说明
 基于 M5Stack 的库进行的开发，功能有：
@@ -37,6 +41,7 @@ _该固件内容为全英文，英文缩写比较多，所以需要有良好的�
 | 键盘 | HID Keyboard | `k` | 蓝牙、USB 键盘 |
 | 小游戏 | Mini Games | `g` | 扫雷、贪吃蛇、生命游戏、粒子时钟等 14 项 |
 | 硬件测试 | Hardware Test | `h` | Display / IMU / Font / Icons / LED / BLE / I2C / Mic |
+| 收音机 | Radio | `r` | Grove FM 收音机（TEA5767 / RDA5807M） |
 
 
 ## 二、文档
