@@ -20,6 +20,16 @@ void FmTuner::detach() {
     chip_id_ = 0;
 }
 
+void FmTuner::silenceIfPresent(m5::I2C_Class& bus) {
+    if (!bus.isEnabled()) {
+        return;
+    }
+    Rda5807m rda;
+    Tea5767 tea;
+    (void)rda.silence(bus);
+    (void)tea.silence(bus);
+}
+
 const char* FmTuner::chipName() const {
     if (chip_ == Chip::Rda5807m) {
         return "RDA5807M";

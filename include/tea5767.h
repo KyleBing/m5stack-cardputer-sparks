@@ -40,6 +40,8 @@ class Tea5767 {
 
     bool begin(m5::I2C_Class& bus);
     bool probe() const;
+    // I2C 扫描写探测可能误开音频；确认在线后 mute + standby，不调谐
+    bool silence(m5::I2C_Class& bus);
 
     uint16_t freqMin() const { return japan_ ? FREQ_JP_MIN : FREQ_EU_MIN; }
     uint16_t freqMax() const { return japan_ ? FREQ_JP_MAX : FREQ_EU_MAX; }

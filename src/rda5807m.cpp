@@ -111,6 +111,23 @@ bool Rda5807m::probe(uint16_t* chip_id) {
     return (id & 0xFF00U) == 0x5800U;
 }
 
+bool Rda5807m::silence(m5::I2C_Class& bus) {
+    bus_ = &bus;
+    if (!bus_->isEnabled() || !probe()) {
+        bus_ = nullptr;
+        return false;
+    }
+    // ENABLE=0 关射频；DHIZ=0 音频高阻；不走 initialize，避免先开声
+    const bool ok = writeRandom(0x02, 0);
+    if (ok) {
+        standby_ = true;
+        tuning_ = false;
+        seeking_ = false;
+    }
+    bus_ = nullptr;
+    return ok;
+}
+
 void Rda5807m::setDefaults() {
     // 上电默认保持静音和高阻，交由调用方显式打开音频。
     shadow_[0] = REG02_ENABLE | REG02_NEW_METHOD;

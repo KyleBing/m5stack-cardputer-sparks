@@ -74,6 +74,35 @@ int drawAppHelpTextColored(int x, int y, const char* text, uint16_t color);
 int drawAppHelpLabelText(int x, int y, const char* label, uint16_t label_color, const char* text);
 // 多页底栏：左箭头+页码，右 h close；单页仅 close
 void drawAppHelpFooter(int page, int page_count);
+// 行列表自动按 APP_HELP_MAX_LINES 分页；章节只是普通行，不强制换页
+struct AppHelpLine {
+    enum class Kind : uint8_t { Key, Badge, Arrows, Text, Colored, Label };
+    Kind kind;
+    char key;
+    const char* primary; // badge / 章节标题 / 纯文本 / 彩色标签
+    const char* extra;   // 说明文字
+    uint16_t color;
+};
+inline AppHelpLine appHelpKey(const char key, const char* text) {
+    return {AppHelpLine::Kind::Key, key, nullptr, text, 0};
+}
+inline AppHelpLine appHelpBadge(const char* badge, const char* text) {
+    return {AppHelpLine::Kind::Badge, 0, badge, text, 0};
+}
+inline AppHelpLine appHelpArrows(const char* text) {
+    return {AppHelpLine::Kind::Arrows, 0, nullptr, text, 0};
+}
+inline AppHelpLine appHelpText(const char* text) {
+    return {AppHelpLine::Kind::Text, 0, text, nullptr, 0};
+}
+inline AppHelpLine appHelpTextColored(const char* text, const uint16_t color) {
+    return {AppHelpLine::Kind::Colored, 0, text, nullptr, color};
+}
+inline AppHelpLine appHelpLabelText(const char* label, const uint16_t color, const char* text) {
+    return {AppHelpLine::Kind::Label, 0, label, text, color};
+}
+int appHelpPageCount(int line_count);
+void drawAppHelpLines(const char* subtitle, const AppHelpLine* lines, int line_count, int page);
 // Help 翻页：方向键/;,./ 或 []，-1/0/1
 int getHelpNavDelta(const Keyboard_Class::KeysState& status);
 // 按 delta 换页（循环）；page_count<=1 时原样返回
@@ -138,6 +167,43 @@ int getMenuNavDelta(const Keyboard_Class::KeysState& status);
 // 括号翻页键：-1 上一页（'['），0 无，1 下一页（']'）
 // 仅供 [ ] 未被占作他用的界面调用，与 getMenuNavDelta 并存
 int getBracketNavDelta(const Keyboard_Class::KeysState& status);
+
+// Tab / Shift+Tab：1 下一项，-1 上一项，0 无
+int getTabNavDelta(const Keyboard_Class::KeysState& status);
+
+// 列表右侧细滚动条：2px 宽，距右边缘 APP_HELP_EDGE；内容未超出可见行时不画
+static constexpr int APP_SCROLLBAR_W = 2;
+
+template <typename Gfx>
+inline void drawAppScrollbar(Gfx& gfx, const int track_y, const int track_h, const int total,
+                             const int visible, const int scroll) {
+    if (total <= visible || visible <= 0 || track_h <= 0) {
+        return;
+    }
+    const int x = gfx.width() - APP_HELP_EDGE - APP_SCROLLBAR_W;
+    if (x < 0) {
+        return;
+    }
+    gfx.fillRect(x, track_y, APP_SCROLLBAR_W, track_h, APP_COLOR_MUTED);
+    int thumb_h = track_h * visible / total;
+    if (thumb_h < APP_SCROLLBAR_W) {
+        thumb_h = APP_SCROLLBAR_W;
+    }
+    if (thumb_h > track_h) {
+        thumb_h = track_h;
+    }
+    const int max_scroll = total - visible;
+    int s = scroll;
+    if (s < 0) {
+        s = 0;
+    }
+    if (s > max_scroll) {
+        s = max_scroll;
+    }
+    const int travel = track_h - thumb_h;
+    const int thumb_y = track_y + (max_scroll > 0 ? (travel * s) / max_scroll : 0);
+    gfx.fillRect(x, thumb_y, APP_SCROLLBAR_W, thumb_h, APP_COLOR_HINT);
+}
 
 // ===== IMU 倾斜方向（贪吃蛇 / 扫雷用倾斜代替方向键）=====
 // 开启时以当前握持姿态为中立位，之后只看偏移量，手持不用端平设备

@@ -4,6 +4,8 @@
 
 void enterRadioApp();
 void leaveRadioApp();
+// I2C 扫描的写探测可能打开 Grove 收音机；扫完 / 退出时待机静音
+void silenceFmRadioOnBus(m5::I2C_Class& bus);
 void updateRadioApp();
 void handleRadioApp(const Keyboard_Class::KeysState& status);
 

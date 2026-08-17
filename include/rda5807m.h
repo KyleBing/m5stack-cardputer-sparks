@@ -120,6 +120,8 @@ class Rda5807m {
     bool probe(uint16_t* chip_id = nullptr);
     bool initialize();
     bool softReset();
+    // I2C 扫描写探测可能误开射频；确认芯片后清 ENABLE，音频高阻
+    bool silence(m5::I2C_Class& bus);
     bool setStandby(bool standby);
     bool isStandby() const { return standby_; }
 

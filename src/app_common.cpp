@@ -228,6 +228,58 @@ void drawAppHelpFooter(const int page, const int page_count) {
     drawHelpHintRight("close");
 }
 
+int appHelpPageCount(const int line_count) {
+    if (line_count <= APP_HELP_MAX_LINES) {
+        return 1;
+    }
+    return (line_count + APP_HELP_MAX_LINES - 1) / APP_HELP_MAX_LINES;
+}
+
+static int drawAppHelpLine(const int x, const int y, const AppHelpLine& line) {
+    const char* primary = (line.primary != nullptr) ? line.primary : "";
+    const char* extra = (line.extra != nullptr) ? line.extra : "";
+    switch (line.kind) {
+        case AppHelpLine::Kind::Key:
+            return drawAppHelpKey(x, y, line.key, extra);
+        case AppHelpLine::Kind::Badge:
+            return drawAppHelpBadge(x, y, primary, extra);
+        case AppHelpLine::Kind::Arrows:
+            return drawAppHelpArrows(x, y, extra);
+        case AppHelpLine::Kind::Text:
+            return drawAppHelpText(x, y, primary);
+        case AppHelpLine::Kind::Colored:
+            return drawAppHelpTextColored(x, y, primary, line.color);
+        case AppHelpLine::Kind::Label:
+            return drawAppHelpLabelText(x, y, primary, line.color, extra);
+    }
+    return y;
+}
+
+void drawAppHelpLines(const char* subtitle, const AppHelpLine* lines, const int line_count,
+                      const int page) {
+    const int pages = appHelpPageCount(line_count);
+    int p = page;
+    if (p < 0) {
+        p = 0;
+    }
+    if (p >= pages) {
+        p = pages - 1;
+    }
+    int y = drawAppHelpBegin(subtitle);
+    constexpr int x = APP_HELP_CONTENT_X;
+    if (lines != nullptr && line_count > 0) {
+        const int start = p * APP_HELP_MAX_LINES;
+        int end = start + APP_HELP_MAX_LINES;
+        if (end > line_count) {
+            end = line_count;
+        }
+        for (int i = start; i < end; ++i) {
+            y = drawAppHelpLine(x, y, lines[i]);
+        }
+    }
+    drawAppHelpFooter(p, pages);
+}
+
 int getHelpNavDelta(const Keyboard_Class::KeysState& status) {
     int delta = getMenuNavDelta(status);
     if (delta == 0) {
@@ -581,6 +633,29 @@ int getBracketNavDelta(const Keyboard_Class::KeysState& status) {
         }
     }
     return 0;
+}
+
+// Tab 下一项，Shift+Tab 上一项
+int getTabNavDelta(const Keyboard_Class::KeysState& status) {
+    bool tab = false;
+    for (const uint8_t hid : status.hid_keys) {
+        if (hid == 0x2B) {
+            tab = true;
+            break;
+        }
+    }
+    if (!tab) {
+        for (const char c : status.word) {
+            if (c == '\t') {
+                tab = true;
+                break;
+            }
+        }
+    }
+    if (!tab) {
+        return 0;
+    }
+    return status.shift ? -1 : 1;
 }
 
 // 音量连续调节时，空闲后再写 LittleFS，避免挡界面刷新

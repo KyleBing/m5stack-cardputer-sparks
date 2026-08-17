@@ -28,7 +28,7 @@ No header. Scans addresses 8–119 and lists each hit as `0x` address, chip name
 | `h` | Help (In: known chips; Ex: pins and likely names) |
 | `r` | Rescan |
 
-Entering the App runs a scan; press `r` to scan again without leaving.
+Entering the App runs a scan; press `r` to scan again without leaving. A scan may briefly wake a Grove FM module; the App mutes it and puts it in standby afterwards, and again when you leave.
 
 ## Usage
 

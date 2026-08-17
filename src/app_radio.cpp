@@ -966,6 +966,9 @@ static void drawStationsList() {
                 radioCanvas.print(label);
             }
         }
+        // 超出一屏时在列表右侧画细滚动条
+        drawAppScrollbar(radioCanvas, list_y, vis * RADIO_LIST_ROW_H, g_station_count, vis,
+                         g_list_scroll);
     }
 
     if (g_view == RadioView::Rename) {
@@ -1365,6 +1368,8 @@ static void drawTunerSettings() {
             cx += radioCanvas.textWidth(opts[o]) + 6;
         }
     }
+    // 项数多于可见行时在右侧画细滚动条
+    drawAppScrollbar(radioCanvas, list_y, visible_rows * row_h, n, visible_rows, g_tuner_scroll);
 }
 
 static void drawRdsInfo() {
@@ -1452,117 +1457,125 @@ static void drawRadioChrome() {
     drawRadioMain();
 }
 
-static int radioHelpPageCount() {
-    switch (g_help_kind) {
-        case RadioHelpKind::Main:
-            return 3;
-        case RadioHelpKind::Stations:
-            return 2;
-        case RadioHelpKind::Tuner:
-            return g_radio.isRda() ? 2 : 1;
-        case RadioHelpKind::Rds:
-            return 1;
-        default:
-            return 1;
+static constexpr int RADIO_HELP_LINE_CAP = 32;
+static AppHelpLine g_help_lines[RADIO_HELP_LINE_CAP];
+
+static void addRadioHelpLine(AppHelpLine* lines, int& n, const AppHelpLine& line) {
+    if (n < RADIO_HELP_LINE_CAP) {
+        lines[n++] = line;
     }
 }
 
-static void drawHelpPage() {
-    constexpr int x = APP_HELP_CONTENT_X;
-    if (g_help_kind == RadioHelpKind::Stations) {
-        int y = drawAppHelpBegin("Stations");
-        if (g_help_page == 0) {
-            y = drawAppHelpArrows(x, y, "select station");
-            y = drawAppHelpBadge(x, y, "[]", "page up / down");
-            y = drawAppHelpBadge(x, y, "Ent", "tune + exit");
-            y = drawAppHelpKey(x, y, 'r', "rename");
-            y = drawAppHelpBadge(x, y, "=", "save freq here");
-            y = drawAppHelpKey(x, y, 'n', "add current freq");
-            y = drawAppHelpBadge(x, y, "d/Bk", "delete");
-        } else {
-            y = drawAppHelpKey(x, y, 'p', "pin to top");
-            y = drawAppHelpKey(x, y, 'c', "clear all stations");
-            y = drawAppHelpKey(x, y, 'l', "close list");
-            y = drawAppHelpText(x, y, "1-0 jump hotkey slot");
-        }
-        drawAppHelpFooter(g_help_page, radioHelpPageCount());
-        return;
-    }
-    if (g_help_kind == RadioHelpKind::Tuner) {
-        int y = drawAppHelpBegin("Tuner");
-        if (!g_radio.isRda() || g_help_page == 0) {
-            y = drawAppHelpArrows(x, y, "select setting");
-            y = drawAppHelpBadge(x, y, "Ent/=", "cycle value");
-            y = drawAppHelpKey(x, y, '-', "cycle prev");
-            y = drawAppHelpKey(x, y, 't', "close tuner");
+// 全部 Help 行连成一条流，按 APP_HELP_MAX_LINES 切开；章节标题不单独占一页
+static int fillRadioHelpLines(AppHelpLine* lines) {
+    int n = 0;
+    switch (g_help_kind) {
+        case RadioHelpKind::Stations:
+            addRadioHelpLine(lines, n, appHelpArrows("select station"));
+            addRadioHelpLine(lines, n, appHelpBadge("[]", "page up / down"));
+            addRadioHelpLine(lines, n, appHelpBadge("Ent", "tune + exit"));
+            addRadioHelpLine(lines, n, appHelpKey('r', "rename"));
+            addRadioHelpLine(lines, n, appHelpBadge("=", "save freq here"));
+            addRadioHelpLine(lines, n, appHelpKey('n', "add current freq"));
+            addRadioHelpLine(lines, n, appHelpBadge("d/Bk", "delete"));
+            addRadioHelpLine(lines, n, appHelpKey('p', "pin to top"));
+            addRadioHelpLine(lines, n, appHelpKey('c', "clear all stations"));
+            addRadioHelpLine(lines, n, appHelpKey('l', "close list"));
+            addRadioHelpLine(lines, n, appHelpText("1-0 jump hotkey slot"));
+            break;
+        case RadioHelpKind::Tuner:
+            addRadioHelpLine(lines, n, appHelpArrows("or Tab: select"));
+            addRadioHelpLine(lines, n, appHelpBadge("Ent/=", "cycle value"));
+            addRadioHelpLine(lines, n, appHelpKey('-', "cycle prev"));
+            addRadioHelpLine(lines, n, appHelpKey('t', "close tuner"));
             if (g_radio.isRda()) {
-                y = drawAppHelpText(x, y, "5 bands; step 25/50/100/200 kHz");
-                y = drawAppHelpText(x, y, "Seek threshold 0-15 (higher=stricter)");
+                addRadioHelpLine(lines, n, appHelpText("5 bands; step 25/50/100/200 kHz"));
+                addRadioHelpLine(lines, n, appHelpText("Seek threshold 0-15 (higher=stricter)"));
+                addRadioHelpLine(lines, n, appHelpTextColored("RDA audio / data", APP_COLOR_LABEL));
+                addRadioHelpLine(lines, n, appHelpText("Bass boosts low frequencies"));
+                addRadioHelpLine(lines, n, appHelpText("Soft blend mixes weak stereo to mono"));
+                addRadioHelpLine(lines, n, appHelpText("Radio data Europe; US radio data NA"));
+                addRadioHelpLine(lines, n, appHelpText("Auto freq normally stays enabled"));
             } else {
-                y = drawAppHelpText(x, y, "Band Europe 87.5-108 / Japan 76-91");
-                y = drawAppHelpText(x, y, "Seek Software step or Hardware");
-                y = drawAppHelpText(x, y, "Seek stop Low/Mid/High");
+                addRadioHelpLine(lines, n, appHelpText("Band Europe 87.5-108 / Japan 76-91"));
+                addRadioHelpLine(lines, n, appHelpText("Seek Software step or Hardware"));
+                addRadioHelpLine(lines, n, appHelpText("Seek stop Low/Mid/High"));
             }
-        } else {
-            y = drawAppHelpTextColored(x, y, "RDA audio / data", APP_COLOR_LABEL);
-            y = drawAppHelpText(x, y, "Bass boosts low frequencies");
-            y = drawAppHelpText(x, y, "Soft blend mixes weak stereo to mono");
-            y = drawAppHelpText(x, y, "Radio data Europe; US radio data NA");
-            y = drawAppHelpText(x, y, "Auto freq normally stays enabled");
-        }
-        drawAppHelpFooter(g_help_page, radioHelpPageCount());
-        return;
+            break;
+        case RadioHelpKind::Rds:
+            addRadioHelpLine(lines, n, appHelpText("PS = station name; RT = radio text"));
+            addRadioHelpLine(lines, n, appHelpText("PI/PTY identify program and type"));
+            addRadioHelpLine(lines, n, appHelpText("TP/TA = traffic service / alert"));
+            addRadioHelpLine(lines, n, appHelpText("AF = alternate-frequency count"));
+            addRadioHelpLine(lines, n, appHelpText("CT = station UTC date and time"));
+            addRadioHelpLine(lines, n, appHelpKey('i', "close RDS info"));
+            break;
+        case RadioHelpKind::Main:
+            addRadioHelpLine(lines, n, appHelpBadge("< >", "seek; again to stop"));
+            addRadioHelpLine(lines, n, appHelpBadge("^ v", "fine tune step"));
+            addRadioHelpLine(lines, n, appHelpBadge("[]", "prev / next station"));
+            addRadioHelpLine(lines, n,
+                             appHelpBadge("-=", g_radio.isRda() ? "volume 0-15" : "tune (legacy)"));
+            addRadioHelpLine(lines, n, appHelpKey('a', "auto scan + save"));
+            addRadioHelpLine(lines, n, appHelpBadge("m o", "mute / mono"));
+            addRadioHelpLine(lines, n, appHelpBadge("l t", "stations / tuner"));
+            addRadioHelpLine(lines, n, appHelpTextColored("Badges", APP_COLOR_LABEL));
+            addRadioHelpLine(lines, n, appHelpLabelText("ST", APP_COLOR_LABEL, " = stereo signal"));
+            addRadioHelpLine(lines, n,
+                             appHelpLabelText("MONO", APP_COLOR_LABEL, " = mono (o force)"));
+            addRadioHelpLine(lines, n, appHelpLabelText("MUTE", APP_COLOR_LABEL, " = muted (m)"));
+            if (g_radio.isRda()) {
+                addRadioHelpLine(lines, n,
+                                 appHelpLabelText("BAND", APP_COLOR_LABEL, " = selected FM range"));
+            } else {
+                addRadioHelpLine(lines, n,
+                                 appHelpLabelText("ML/MR", APP_COLOR_LABEL, " = mute L / R"));
+                addRadioHelpLine(lines, n,
+                                 appHelpLabelText("JP", APP_COLOR_LABEL, " = Japan FM band"));
+            }
+            addRadioHelpLine(lines, n, appHelpLabelText("SEEK", APP_COLOR_LABEL, " = searching"));
+            if (g_radio.isRda()) {
+                addRadioHelpLine(lines, n, appHelpText("Yellow 5x3 grid = volume 0-15"));
+                addRadioHelpLine(lines, n, appHelpKey('i', "RDS station info"));
+            }
+            addRadioHelpLine(lines, n, appHelpTextColored("Dial", APP_COLOR_LABEL));
+            addRadioHelpLine(lines, n, appHelpLabelText("green", APP_COLOR_OK, " = saved station"));
+            addRadioHelpLine(lines, n,
+                             appHelpLabelText("cyan", APP_COLOR_LABEL, " = active station"));
+            addRadioHelpLine(lines, n, appHelpText("Audio: module 3.5mm jack only"));
+            addRadioHelpLine(lines, n, appHelpText("No BT/AirPods; cable is often antenna"));
+            addRadioHelpLine(lines, n,
+                             appHelpText(g_radio.isRda() ? "Native I2C 0x10/0x11"
+                                                         : "No volume register"));
+            addRadioHelpLine(lines, n, appHelpText("I2C Grove G2/G1 or EXT G8/G9"));
+            addRadioHelpLine(lines, n, appHelpText("NO MOD = chip not found"));
+            break;
+        default:
+            break;
     }
-    if (g_help_kind == RadioHelpKind::Rds) {
-        int y = drawAppHelpBegin("RDS");
-        y = drawAppHelpText(x, y, "PS = station name; RT = radio text");
-        y = drawAppHelpText(x, y, "PI/PTY identify program and type");
-        y = drawAppHelpText(x, y, "TP/TA = traffic service / alert");
-        y = drawAppHelpText(x, y, "AF = alternate-frequency count");
-        y = drawAppHelpText(x, y, "CT = station UTC date and time");
-        y = drawAppHelpKey(x, y, 'i', "close RDS info");
-        drawHelpHintRight("close");
-        return;
-    }
+    return n;
+}
 
-    int y = drawAppHelpBegin("Radio");
-    if (g_help_page == 0) {
-        y = drawAppHelpBadge(x, y, "< >", "seek prev / next");
-        y = drawAppHelpBadge(x, y, "^ v", "fine tune step");
-        y = drawAppHelpBadge(x, y, "[]", "prev / next station");
-        y = drawAppHelpBadge(x, y, "-=", g_radio.isRda() ? "volume 0-15" : "tune (legacy)");
-        y = drawAppHelpKey(x, y, 'a', "auto scan + save");
-        y = drawAppHelpBadge(x, y, "m o", "mute / mono");
-        y = drawAppHelpBadge(x, y, "l t", "stations / tuner");
-    } else if (g_help_page == 1) {
-        // 主界面状态徽章含义
-        y = drawAppHelpTextColored(x, y, "Badges", APP_COLOR_LABEL);
-        y = drawAppHelpLabelText(x, y, "ST", APP_COLOR_LABEL, " = stereo signal");
-        y = drawAppHelpLabelText(x, y, "MONO", APP_COLOR_LABEL, " = mono (o force)");
-        y = drawAppHelpLabelText(x, y, "MUTE", APP_COLOR_LABEL, " = muted (m)");
-        if (g_radio.isRda()) {
-            y = drawAppHelpLabelText(x, y, "BAND", APP_COLOR_LABEL, " = selected FM range");
-        } else {
-            y = drawAppHelpLabelText(x, y, "ML/MR", APP_COLOR_LABEL, " = mute L / R");
-            y = drawAppHelpLabelText(x, y, "JP", APP_COLOR_LABEL, " = Japan FM band");
-        }
-        y = drawAppHelpLabelText(x, y, "SEEK", APP_COLOR_LABEL, " = searching");
-        if (g_radio.isRda()) {
-            y = drawAppHelpText(x, y, "Yellow 5x3 grid = volume 0-15");
-            y = drawAppHelpKey(x, y, 'i', "RDS station info");
-        }
-    } else {
-        y = drawAppHelpTextColored(x, y, "Dial", APP_COLOR_LABEL);
-        y = drawAppHelpLabelText(x, y, "green", APP_COLOR_OK, " = saved station");
-        y = drawAppHelpLabelText(x, y, "cyan", APP_COLOR_LABEL, " = active station");
-        y = drawAppHelpText(x, y, "Audio: module 3.5mm jack only");
-        y = drawAppHelpText(x, y, "No BT/AirPods; cable is often antenna");
-        y = drawAppHelpText(x, y,
-                            g_radio.isRda() ? "Native I2C 0x10/0x11" : "No volume register");
-        y = drawAppHelpText(x, y, "I2C Grove G2/G1 or EXT G8/G9");
-        y = drawAppHelpText(x, y, "NO MOD = chip not found");
+static const char* radioHelpSubtitle() {
+    switch (g_help_kind) {
+        case RadioHelpKind::Stations:
+            return "Stations";
+        case RadioHelpKind::Tuner:
+            return "Tuner";
+        case RadioHelpKind::Rds:
+            return "RDS";
+        default:
+            return "Radio";
     }
-    drawAppHelpFooter(g_help_page, radioHelpPageCount());
+}
+
+static int radioHelpPageCount() {
+    return appHelpPageCount(fillRadioHelpLines(g_help_lines));
+}
+
+static void drawHelpPage() {
+    const int n = fillRadioHelpLines(g_help_lines);
+    drawAppHelpLines(radioHelpSubtitle(), g_help_lines, n, g_help_page);
 }
 
 static void markRssiFresh() {
@@ -2162,7 +2175,9 @@ static bool handleTunerInput(const Keyboard_Class::KeysState& status, const Stri
         closeTunerSettingsToMain();
         return true;
     }
-    const int nav = getMenuNavDelta(status);
+    // Tab / Shift+Tab 与方向键一样上下切项
+    const int tab = getTabNavDelta(status);
+    const int nav = (tab != 0) ? tab : getMenuNavDelta(status);
     if (nav != 0) {
         const int n = tunerItemCount();
         g_tuner_sel = (g_tuner_sel + nav + n) % n;
@@ -2666,6 +2681,10 @@ void enterRadioApp() {
     drawRadioChrome();
 }
 
+void silenceFmRadioOnBus(m5::I2C_Class& bus) {
+    FmTuner::silenceIfPresent(bus);
+}
+
 void leaveRadioApp() {
     g_help_kind = RadioHelpKind::None;
     g_view = RadioView::Main;
@@ -2889,7 +2908,7 @@ void handleRadioApp(const Keyboard_Class::KeysState& status) {
         return;
     }
 
-    // 搜台中：微调/音量或 [] 停在当前频点；左右可改搜台方向。
+    // 搜台中：微调/音量或 [] 停在当前频点；左右同向再按停止，反向改搜台方向。
     if (g_seeking) {
         if (getTuneDelta(status) != 0 || getVolumeDelta(status) != 0) {
             (void)closeRadioSeek();
@@ -2903,10 +2922,13 @@ void handleRadioApp(const Keyboard_Class::KeysState& status) {
         }
         if (!g_auto_scanning) {
             const int seek_delta = getSeekDelta(status);
-            if (seek_delta < 0) {
-                redirectSeek(false);
-            } else if (seek_delta > 0) {
-                redirectSeek(true);
+            if (seek_delta != 0) {
+                const bool want_up = seek_delta > 0;
+                if (g_seek_up == want_up) {
+                    (void)closeRadioSeek(); // 同方向再按：停在当前频点
+                } else {
+                    redirectSeek(want_up);
+                }
             }
         }
         return;

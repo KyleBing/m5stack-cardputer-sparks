@@ -134,6 +134,21 @@ bool Tea5767::probe() const {
     return bus_->scanID(I2C_ADDR);
 }
 
+bool Tea5767::silence(m5::I2C_Class& bus) {
+    bus_ = &bus;
+    if (!probe()) {
+        bus_ = nullptr;
+        return false;
+    }
+    muted_ = true;
+    standby_ = true;
+    searching_ = false;
+    search_ind_ = false;
+    const bool ok = writeRegs();
+    bus_ = nullptr;
+    return ok;
+}
+
 void Tea5767::setFrequency(const uint16_t freq_centi, const bool wait_settle) {
     searching_ = false;
     search_ind_ = false;

@@ -57,7 +57,7 @@ Full list: `h` Help (multi-page).
 | Key | Action |
 |-----|--------|
 | `h` | Help |
-| `←` `→` | Seek previous / next station signal |
+| `←` `→` | Seek previous / next station; press same again to stop |
 | `↑` `↓` | Fine tune step |
 | `-` `=` | RDA: volume · TEA: step tune |
 | `[` `]` | Previous / next saved station |
@@ -77,6 +77,7 @@ From the main radio screen press **`t`** to open Tuner (settings list); press `t
 | Key | Action |
 |-----|--------|
 | ↑ ↓ / `;` `.` etc. | Move between items |
+| Tab / Shift+Tab | Next / previous item |
 | `Enter` / `Space` / `=` | Next value |
 | `-` | Previous value |
 | `t` | Close Tuner |

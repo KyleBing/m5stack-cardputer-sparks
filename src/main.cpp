@@ -2563,6 +2563,8 @@ static void drawI2cScanApp(m5::I2C_Class& bus, const char* title, const bool int
     if (bus.isEnabled()) {
         bus.begin(); // Ex_I2C 默认未 init，扫描前补上
         bus.scanID(found);
+        // 写探测会打开 TEA5767 / RDA5807M，扫完立刻待机，避免嘶声
+        silenceFmRadioOnBus(bus);
     }
 
     clearAppHeaderStatusRefresh();
@@ -2947,6 +2949,10 @@ static void leaveHardwareTestChild(const HardwareTestMode mode) {
         leaveMicApp();
     } else if (mode == HardwareTestMode::BLE) {
         leaveBleApp();
+    } else if (mode == HardwareTestMode::IN_I2C) {
+        silenceFmRadioOnBus(M5Cardputer.In_I2C);
+    } else if (mode == HardwareTestMode::EX_I2C) {
+        silenceFmRadioOnBus(M5Cardputer.Ex_I2C);
     }
     g_i2c_help_visible = false;
 }
@@ -3342,6 +3348,12 @@ void enterApp(const AppState state) {
     }
     if (currentState == AppState::RADIO && state != AppState::RADIO) {
         leaveRadioApp();
+    }
+    if (currentState == AppState::IN_I2C && state != AppState::IN_I2C) {
+        silenceFmRadioOnBus(M5Cardputer.In_I2C);
+    }
+    if (currentState == AppState::EX_I2C && state != AppState::EX_I2C) {
+        silenceFmRadioOnBus(M5Cardputer.Ex_I2C);
     }
     if (currentState == AppState::VOCAB && state != AppState::VOCAB) {
         leaveVocabApp();

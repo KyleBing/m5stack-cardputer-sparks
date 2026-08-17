@@ -42,6 +42,8 @@ class FmTuner {
 
     bool begin(m5::I2C_Class& bus);
     void detach();
+    // 扫描后把总线上的 TEA5767 / RDA5807M 收回待机，避免嘶声
+    static void silenceIfPresent(m5::I2C_Class& bus);
 
     Chip chip() const { return chip_; }
     bool isRda() const { return chip_ == Chip::Rda5807m; }
