@@ -46,9 +46,9 @@
 | **VCC** / VDD | **5V** |
 | **GND** | **GND** |
 
-耳机插模块自带的 3.5 mm 孔，声音不走机身喇叭。天线一般已做在板上。接好后 [ExI2C](./i2c) 应看到 TEA5767 `0x60`，或 RDA5807M `0x10` / `0x11`。
+耳机插模块自带的 3.5 mm 孔，声音不走机身喇叭，也**不支持 AirPods / 蓝牙耳机**。很多模块把耳机线当天线，请用有线 3.5 mm 耳机或音箱。接好后 [ExI2C](./i2c) 应看到 TEA5767 `0x60`，或 RDA5807M `0x10` / `0x11`。
 
-> TEA5767 没有芯片音量，用耳机旋钮；RDA5807M 用主界面 `-=` 或 Tuner → Volume。
+> TEA5767 没有芯片音量，用耳机旋钮；RDA5807M 用主界面 `-=`（信号条旁 5×3 黄格）或 Tuner → Volume。
 
 ## 快捷键
 
@@ -57,8 +57,8 @@
 | 按键 | 作用 |
 |------|------|
 | `h` | Help |
-| `←` `→` | 步进调谐 / 停止扫描 |
-| `↑` `↓` | 搜台 / 换方向 |
+| `←` `→` | 搜台（前一台 / 后一台信号） |
+| `↑` `↓` | 频率微调 |
 | `-` `=` | RDA：音量 · TEA：步进调谐 |
 | `[` `]` | 上一 / 下一已存电台 |
 | `a` | 自动搜台并保存 |
@@ -68,7 +68,7 @@
 | `i` | RDS 信息（仅 RDA） |
 | `1`–`0` | 跳到对应电台槽 |
 
-电台列表内：方向键选择，`Enter` 调谐并退出，`r` 改名，`n` 添加当前频率，`d` / Backspace 删除，`p` 置顶。
+电台列表内：方向键选择，`Enter` 调谐并退出，`r` 改名，`n` 添加当前频率，`d` / Backspace 删除，`c` 清空全部并保存，`p` 置顶。
 
 ## Tuner
 
@@ -86,37 +86,37 @@
 
 | 项 | 取值 | 说明 |
 |----|------|------|
-| Band | EU / JP | EU 87.5–108 MHz；JP 76–91 MHz |
-| Deemph | 50us / 75us | 去加重：欧日 50µs，北美 75µs |
-| Seek | Soft / Chip | Soft=软件步进搜台；Chip=芯片硬件搜台（SM） |
-| Stop | Lo / Mid / Hi | 硬件搜台停台门限（SSL，信号越严越不容易停） |
-| Inject | High / Low | 本振注入边（HLSI）；串台时可换一边 |
-| SMute | On / Off | 弱台软静音 |
-| HiCut | On / Off | 弱台削高音降噪（HCC） |
-| SNC | On / Off | 立体声噪声抑制 |
-| MuteLR | Off / L / R | 静音左或右声道 |
+| Band | Europe / Japan | Europe 87.5–108 MHz；Japan 76–91 MHz |
+| De-emphasis | 50 us / 75 us | 去加重：欧日 50µs，北美 75µs |
+| Seek mode | Software / Hardware | Software=软件步进搜台；Hardware=芯片硬件搜台 |
+| Seek stop | Low / Mid / High | 硬件搜台停台门限（信号越严越不容易停） |
+| Injection | High / Low | 本振注入边；串台时可换一边 |
+| Soft mute | On / Off | 弱台软静音 |
+| High cut | On / Off | 弱台削高音降噪 |
+| Noise cancel | On / Off | 立体声噪声抑制 |
+| Channel mute | Off / Left / Right | 静音左或右声道 |
 
 ### RDA5807M 各项
 
-比 TEA 多频段、步进、音量和 RDS：
+比 TEA 多频段、步进、音量和电台数据：
 
 | 项 | 取值 | 说明 |
 |----|------|------|
-| Band | EU / JP / Wide / East / Low | EU 87–108；JP 76–91；Wide 76–108；East 65–76；Low 50–76 |
-| Step | 100k / 200k / 50k / 25k | 调谐步进 |
-| Deemph | 50us / 75us | 同上 |
-| Seek | Soft / Chip | 同上 |
-| SeekTh | 0–15 | 硬件搜台门限 |
-| Wrap | On / Off | 搜到频段尽头是否绕回 |
+| Band | 87-108 / 76-91 / 76-108 / 65-76 / 50-76 | 对应欧 / 日 / 宽 / 东欧 / 低端频段 |
+| Step | 100 kHz / 200 kHz / 50 kHz / 25 kHz | 调谐步进 |
+| De-emphasis | 50 us / 75 us | 同上 |
+| Seek mode | Software / Hardware | 同上 |
+| Seek threshold | 0–15 | 硬件搜台 SNR 门限（默认 8；越大越严。停台后还会校验有效台） |
+| Seek wrap | On / Off | 搜到频段尽头是否绕回 |
 | Volume | 0–15 | 芯片音量 |
-| Bass | On / Off | 低音增强 |
-| SMute | On / Off | 弱台软静音 |
-| SBlend | On / Off | 弱立体声混成单声道 |
-| RDS | On / Off | 欧洲 RDS |
-| RBDS | On / Off | 北美 RBDS |
-| AFC | On / Off | 自动频率控制，一般保持 On |
+| Bass boost | On / Off | 低音增强 |
+| Soft mute | On / Off | 弱台软静音 |
+| Soft blend | On / Off | 弱立体声混成单声道 |
+| Radio data | On / Off | 欧洲电台数据（RDS） |
+| US radio data | On / Off | 北美电台数据（RBDS） |
+| Auto freq | On / Off | 自动频率控制，一般保持 On |
 
-主界面 `i` 可看 RDS（PS / RT 等），仅 RDA 有效。
+主界面 `i` 可看电台数据（站名 / 电台文本等），仅 RDA 有效。
 
 ## 使用说明
 

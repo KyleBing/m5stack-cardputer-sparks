@@ -46,9 +46,9 @@ Pin order on the module varies by seller. Match **silkscreen names** to the left
 | **VCC** / VDD | **5V** |
 | **GND** | **GND** |
 
-Headphones go in the module’s 3.5 mm jack, not the Cardputer speaker. The antenna is usually already on the board. [ExI2C](./i2c) should then show TEA5767 at `0x60`, or RDA5807M at `0x10` / `0x11`.
+Headphones go in the module’s 3.5 mm jack — not the Cardputer speaker, and **not AirPods / Bluetooth**. Many modules use the headphone cable as the antenna; use a wired 3.5 mm headset or speaker. [ExI2C](./i2c) should then show TEA5767 at `0x60`, or RDA5807M at `0x10` / `0x11`.
 
-> TEA5767 has no chip volume — use the headphone volume. RDA5807M: main-screen `-=` or Tuner → Volume.
+> TEA5767 has no chip volume — use the headphone volume. RDA5807M: main-screen `-=` (5×3 yellow grid beside signal) or Tuner → Volume.
 
 ## Shortcuts
 
@@ -57,8 +57,8 @@ Full list: `h` Help (multi-page).
 | Key | Action |
 |-----|--------|
 | `h` | Help |
-| `←` `→` | Step tune / stop scan |
-| `↑` `↓` | Seek / flip direction |
+| `←` `→` | Seek previous / next station signal |
+| `↑` `↓` | Fine tune step |
 | `-` `=` | RDA: volume · TEA: step tune |
 | `[` `]` | Previous / next saved station |
 | `a` | Auto scan and save |
@@ -68,7 +68,7 @@ Full list: `h` Help (multi-page).
 | `i` | RDS info (RDA only) |
 | `1`–`0` | Jump to station slot |
 
-In the list: arrows select, `Enter` tunes and exits, `r` rename, `n` add current freq, `d` / Backspace delete, `p` pin to top.
+In the list: arrows select, `Enter` tunes and exits, `r` rename, `n` add current freq, `d` / Backspace delete, `c` clear all and save, `p` pin to top.
 
 ## Tuner
 
@@ -86,37 +86,37 @@ From the main radio screen press **`t`** to open Tuner (settings list); press `t
 
 | Item | Values | Meaning |
 |------|--------|---------|
-| Band | EU / JP | EU 87.5–108 MHz; JP 76–91 MHz |
-| Deemph | 50us / 75us | De-emphasis: EU/JP 50µs, North America 75µs |
-| Seek | Soft / Chip | Soft = software step seek; Chip = hardware SM seek |
-| Stop | Lo / Mid / Hi | Hardware seek stop threshold (SSL; higher = pickier) |
-| Inject | High / Low | Local-oscillator injection side (HLSI); flip if a station is noisy |
-| SMute | On / Off | Soft mute on weak stations |
-| HiCut | On / Off | High-cut on weak stations (HCC) |
-| SNC | On / Off | Stereo noise cancelling |
-| MuteLR | Off / L / R | Mute left or right channel |
+| Band | Europe / Japan | Europe 87.5–108 MHz; Japan 76–91 MHz |
+| De-emphasis | 50 us / 75 us | De-emphasis: EU/JP 50µs, North America 75µs |
+| Seek mode | Software / Hardware | Software = step seek; Hardware = chip seek |
+| Seek stop | Low / Mid / High | Hardware seek stop threshold (higher = pickier) |
+| Injection | High / Low | Local-oscillator injection side; flip if a station is noisy |
+| Soft mute | On / Off | Soft mute on weak stations |
+| High cut | On / Off | High-cut on weak stations |
+| Noise cancel | On / Off | Stereo noise cancelling |
+| Channel mute | Off / Left / Right | Mute left or right channel |
 
 ### RDA5807M items
 
-Extra bands, step, volume, and RDS vs TEA:
+Extra bands, step, volume, and station data vs TEA:
 
 | Item | Values | Meaning |
 |------|--------|---------|
-| Band | EU / JP / Wide / East / Low | EU 87–108; JP 76–91; Wide 76–108; East 65–76; Low 50–76 |
-| Step | 100k / 200k / 50k / 25k | Tune step |
-| Deemph | 50us / 75us | Same as TEA |
-| Seek | Soft / Chip | Same as TEA |
-| SeekTh | 0–15 | Hardware seek threshold |
-| Wrap | On / Off | Wrap at band edges while seeking |
+| Band | 87-108 / 76-91 / 76-108 / 65-76 / 50-76 | Europe / Japan / wide / East Europe / low FM |
+| Step | 100 kHz / 200 kHz / 50 kHz / 25 kHz | Tune step |
+| De-emphasis | 50 us / 75 us | Same as TEA |
+| Seek mode | Software / Hardware | Same as TEA |
+| Seek threshold | 0–15 | Hardware seek SNR threshold (default 8; higher = stricter; valid-station checked after stop) |
+| Seek wrap | On / Off | Wrap at band edges while seeking |
 | Volume | 0–15 | Chip volume |
-| Bass | On / Off | Bass boost |
-| SMute | On / Off | Soft mute on weak stations |
-| SBlend | On / Off | Blend weak stereo toward mono |
-| RDS | On / Off | European RDS |
-| RBDS | On / Off | North-American RBDS |
-| AFC | On / Off | Auto frequency control; leave On |
+| Bass boost | On / Off | Bass boost |
+| Soft mute | On / Off | Soft mute on weak stations |
+| Soft blend | On / Off | Blend weak stereo toward mono |
+| Radio data | On / Off | European RDS |
+| US radio data | On / Off | North-American RBDS |
+| Auto freq | On / Off | Auto frequency control; leave On |
 
-Main screen `i` shows RDS (PS / RT, …); RDA only.
+Main screen `i` shows station data (name / radio text, …); RDA only.
 
 ## Usage
 

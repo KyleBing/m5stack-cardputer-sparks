@@ -115,6 +115,7 @@ static uint16_t g_seek_origin = 0;
 static int g_scan_found_count = 0;
 static uint16_t g_scan_last_found = 0;
 static constexpr uint32_t RADIO_SEEK_SETTLE_MS = 60;
+static constexpr uint32_t RADIO_RDA_SEEK_SETTLE_MS = 120; // RDA 需更久才稳 FM_TRUE/RSSI
 static constexpr uint32_t RADIO_RSSI_POLL_MS = 250; // 空闲信号刷新周期（kick + 60ms settle）
 static constexpr uint32_t RADIO_HW_SEEK_TIMEOUT_MS = 8000;
 static bool g_japan = false;
@@ -129,7 +130,7 @@ static FmTuner::ChannelMute g_ch_mute = FmTuner::ChannelMute::Off;
 static uint8_t g_rda_band = 0;
 static uint8_t g_rda_spacing = 0; // 默认 100 kHz
 static uint8_t g_rda_volume = 8;
-static uint8_t g_rda_seek_threshold = 8;
+static uint8_t g_rda_seek_threshold = 8; // datasheet 默认；停台后再用 FM_TRUE 滤假台
 static bool g_rda_hw_seek = true;
 static bool g_rda_wrap = true;
 static bool g_rda_bass = false;
@@ -263,6 +264,12 @@ static void saveAllStations() {
     prefs.end();
 }
 
+// 清空列表并写入 NVS
+static void clearSavedStations() {
+    clearAllStations();
+    saveAllStations();
+}
+
 static void loadRadioPresets() {
     clearAllStations();
     Preferences prefs;
@@ -357,7 +364,13 @@ static void loadTunerSettings() {
     g_rda_band = prefs.getUChar("rband", 0);
     g_rda_spacing = prefs.getUChar("rstep", 0);
     g_rda_volume = constrain(prefs.getUChar("rvol", 8), 0, 15);
-    g_rda_seek_threshold = constrain(prefs.getUChar("rseekth", 8), 0, 15);
+    // 先前曾把默认 SeekTh 8→11；有 FM_TRUE 后改回 8（仅撤销自动升到 11 的）
+    const bool seekth_relaxed = prefs.getBool("rsk8", false);
+    uint8_t seekth = prefs.getUChar("rseekth", 8);
+    if (!seekth_relaxed && prefs.getBool("rsk11", false) && seekth == 11) {
+        seekth = 8;
+    }
+    g_rda_seek_threshold = constrain(seekth, 0, 15);
     g_rda_hw_seek = prefs.getBool("rhwseek", true);
     g_rda_wrap = prefs.getBool("rwrap", true);
     g_rda_bass = prefs.getBool("rbass", false);
@@ -368,6 +381,14 @@ static void loadTunerSettings() {
     g_rda_afc = prefs.getBool("rafc", true);
     g_rda_deemph75 = prefs.getBool("rdtc75", false);
     prefs.end();
+    if (!seekth_relaxed) {
+        Preferences write_prefs;
+        if (write_prefs.begin("radio", false)) {
+            write_prefs.putBool("rsk8", true);
+            write_prefs.putUChar("rseekth", g_rda_seek_threshold);
+            write_prefs.end();
+        }
+    }
 }
 
 static void saveTunerSettings() {
@@ -581,6 +602,30 @@ static void drawSignalBars(const int x, const int y, const int bar_w, const int 
     }
 }
 
+// RDA 音量 0–15：5 列×3 行，自底从左往右填黄格；高度与信号条一致
+static void drawVolumeGrid(const int x, const int y, const int max_h, const uint8_t volume) {
+    constexpr int cols = 5;
+    constexpr int rows = 3;
+    constexpr int cell_w = 5;
+    constexpr int h_gap = 2;
+    constexpr int v_gap = 1;
+    const int cell_h = (max_h - (rows - 1) * v_gap) / rows;
+    const int filled = g_ready ? constrain(static_cast<int>(volume), 0, cols * rows) : 0;
+
+    for (int i = 0; i < cols * rows; ++i) {
+        const int col = i % cols;
+        const int row_from_bottom = i / cols;
+        const int row = (rows - 1) - row_from_bottom;
+        const int cx = x + col * (cell_w + h_gap);
+        const int cy = y + row * (cell_h + v_gap);
+        if (i < filled) {
+            radioCanvas.fillRect(cx, cy, cell_w, cell_h, YELLOW);
+        } else {
+            radioCanvas.drawRect(cx, cy, cell_w, cell_h, APP_COLOR_MUTED);
+        }
+    }
+}
+
 // 播放/停止图标：播放=绿色三角，停止=红色圆角方块
 static void drawPlayPauseIcon(const int x, const int y) {
     constexpr int size = RADIO_PLAY_SIZE;
@@ -655,14 +700,6 @@ static void drawStatusBadges(const int x, const int y) {
     }
     if (band_badge != nullptr && band_badge[0] != '\0') {
         cx += drawTextBadgeOnCanvas(cx, y, band_badge, 1) + 2;
-        radioCanvas.setTextSize(1);
-        radioCanvas.setTextColor(APP_COLOR_HINT, BLACK);
-    }
-
-    if (g_radio.isRda()) {
-        char vol[5];
-        snprintf(vol, sizeof(vol), "V%u", static_cast<unsigned>(g_rda_volume));
-        cx += drawTextBadgeOnCanvas(cx, y, vol, 1) + 2;
         radioCanvas.setTextSize(1);
         radioCanvas.setTextColor(APP_COLOR_HINT, BLACK);
     }
@@ -1024,12 +1061,21 @@ static void paintRadioMainCanvas() {
     constexpr int bar_gap = 2; // 信号条间距再贴近 1px
     constexpr int bars = 5;
     constexpr int bars_h = 18;
+    constexpr int vol_gap = 8; // 信号条与音量格间距
     constexpr int badge_h = 8 + 1 * 2; // text_size1 + pad_y
     const int bars_w = bars * bar_w + (bars - 1) * bar_gap;
+    constexpr int vol_w = 5 * 5 + 4 * 2; // 5x3 黄格总宽
     // status 与信号条纵向居中对齐
     const int status_y = meter_y + (bars_h - badge_h) / 2;
     drawSignalBars(RADIO_UI_LEFT, meter_y, bar_w, bar_gap, bars_h, g_rssi);
-    drawStatusBadges(RADIO_UI_LEFT + bars_w + 10, status_y);
+    int meter_x = RADIO_UI_LEFT + bars_w + vol_gap;
+    if (g_radio.isRda()) {
+        drawVolumeGrid(meter_x, meter_y, bars_h, g_rda_volume);
+        meter_x += vol_w + 10;
+    } else {
+        meter_x += 2; // TEA 无芯片音量，徽章紧跟信号条
+    }
+    drawStatusBadges(meter_x, status_y);
 }
 
 // 搜台/扫频：canvas 整帧绘制，只把脏区推到屏幕
@@ -1072,21 +1118,21 @@ static const char* tunerItemLabel(const TunerItem item) {
         case TunerItem::Band:
             return "Band";
         case TunerItem::Deemph:
-            return "Deemph";
+            return "De-emphasis";
         case TunerItem::SeekMode:
-            return "Seek";
+            return "Seek mode";
         case TunerItem::SeekStop:
-            return "Stop";
+            return "Seek stop";
         case TunerItem::Injection:
-            return "Inject";
+            return "Injection";
         case TunerItem::SoftMute:
-            return "SMute";
+            return "Soft mute";
         case TunerItem::HighCut:
-            return "HiCut";
+            return "High cut";
         case TunerItem::Snc:
-            return "SNC";
+            return "Noise cancel";
         case TunerItem::ChMute:
-            return "MuteLR";
+            return "Channel mute";
         default:
             return "";
     }
@@ -1094,13 +1140,13 @@ static const char* tunerItemLabel(const TunerItem item) {
 
 // 返回该设置的全部可选项；*out_sel 为当前选中下标
 static const char* const* tunerItemOptions(const TunerItem item, int* out_count, int* out_sel) {
-    static const char* kBand[] = {"EU", "JP"};
-    static const char* kDeemph[] = {"50us", "75us"};
-    static const char* kSeek[] = {"Soft", "Chip"};
-    static const char* kStop[] = {"Lo", "Mid", "Hi"};
+    static const char* kBand[] = {"Europe", "Japan"};
+    static const char* kDeemph[] = {"50 us", "75 us"};
+    static const char* kSeek[] = {"Software", "Hardware"};
+    static const char* kStop[] = {"Low", "Mid", "High"};
     static const char* kInject[] = {"High", "Low"};
     static const char* kOnOff[] = {"On", "Off"};
-    static const char* kMute[] = {"Off", "L", "R"};
+    static const char* kMute[] = {"Off", "Left", "Right"};
 
     switch (item) {
         case TunerItem::Band:
@@ -1170,27 +1216,27 @@ static const char* rdaTunerItemLabel(const RdaTunerItem item) {
         case RdaTunerItem::Spacing:
             return "Step";
         case RdaTunerItem::Deemph:
-            return "Deemph";
+            return "De-emphasis";
         case RdaTunerItem::SeekMode:
-            return "Seek";
+            return "Seek mode";
         case RdaTunerItem::SeekThreshold:
-            return "SeekTh";
+            return "Seek threshold";
         case RdaTunerItem::SeekWrap:
-            return "Wrap";
+            return "Seek wrap";
         case RdaTunerItem::Volume:
             return "Volume";
         case RdaTunerItem::Bass:
-            return "Bass";
+            return "Bass boost";
         case RdaTunerItem::SoftMute:
-            return "SMute";
+            return "Soft mute";
         case RdaTunerItem::SoftBlend:
-            return "SBlend";
+            return "Soft blend";
         case RdaTunerItem::Rds:
-            return "RDS";
+            return "Radio data";
         case RdaTunerItem::Rbds:
-            return "RBDS";
+            return "US radio data";
         case RdaTunerItem::Afc:
-            return "AFC";
+            return "Auto freq";
         default:
             return "";
     }
@@ -1198,10 +1244,11 @@ static const char* rdaTunerItemLabel(const RdaTunerItem item) {
 
 static const char* const* rdaTunerItemOptions(const RdaTunerItem item, int* out_count,
                                               int* out_sel) {
-    static const char* kBand[] = {"EU", "JP", "Wide", "East", "Low"};
-    static const char* kSpacing[] = {"100k", "200k", "50k", "25k"};
-    static const char* kDeemph[] = {"50us", "75us"};
-    static const char* kSeek[] = {"Soft", "Chip"};
+    // 频段用范围比 EU/JP 缩写更直观
+    static const char* kBand[] = {"87-108", "76-91", "76-108", "65-76", "50-76"};
+    static const char* kSpacing[] = {"100 kHz", "200 kHz", "50 kHz", "25 kHz"};
+    static const char* kDeemph[] = {"50 us", "75 us"};
+    static const char* kSeek[] = {"Software", "Hardware"};
     static const char* kOnOff[] = {"On", "Off"};
     static const char* kLevel[] = {"0", "1", "2", "3", "4", "5", "6", "7",
                                   "8", "9", "10", "11", "12", "13", "14", "15"};
@@ -1276,7 +1323,6 @@ static void drawTunerSettings() {
     radioCanvas.setTextSize(1);
     constexpr int row_h = 11;
     constexpr int list_y = title_y + RADIO_TITLE_H + RADIO_TITLE_GAP;
-    constexpr int opts_x = RADIO_UI_LEFT + 48;
     constexpr int visible_rows = 9;
     const int n = tunerItemCount();
     if (g_tuner_sel < g_tuner_scroll) {
@@ -1291,12 +1337,14 @@ static void drawTunerSettings() {
         }
         const int y = list_y + row * row_h;
         const bool focus = (i == g_tuner_sel);
+        const char* label = g_radio.isRda()
+                                ? rdaTunerItemLabel(static_cast<RdaTunerItem>(i))
+                                : tunerItemLabel(static_cast<TunerItem>(i));
 
         // 焦点行：标签高亮；当前取值用成功色，其余选项灰显
         radioCanvas.setTextColor(focus ? APP_COLOR_LABEL : APP_COLOR_HINT, BLACK);
         radioCanvas.setCursor(RADIO_UI_LEFT, y);
-        radioCanvas.print(g_radio.isRda() ? rdaTunerItemLabel(static_cast<RdaTunerItem>(i))
-                                         : tunerItemLabel(static_cast<TunerItem>(i)));
+        radioCanvas.print(label);
 
         int opt_count = 0;
         int opt_sel = 0;
@@ -1304,10 +1352,11 @@ static void drawTunerSettings() {
             g_radio.isRda()
                 ? rdaTunerItemOptions(static_cast<RdaTunerItem>(i), &opt_count, &opt_sel)
                 : tunerItemOptions(static_cast<TunerItem>(i), &opt_count, &opt_sel);
-        int cx = opts_x;
-        // 16 档设置只显示当前值，避免一行溢出屏幕。
-        const int first = opt_count > 6 ? opt_sel : 0;
-        const int last = opt_count > 6 ? (opt_sel + 1) : opt_count;
+        // 全称标签后接选项；选项多时只显示当前值，避免溢出
+        int cx = RADIO_UI_LEFT + radioCanvas.textWidth(label) + 8;
+        const bool value_only = opt_count > 4;
+        const int first = value_only ? opt_sel : 0;
+        const int last = value_only ? (opt_sel + 1) : opt_count;
         for (int o = first; o < last; ++o) {
             const bool on = (o == opt_sel);
             radioCanvas.setTextColor(on ? APP_COLOR_OK : APP_COLOR_MUTED, BLACK);
@@ -1432,6 +1481,7 @@ static void drawHelpPage() {
             y = drawAppHelpBadge(x, y, "d/Bk", "delete");
         } else {
             y = drawAppHelpKey(x, y, 'p', "pin to top");
+            y = drawAppHelpKey(x, y, 'c', "clear all stations");
             y = drawAppHelpKey(x, y, 'l', "close list");
             y = drawAppHelpText(x, y, "1-0 jump hotkey slot");
         }
@@ -1446,19 +1496,19 @@ static void drawHelpPage() {
             y = drawAppHelpKey(x, y, '-', "cycle prev");
             y = drawAppHelpKey(x, y, 't', "close tuner");
             if (g_radio.isRda()) {
-                y = drawAppHelpText(x, y, "5 bands; step 25/50/100/200k");
-                y = drawAppHelpText(x, y, "SeekTh is hardware threshold 0-15");
+                y = drawAppHelpText(x, y, "5 bands; step 25/50/100/200 kHz");
+                y = drawAppHelpText(x, y, "Seek threshold 0-15 (higher=stricter)");
             } else {
-                y = drawAppHelpText(x, y, "Band EU 87.5-108 / JP 76-91");
-                y = drawAppHelpText(x, y, "Seek Soft step or Chip SM");
-                y = drawAppHelpText(x, y, "Stop Lo/Mid/Hi = SSL");
+                y = drawAppHelpText(x, y, "Band Europe 87.5-108 / Japan 76-91");
+                y = drawAppHelpText(x, y, "Seek Software step or Hardware");
+                y = drawAppHelpText(x, y, "Seek stop Low/Mid/High");
             }
         } else {
             y = drawAppHelpTextColored(x, y, "RDA audio / data", APP_COLOR_LABEL);
             y = drawAppHelpText(x, y, "Bass boosts low frequencies");
-            y = drawAppHelpText(x, y, "SBlend mixes weak stereo to mono");
-            y = drawAppHelpText(x, y, "RDS Europe; RBDS North America");
-            y = drawAppHelpText(x, y, "AFC normally stays enabled");
+            y = drawAppHelpText(x, y, "Soft blend mixes weak stereo to mono");
+            y = drawAppHelpText(x, y, "Radio data Europe; US radio data NA");
+            y = drawAppHelpText(x, y, "Auto freq normally stays enabled");
         }
         drawAppHelpFooter(g_help_page, radioHelpPageCount());
         return;
@@ -1477,10 +1527,10 @@ static void drawHelpPage() {
 
     int y = drawAppHelpBegin("Radio");
     if (g_help_page == 0) {
-        y = drawAppHelpBadge(x, y, "< >", "tune / stop scan");
-        y = drawAppHelpBadge(x, y, "^ v", "seek / flip dir");
-        y = drawAppHelpBadge(x, y, "-=", g_radio.isRda() ? "volume 0-15" : "tune (legacy)");
+        y = drawAppHelpBadge(x, y, "< >", "seek prev / next");
+        y = drawAppHelpBadge(x, y, "^ v", "fine tune step");
         y = drawAppHelpBadge(x, y, "[]", "prev / next station");
+        y = drawAppHelpBadge(x, y, "-=", g_radio.isRda() ? "volume 0-15" : "tune (legacy)");
         y = drawAppHelpKey(x, y, 'a', "auto scan + save");
         y = drawAppHelpBadge(x, y, "m o", "mute / mono");
         y = drawAppHelpBadge(x, y, "l t", "stations / tuner");
@@ -1498,13 +1548,15 @@ static void drawHelpPage() {
         }
         y = drawAppHelpLabelText(x, y, "SEEK", APP_COLOR_LABEL, " = searching");
         if (g_radio.isRda()) {
+            y = drawAppHelpText(x, y, "Yellow 5x3 grid = volume 0-15");
             y = drawAppHelpKey(x, y, 'i', "RDS station info");
         }
     } else {
         y = drawAppHelpTextColored(x, y, "Dial", APP_COLOR_LABEL);
         y = drawAppHelpLabelText(x, y, "green", APP_COLOR_OK, " = saved station");
         y = drawAppHelpLabelText(x, y, "cyan", APP_COLOR_LABEL, " = active station");
-        y = drawAppHelpText(x, y, "Audio out: module jack");
+        y = drawAppHelpText(x, y, "Audio: module 3.5mm jack only");
+        y = drawAppHelpText(x, y, "No BT/AirPods; cable is often antenna");
         y = drawAppHelpText(x, y,
                             g_radio.isRda() ? "Native I2C 0x10/0x11" : "No volume register");
         y = drawAppHelpText(x, y, "I2C Grove G2/G1 or EXT G8/G9");
@@ -1577,6 +1629,10 @@ static void finishSeek(const bool refresh_status = true) {
     g_seeking = false;
     g_auto_scanning = false;
     g_seek_hw = false;
+    // 搜台结束恢复用户静音状态（搜台中强制静音避免扫空白杂音）
+    if (g_ready) {
+        g_radio.setMute(g_muted);
+    }
     if (refresh_status && g_ready) {
         FmTuner::Status st{};
         if (g_radio.readStatus(st)) {
@@ -1638,6 +1694,14 @@ static void completeAutoScan() {
     finishSeek(true);
 }
 
+// 与软件搜台同一套门限：RDA 另需芯片 FM_TRUE，避免噪点当台
+static bool isAcceptableSeekStation(const FmTuner::Status& st) {
+    if (st.rssi < seekRssiThreshold()) {
+        return false;
+    }
+    return !g_radio.isRda() || st.valid_station;
+}
+
 // PLL 稳定后读 RSSI；够强则停（自动扫描则记台后继续）
 static void onSeekSettled() {
     if (!g_ready) {
@@ -1650,8 +1714,7 @@ static void onSeekSettled() {
         g_rssi = st.rssi;
         g_stereo = st.stereo;
     }
-    const bool station_found =
-        status_ok && g_rssi >= seekRssiThreshold() && (!g_radio.isRda() || st.valid_station);
+    const bool station_found = status_ok && isAcceptableSeekStation(st);
 
     if (g_auto_scanning) {
         if (station_found) {
@@ -1690,6 +1753,29 @@ static void startHwSearch(const bool up) {
         g_radio.startSearch(up);
     }
     drawRadioMainPartial(RADIO_DIRTY_LIVE);
+}
+
+// 硬件停台不合格时：跳过当前频点继续 SM（与扫完一圈的终点判断一致）
+static void continueHwSeekPastCurrent() {
+    const bool up = g_auto_scanning || g_seek_up;
+    const uint16_t nxt = nextSeekFreq(g_freq, up);
+    if (g_auto_scanning) {
+        if (nxt == g_seek_origin || nxt < g_freq) {
+            completeAutoScan();
+            return;
+        }
+        g_radio.setFrequency(nxt, g_radio.isRda());
+        g_freq = nxt;
+        startHwSearch(true);
+        return;
+    }
+    if (nxt == g_seek_origin) {
+        finishSeek(true);
+        return;
+    }
+    g_radio.setFrequency(nxt, g_radio.isRda());
+    g_freq = nxt;
+    startHwSearch(up);
 }
 
 static void onHwSeekTick() {
@@ -1751,6 +1837,20 @@ static void onHwSeekTick() {
     if (st.freq_centi >= radioFreqMin() && st.freq_centi <= radioFreqMax()) {
         g_freq = st.freq_centi;
     }
+    // 清 SEEK 后再读一次：用 FM_TRUE + RSSI 过滤 SEEKTH 过松的假台
+    if (g_radio.isRda()) {
+        FmTuner::Status check{};
+        if (g_radio.readStatus(check)) {
+            st = check;
+            g_rssi = st.rssi;
+            g_stereo = st.stereo;
+            g_if_counter = st.quality;
+        }
+        if (!isAcceptableSeekStation(st)) {
+            continueHwSeekPastCurrent();
+            return;
+        }
+    }
     if (g_auto_scanning) {
         if (g_scan_last_found != 0 && g_freq <= g_scan_last_found) {
             completeAutoScan(); // RDA 开启硬件回绕时，以频率回退判断扫完一圈。
@@ -1783,6 +1883,7 @@ static void beginSeek(const bool up) {
     g_seek_origin = g_freq;
     g_seek_wrapped = false;
     g_seek_poll_ms = millis();
+    g_radio.setMute(true); // 扫空白频段时静音，避免耳机里一片沙沙声
     if (useHardwareSeek()) {
         startHwSearch(up);
         return;
@@ -1814,11 +1915,12 @@ static void redirectSeek(const bool up) {
 }
 
 static bool isTuneDirectionStillHeld(const int dir) {
-    if (dir < 0) {
-        return M5Cardputer.Keyboard.isKeyPressed('e') || M5Cardputer.Keyboard.isKeyPressed(',');
-    }
+    // Cardputer：;↑ 加频，.↓ 减频
     if (dir > 0) {
-        return M5Cardputer.Keyboard.isKeyPressed('d') || M5Cardputer.Keyboard.isKeyPressed('.');
+        return M5Cardputer.Keyboard.isKeyPressed(';');
+    }
+    if (dir < 0) {
+        return M5Cardputer.Keyboard.isKeyPressed('.');
     }
     return false;
 }
@@ -1857,6 +1959,7 @@ static void beginAutoScan() {
     g_scan_found_count = 0;
     g_scan_last_found = 0;
     g_seek_poll_ms = millis();
+    g_radio.setMute(true); // 自动扫台同样静音
     if (useHardwareSeek()) {
         g_freq = radioFreqMin();
         g_radio.setFrequency(g_freq, g_radio.isRda());
@@ -2399,6 +2502,12 @@ static bool handleStationsInput(const Keyboard_Class::KeysState& status, const S
         return true;
     }
 
+    if (key == "c" || key == "C") {
+        clearSavedStations();
+        drawRadioChrome();
+        return true;
+    }
+
     if (key == "=" || key == "+") {
         saveCurrentFreqToSelectedSlot();
         return true;
@@ -2417,43 +2526,44 @@ static bool handleStationsInput(const Keyboard_Class::KeysState& status, const S
     return true;
 }
 
-// 左右方向（含 , .）微调频率。
-static int getTuneDelta(const Keyboard_Class::KeysState& status) {
+// Cardputer 方向键：;↑  ,←  .↓  /→（与 main/hid_keyboard 一致）
+// 左右：前后搜台
+static int getSeekDelta(const Keyboard_Class::KeysState& status) {
     for (const uint8_t hid : status.hid_keys) {
         if (hid == 0x50 || hid == 0x36) {
             return -1; // Left / ,
         }
-        if (hid == 0x4F || hid == 0x37) {
-            return 1; // Right / .
+        if (hid == 0x4F || hid == 0x38) {
+            return 1; // Right / /
         }
     }
     for (const char c : status.word) {
         if (c == ',') {
             return -1;
         }
-        if (c == '.') {
+        if (c == '/') {
             return 1;
         }
     }
     return 0;
 }
 
-// 上下方向（含 ; /）搜台。
-static int getSeekDelta(const Keyboard_Class::KeysState& status) {
+// 上下：频率微调（↑ 加频，↓ 减频）
+static int getTuneDelta(const Keyboard_Class::KeysState& status) {
     for (const uint8_t hid : status.hid_keys) {
         if (hid == 0x52 || hid == 0x33) {
-            return -1; // Up / ;
+            return 1; // Up / ; → 加频
         }
-        if (hid == 0x51 || hid == 0x38) {
-            return 1; // Down / /
+        if (hid == 0x51 || hid == 0x37) {
+            return -1; // Down / . → 减频
         }
     }
     for (const char c : status.word) {
         if (c == ';') {
-            return -1;
-        }
-        if (c == '/') {
             return 1;
+        }
+        if (c == '.') {
+            return -1;
         }
     }
     return 0;
@@ -2664,7 +2774,8 @@ void updateRadioApp() {
         }
         if (g_seek_hw) {
             onHwSeekTick();
-        } else if (now - g_seek_settle_ms >= RADIO_SEEK_SETTLE_MS) {
+        } else if (now - g_seek_settle_ms >=
+                   (g_radio.isRda() ? RADIO_RDA_SEEK_SETTLE_MS : RADIO_SEEK_SETTLE_MS)) {
             onSeekSettled();
         }
         return;
@@ -2778,7 +2889,7 @@ void handleRadioApp(const Keyboard_Class::KeysState& status) {
         return;
     }
 
-    // 搜台中：调频/音量键或 [] 停在当前频点；上下键可改方向。
+    // 搜台中：微调/音量或 [] 停在当前频点；左右可改搜台方向。
     if (g_seeking) {
         if (getTuneDelta(status) != 0 || getVolumeDelta(status) != 0) {
             (void)closeRadioSeek();
@@ -2835,7 +2946,7 @@ void handleRadioApp(const Keyboard_Class::KeysState& status) {
         }
     }
 
-    // [] 切换全部已保存电台
+    // []：切换已保存电台
     const int preset_delta = getBracketNavDelta(status);
     if (preset_delta != 0) {
         cycleSavedPreset(preset_delta);
@@ -2861,6 +2972,7 @@ void handleRadioApp(const Keyboard_Class::KeysState& status) {
         return;
     }
 
+    // ↑↓：频率微调
     const int tune_delta = getTuneDelta(status);
     if (tune_delta != 0) {
         tuneBySteps(tune_delta);
@@ -2877,6 +2989,7 @@ void handleRadioApp(const Keyboard_Class::KeysState& status) {
         return;
     }
 
+    // ←→：搜台
     const int seek_delta = getSeekDelta(status);
     if (seek_delta < 0) {
         beginSeek(false);

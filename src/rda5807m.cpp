@@ -117,7 +117,7 @@ void Rda5807m::setDefaults() {
     shadow_[1] = 0;
     shadow_[2] = REG04_SOFTMUTE;
     shadow_[3] = REG05_INT_MODE | (8U << 8) |
-                 (static_cast<uint16_t>(LnaPort::Positive) << 6);
+                 (static_cast<uint16_t>(LnaPort::Dual) << 6); // 耳机线天线多用双端 LNA
     shadow_[4] = 0; // OPEN_MODE 始终为 00。
     shadow_[5] = REG07_BLEND_THRESHOLD | REG07_SOFTBLEND;
     shadow_[6] = 0;
