@@ -169,7 +169,6 @@ export default defineConfig({
               { text: 'Cursor 用量', link: '/apps/cursor' },
               { text: 'Keyboard', link: '/apps/hid-keyboard' },
               { text: 'Morse 摩斯', link: '/apps/morse' },
-              { text: 'Radio 收音机', link: '/apps/radio' },
             ],
           },
           {
@@ -219,6 +218,14 @@ export default defineConfig({
                   { text: 'BLE', link: '/apps/ble' },
                   { text: 'I2C 扫描', link: '/apps/i2c' },
                   { text: 'Mic 麦克风', link: '/apps/mic' },
+                ],
+              },
+              {
+                text: 'EX I2C 外设',
+                link: '/apps/ex-i2c',
+                collapsed: false,
+                items: [
+                  { text: 'Radio 收音机', link: '/apps/radio' },
                 ],
               },
             ],
@@ -307,7 +314,6 @@ export default defineConfig({
               { text: 'Cursor Usage', link: '/en/apps/cursor' },
               { text: 'Keyboard', link: '/en/apps/hid-keyboard' },
               { text: 'Morse', link: '/en/apps/morse' },
-              { text: 'Radio', link: '/en/apps/radio' },
             ],
           },
           {
@@ -357,6 +363,14 @@ export default defineConfig({
                   { text: 'BLE', link: '/en/apps/ble' },
                   { text: 'I2C Scan', link: '/en/apps/i2c' },
                   { text: 'Mic', link: '/en/apps/mic' },
+                ],
+              },
+              {
+                text: 'EX I2C',
+                link: '/en/apps/ex-i2c',
+                collapsed: false,
+                items: [
+                  { text: 'Radio', link: '/en/apps/radio' },
                 ],
               },
             ],

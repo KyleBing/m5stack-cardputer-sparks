@@ -66,15 +66,6 @@ More detail: [Getting Started · Main Menu](/en/guide/getting-started#main-menu)
 | `c` | [Cursor](./cursor) | Cursor usage Summary, day / week / month charts |
 | `k` | [Keyboard](./hid-keyboard) | USB / BLE HID keyboard |
 | `j` | [Morse](./morse) | Morse tones, symbol highlighting, and live waveform |
-| `r` | [Radio](./radio) | Grove FM radio (TEA5767 / RDA5807M) |
-
-<div class="shot-row">
-
-![radio-playing](/shots/app_radio_playing.png)
-![radio-no-module](/shots/app_radio_no_module.png)
-![radio-stations](/shots/app_radio_station_list.png)
-
-</div>
 
 ## System & Info
 
@@ -90,3 +81,12 @@ More detail: [Getting Started · Main Menu](/en/guide/getting-started#main-menu)
 |-----|-----|-------------|
 | `g` | [Mini Games](./mini-games) | [Coin](./coin-toss), [pendulum](./double-pendulum), [wheel](./prize-wheel), [Dice](./dice), [Newton cradle](./newton-cradle), [Neon FX](./neon-fx), [curves](./curves), [Minesweeper](./minesweeper), [Snake](./snake), [Conway Life](./conway-life), [MATRIX](./matrix), [WAVE](./wave), [PCLOCK](./particle-clock), [LISSA](./lissa) |
 | `h` | [Hardware Test](./hardware-test) | [Display](./display), [IMU](./imu), [Font](./font), [Icons](./icons), [LED](./rgb-led), [BLE](./ble), [I2C](./i2c), page-2 [Mic](./mic) |
+| `e` | [EX I2C](./ex-i2c) | [Radio](./radio) (TEA5767 / RDA5807M), ExI2 scan, CC1101 433 MHz |
+
+<div class="shot-row">
+
+![exi2c-hub](/shots/app_exi2c_001.png)
+![radio-playing](/shots/app_radio_playing.png)
+![radio-no-module](/shots/app_radio_no_module.png)
+
+</div>

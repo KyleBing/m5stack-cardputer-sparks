@@ -1,8 +1,8 @@
 # Radio
 
-Main menu key: `r`
+Open from: main menu `e` → [EX I2C](./ex-i2c) `1` / `r`
 
-FM radio on the left Grove port. Buy a ready-made **TEA5767** or **RDA5807M** 4-pin module (I2C `0x60` or `0x10`/`0x11`); both share one UI. Audio comes from the **module headphone jack**.
+FM radio on the left Grove port. Buy a ready-made **TEA5767** or **RDA5807M** 4-pin module (I2C `0x60` or `0x10`/`0x11`); both share one UI. Audio comes from the **module headphone jack**. Chip wiring and driver APIs: [EX I2C](./ex-i2c).
 
 On enter it probes left Grove (Ex_I2C). No chip → `NO MOD`.
 

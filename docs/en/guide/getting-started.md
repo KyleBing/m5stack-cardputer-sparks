@@ -25,7 +25,7 @@ Sparks is a multi-app firmware for the [M5Stack Cardputer](https://docs.m5stack.
 | `i` | Inf | [Info](/en/apps/info) | `p` | Bat | [Battery](/en/apps/battery) | `c` | Cur | [Cursor](/en/apps/cursor) |
 | `a` | Cal | [Calendar](/en/apps/calendar) | `v` | Ver | [Version](/en/apps/version) | `j` | Mor | [Morse](/en/apps/morse) |
 | `x` | IR | [Infrared](/en/apps/infrared) | `k` | KB | [Keyboard](/en/apps/hid-keyboard) | `g` | Game | [Mini Games](/en/apps/mini-games) |
-| `h` | Test | [Hardware Test](/en/apps/hardware-test) | `r` | FM | [Radio](/en/apps/radio) |  |  |  |
+| `h` | Test | [Hardware Test](/en/apps/hardware-test) | `e` | ExI2 | [EX I2C](/en/apps/ex-i2c) |  |  |  |
 
 The menu paginates with the keyboard arrow keys; no **Fn** needed.
 
