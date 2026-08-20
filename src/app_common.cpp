@@ -110,6 +110,17 @@ int drawArrowDownBadge(const int x, const int y, const int text_size) {
     return drawArrowBadgeImpl(x, y, text_size, ICON_ARROW_W, ICON_ARROW_H, drawIconArrowDown);
 }
 
+// tip 文案首字母与按键相同时省略，使 [h]help 显示为 [H]elp。
+static const char* hintLabelAfterKey(const char key, const char* text) {
+    if (text == nullptr || text[0] == '\0') {
+        return "";
+    }
+    if (tolower(static_cast<unsigned char>(text[0])) == tolower(static_cast<unsigned char>(key))) {
+        return text + 1;
+    }
+    return text;
+}
+
 void drawKeyHintsRow(const int x, const int y, const KeyHintItem* items, const int item_count,
                      const int text_size, const uint16_t color) {
     if (items == nullptr || item_count <= 0) {
@@ -123,11 +134,12 @@ void drawKeyHintsRow(const int x, const int y, const KeyHintItem* items, const i
 
     for (int i = 0; i < item_count; i++) {
         const KeyHintItem& item = items[i];
+        const char* label = hintLabelAfterKey(item.key, item.text);
         cx += drawKeyBadge(cx, y, item.key, text_size);
         M5Cardputer.Display.setCursor(cx, text_y);
         M5Cardputer.Display.setTextColor(color, BLACK);
-        M5Cardputer.Display.print(item.text);
-        cx += M5Cardputer.Display.textWidth(item.text);
+        M5Cardputer.Display.print(label);
+        cx += M5Cardputer.Display.textWidth(label);
         if (i != item_count - 1) {
             M5Cardputer.Display.setCursor(cx, text_y);
             M5Cardputer.Display.print(" ");
@@ -296,28 +308,29 @@ int applyHelpPageDelta(const int page, const int page_count, const int delta) {
 }
 
 // 底栏右下角 h help/close（徽章不动，说明文字下移 1px；y_offset 整行下移）
+// help → [H]elp；close/back 等首字母非 h 时保持全文。
 void drawHelpHintRight(const char* help_label, const int y_offset) {
     const char* label = (help_label != nullptr && help_label[0] != '\0') ? help_label : "help";
+    const char* shown = hintLabelAfterKey('h', label);
     const int y = M5Cardputer.Display.height() - 12 + y_offset;
     const int text_y = y + 1;
     const int screen_w = M5Cardputer.Display.width();
-    const KeyHintItem help_item = {'h', label};
 
     M5Cardputer.Display.setTextSize(1);
-    const char letter = static_cast<char>(toupper(static_cast<unsigned char>(help_item.key)));
+    const char letter = 'H';
     const char str[2] = {letter, '\0'};
     const int tw = M5Cardputer.Display.textWidth(str);
     constexpr int pad_x = 2;
     const int badge_w = tw + pad_x * 2 + 3;
-    const int help_w = badge_w + M5Cardputer.Display.textWidth(help_item.text);
+    const int help_w = badge_w + M5Cardputer.Display.textWidth(shown);
     // Help / tip 右侧同样至少留 APP_HELP_EDGE
     const int hx = screen_w - APP_HELP_EDGE - help_w;
 
-    int cx = hx + drawKeyBadge(hx, y, help_item.key, 1);
+    int cx = hx + drawKeyBadge(hx, y, 'h', 1);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK);
     M5Cardputer.Display.setCursor(cx, text_y);
-    M5Cardputer.Display.print(help_item.text);
+    M5Cardputer.Display.print(shown);
 }
 
 // 提示小字：',' 左箭头，'.' 右箭头

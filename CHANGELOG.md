@@ -6,6 +6,22 @@
 
 ---
 
+## 2026-08-20
+
+### 新增
+
+- **NFC**：Ex I2C 新增 ST25R3916 Reader/Writer；分页显示 UID、卡型、ATQA/SAK、容量、NDEF 与完整可读用户区 Hex/ASCII，支持读写历史
+- **NFC 模拟**：支持 NFC-A MIFARE Ultralight / Type 2 NDEF 文本标签模拟，可供手机识别
+- **GPS**：Ex I2C 新增 AT6668 UART GPS；提供实时定位、卫星、融合测速、行程记录与历史曲线
+
+### 改进
+
+- **NFC UI**：隐藏底层交互过程；读取与写入分别使用绿色 `R`、红色 `W` 大徽章，全零用户区明确标为 blank，受保护块单独提示
+- **GPS UI**：所有数据页改用紧凑标题栏，释放旧式 header 占用的显示空间
+- **Ex I2C**：Hub 集成 NFC / GPS，扫描器识别 `0x50` Unit NFC；共享底栏按键提示避免重复显示首字母
+
+---
+
 ## 2026-08-17
 
 ### 修复

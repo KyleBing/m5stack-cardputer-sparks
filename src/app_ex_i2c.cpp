@@ -1,8 +1,10 @@
 #include "app_ex_i2c.h"
 #include "app_cc1101.h"
 #include "app_common.h"
+#include "app_gps.h"
 #include "app_header.h"
 #include "app_i2c_scan.h"
+#include "app_nfc.h"
 #include "app_radio.h"
 
 namespace {
@@ -12,6 +14,8 @@ enum class ExI2cMode {
     RADIO,
     SCAN,
     CC1101,
+    NFC,
+    GPS,
 };
 
 struct ExI2cHubItem {
@@ -24,8 +28,10 @@ static constexpr int EXI2C_HUB_ITEMS_PER_PAGE = 8;
 
 static constexpr ExI2cHubItem EXI2C_HUB_ITEMS[] = {
     {"RADIO", ExI2cMode::RADIO, 'r'},
-    {"EXI2", ExI2cMode::SCAN, 'i'},
+    {"EXI2", ExI2cMode::SCAN, 'e'},
     {"CC1101", ExI2cMode::CC1101, 'c'},
+    {"NFC", ExI2cMode::NFC, 'n'},
+    {"GPS", ExI2cMode::GPS, 'g'},
 };
 static constexpr int EXI2C_HUB_ITEM_COUNT =
     static_cast<int>(sizeof(EXI2C_HUB_ITEMS) / sizeof(EXI2C_HUB_ITEMS[0]));
@@ -108,6 +114,10 @@ static void leaveExI2cChild(const ExI2cMode mode) {
         resetI2cScanHelp();
     } else if (mode == ExI2cMode::CC1101) {
         leaveCc1101App();
+    } else if (mode == ExI2cMode::NFC) {
+        leaveNfcApp();
+    } else if (mode == ExI2cMode::GPS) {
+        leaveGpsApp();
     }
 }
 
@@ -124,6 +134,10 @@ static void selectExI2cMode(const ExI2cMode mode) {
         drawI2cScanApp(M5Cardputer.Ex_I2C, "ExI2", false);
     } else if (mode == ExI2cMode::CC1101) {
         enterCc1101App();
+    } else if (mode == ExI2cMode::NFC) {
+        enterNfcApp();
+    } else if (mode == ExI2cMode::GPS) {
+        enterGpsApp();
     } else {
         showExI2cHubScreen();
     }
@@ -148,6 +162,10 @@ void updateExI2cApp() {
         updateRadioApp();
     } else if (g_mode == ExI2cMode::CC1101) {
         updateCc1101App();
+    } else if (g_mode == ExI2cMode::NFC) {
+        updateNfcApp();
+    } else if (g_mode == ExI2cMode::GPS) {
+        updateGpsApp();
     }
 }
 
@@ -188,6 +206,10 @@ void handleExI2cApp(const Keyboard_Class::KeysState& status) {
         handleI2cScanApp(getPressedKey(), M5Cardputer.Ex_I2C, "ExI2", false);
     } else if (g_mode == ExI2cMode::CC1101) {
         handleCc1101App(status);
+    } else if (g_mode == ExI2cMode::NFC) {
+        handleNfcApp(status);
+    } else if (g_mode == ExI2cMode::GPS) {
+        handleGpsApp(status);
     }
 }
 
@@ -215,6 +237,12 @@ bool closeExI2cHelp() {
     if (g_mode == ExI2cMode::CC1101) {
         return closeCc1101Help();
     }
+    if (g_mode == ExI2cMode::NFC) {
+        return closeNfcHelp();
+    }
+    if (g_mode == ExI2cMode::GPS) {
+        return closeGpsHelp();
+    }
     return false;
 }
 
@@ -227,6 +255,12 @@ bool isExI2cHelpVisible() {
     }
     if (g_mode == ExI2cMode::CC1101) {
         return isCc1101HelpVisible();
+    }
+    if (g_mode == ExI2cMode::NFC) {
+        return isNfcHelpVisible();
+    }
+    if (g_mode == ExI2cMode::GPS) {
+        return isGpsHelpVisible();
     }
     return false;
 }

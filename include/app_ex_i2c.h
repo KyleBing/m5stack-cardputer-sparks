@@ -2,7 +2,7 @@
 
 #include "M5Cardputer.h"
 
-// 外设集合：左侧 Grove（Radio / ExI2）与 EXT14 SPI（CC1101）。
+// 外设集合：左侧 Grove（I2C Radio/NFC、UART GPS）与 EXT14 SPI（CC1101）。
 void enterExI2cApp();
 void leaveExI2cApp();
 void updateExI2cApp();

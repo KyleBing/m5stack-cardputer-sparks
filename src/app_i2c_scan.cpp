@@ -33,7 +33,7 @@ static constexpr I2cDevHint kI2cExDevs[] = {
     {0x43, "8Angle", "angle"},
     {0x44, "SHT3x", "ENV"},
     {0x48, "ADS1115", "ADC"},
-    {0x50, "EEPROM", "memory"},
+    {0x50, "UnitNFC", "ST25R3916"},
     {0x51, "BM8563", "RTC"},
     {0x57, "UnitUS", "sonar"},
     {0x5A, "MLX90614", "NCIR"},
@@ -77,6 +77,7 @@ static void drawI2cHelpPage(const bool internal_bus) {
         y = drawAppHelpText(x, y, "G2=SDA  G1=SCL");
         y = drawAppHelpText(x, y, "names are likely matches");
         y = drawAppHelpLabelText(x, y, "10/11", APP_COLOR_LABEL, " RDA5807M radio");
+        y = drawAppHelpLabelText(x, y, "0x50", APP_COLOR_LABEL, " UnitNFC ST25R3916");
         y = drawAppHelpLabelText(x, y, "0x60", APP_COLOR_LABEL, " TEA5767 radio");
         y = drawAppHelpText(x, y, "unknown addr shows as --");
     }

@@ -52,6 +52,7 @@ void drawKeyHintsRow(int x, int y, const KeyHintItem* items, int item_count, int
                      uint16_t color = APP_COLOR_HINT);
 
 // 底栏右下角 h help（各应用统一位置；y_offset 整行下移，宫格 tip 用 1）
+// 传入 "help" 时显示为 [H]elp（首字母进徽章）
 void drawHelpHintRight(const char* help_label = "help", int y_offset = 0);
 
 // ===== Time 风格全屏 Help（无 header）=====
