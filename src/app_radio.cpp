@@ -2712,6 +2712,36 @@ bool isRadioHelpVisible() {
     return g_help_kind != RadioHelpKind::None;
 }
 
+void getRadioShotFeature(char* out, const size_t out_len) {
+    if (out == nullptr || out_len == 0) {
+        return;
+    }
+    const char* feature = "main";
+    if (g_help_kind != RadioHelpKind::None) {
+        feature = "help";
+    } else {
+        switch (g_view) {
+            case RadioView::Main:
+                feature = "main";
+                break;
+            case RadioView::Stations:
+                feature = "stations";
+                break;
+            case RadioView::Rename:
+                feature = "rename";
+                break;
+            case RadioView::Tuner:
+                feature = "tuner";
+                break;
+            case RadioView::Rds:
+                feature = "rds";
+                break;
+        }
+    }
+    strncpy(out, feature, out_len - 1);
+    out[out_len - 1] = '\0';
+}
+
 bool closeRadioHelp() {
     if (g_help_kind == RadioHelpKind::None) {
         return false;

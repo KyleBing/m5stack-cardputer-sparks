@@ -1,5 +1,5 @@
 ---
-description: Help 页 UI 格式与 ESC 关闭约定
+description: Help 页 UI 格式、ESC 关闭与页面 tip 约定
 alwaysApply: true
 ---
 
@@ -13,7 +13,7 @@ alwaysApply: true
 int y = drawAppHelpBegin("Clock"); // 黑底 + size-2 "Help" + 浅色副标题，返回内容起始 y
 constexpr int x = APP_HELP_CONTENT_X; // = APP_HELP_EDGE(5)，距边至少 5px
 y = drawAppHelpKey(x, y, 'r', "sync time over WiFi");
-y = drawAppHelpBadge(x, y, "BtnGO", "start / pause");
+y = drawAppHelpBadge(x, y, "BtnGO", "start / pause"); // 侧键作操作时才写 BtnGO
 y = drawAppHelpText(x, y, "Uses RTC; sync source is NTP.");
 drawHelpHintRight("close");
 ```
@@ -40,7 +40,11 @@ page = applyHelpPageDelta(page, page_count, delta);
 - 翻页统一 `getHelpNavDelta`（含方向键与 `[]`）
 - 多页时标题仍为 size-2 `Help` + 副标题，页码在底栏
 
-## ESC / BtnGO 行为
+## ESC 与 BtnGO
+
+**返回 / 关闭嵌套界面用 ESC**（`wasBtnGoPressed()`；`BTNGO_USE_KEYBOARD=1` 时为键盘 `` ` ``，提示文案用 `btnGoHintLabel()` → `"ESC"`）。
+
+**侧边 BtnGO（BtnA）不是返回键**。各 App 可把它用作开始/暂停、开关、关屏等操作；Help / tip / 文档里不要再写「BtnGO = 返回」。
 
 **Help 打开时，ESC 等同按 `h` 关闭 Help**，不得直接回主菜单或退出子界面。
 
@@ -49,3 +53,11 @@ page = applyHelpPageDelta(page, page_count, delta);
 - HID Keyboard：Help 打开时 `` ` `` / HID `0x35` 关 Help，不发给主机（本 App 仍用侧边 BtnA 退出）
 
 新增 Help 时：实现 Time 风格绘制 + `closeXxxHelp()`，并把它挂进 `tryCloseCurrentAppHelp()`。
+
+## 页面 tip（默认不画）
+
+主界面**不必**每页画底栏 tip / `drawHelpHintRight("help")`。快捷键说明放进 Help 即可；用户按 `h` 查看。
+
+- Help 页仍用 `drawHelpHintRight("close")` / `drawAppHelpFooter`
+- 仅在编辑态、确认态、易误操作等**确实需要**时再画 tip
+- 不要默认堆 `h help`、`BtnGO back` 一类常驻提示

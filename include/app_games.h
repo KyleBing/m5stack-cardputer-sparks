@@ -12,5 +12,7 @@ bool handleGamesBack();
 bool isGamesHelpVisible();
 // Help 可见时关闭并重绘；否则返回 false
 bool closeGamesHelp();
+// 截图 slug：gamemini_<app>_<feature>（如 gamemini_snake_help）
+void getGamesShotSlug(char* out, size_t out_len);
 // 每帧轮询 BtnA（wasPressed / 蓄力 isPressed 在 update 内）
 void pollGamesBtnA();

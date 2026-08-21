@@ -2,7 +2,7 @@
 
 #include "M5Cardputer.h"
 
-// 外设集合：左侧 Grove（I2C Radio/NFC、UART GPS）与 EXT14 SPI（CC1101）。
+// Grove 外设合集：左侧 Grove（I2C Radio/NFC、UART GPS）与 EXT14 SPI（CC1101）。
 void enterExI2cApp();
 void leaveExI2cApp();
 void updateExI2cApp();
@@ -12,7 +12,8 @@ bool handleExI2cBack();
 // Help 打开时关闭并重绘；Radio / CC1101 子项委托对应 close*。
 bool closeExI2cHelp();
 bool isExI2cHelpVisible();
-// 截图 slug：Radio 子界面时为 true
+// 截图 slug：exi2c_<app>_<feature>（如 exi2c_gps_live）
+void getExI2cShotSlug(char* out, size_t out_len);
+// 兼容旧调用（截图已改用 getExI2cShotSlug）
 bool isExI2cRadioActive();
-// 截图 slug：CC1101 子界面时为 true
 bool isExI2cCc1101Active();

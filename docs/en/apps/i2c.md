@@ -4,9 +4,9 @@ Open from:
 
 - Main menu `h` → Hardware Test `7` / `i` — **InI2C** internal bus  
 - Main menu `h` → Hardware Test `8` / `e` — **ExI2C** external bus  
-- Main menu `e` → [EX I2C](./ex-i2c) `2` / `i` — **EXI2** (same scanner as Hardware Test ExI2)
+- Main menu `e` → [Grove](./ex-i2c) `2` / `i` — **EXI2** (same scanner as Hardware Test ExI2)
 
-No header. Scans addresses 8–119 and lists each hit as `0x` address, chip name, and role, with SDA / SCL beside the title. A 4x4 dot precedes each row: green = known address map, gray = unknown. External chip wiring and driver APIs: [EX I2C](./ex-i2c).
+No header. Scans addresses 8–119 and lists each hit as `0x` address, chip name, and role, with SDA / SCL beside the title. A 4x4 dot precedes each row: green = known address map, gray = unknown. External chip wiring and driver APIs: [Grove](./ex-i2c).
 
 - **InI2**: onboard chips (Adv: `0x18` ES8311 codec, `0x34` TCA8418 keyboard, `0x68` BMI270 IMU).
 - **ExI2**: Grove / EXT peripherals; chip names are likely matches (for example, `0x10/0x11` RDA5807M or `0x60` TEA5767).

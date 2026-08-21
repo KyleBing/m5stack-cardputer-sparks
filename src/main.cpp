@@ -35,6 +35,7 @@
 #include "app_i2c_scan.h"
 #include "app_vocab.h"
 #include <WiFi.h>
+#include <cstdio>
 #include <esp_sleep.h>
 #include <esp_timer.h>
 #include <esp_rom_sys.h>
@@ -88,7 +89,7 @@ enum class AppState {
     INFO, // 系统信息 / 内存（字母 i）
     CALENDAR,
     AC_AUTO,    // 空调自动化
-    EX_I2C_APPS, // 左侧 Grove Ex_I2C 外设（Radio 等）
+    EX_I2C_APPS, // Grove 外设合集（Radio / NFC / GPS / CC1101 等）
     VOCAB,      // 单词学习
 };
 
@@ -130,7 +131,7 @@ static const MenuItem MENU_ITEMS[] = {
     {'j', "Mor", "MORSE", AppState::MORSE},
     {'x', "IR", "INFRARED", AppState::IR},
     {'n', "AC", "AC AUTO", AppState::AC_AUTO},
-    {'e', "ExI2", "EX I2C", AppState::EX_I2C_APPS},
+    {'e', "Grove", "GROVE", AppState::EX_I2C_APPS},
     {'l', "Voc", "VOCAB", AppState::VOCAB},
 
     // 系统功能测试
@@ -144,6 +145,7 @@ static const int MENU_ITEM_COUNT = sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0]);
 AppState currentState = AppState::MENU;
 static HardwareTestMode hardwareTestMode = HardwareTestMode::HUB;
 static int hardwareTestHubPage = 0;
+static bool g_led_help_visible = false;
 static bool bmiScreenReady = false;
 static int bmiPrevDotX[2] = {-1, -1};
 static int bmiPrevDotY[2] = {-1, -1};
@@ -176,88 +178,172 @@ const char* getMenuItemNameFull(const AppState state) {
     return "?";
 }
 
-// 截图文件名短名：app_<slug>_NNN.png
+// 截图文件名：组名_app名_功能名（如 exi2c_gps_live / gamemini_snake_help）
 const char* getCurrentAppShotSlug() {
+    static char slug[40];
+    auto fill = [&](const char* group, const char* app, const char* feature) {
+        snprintf(slug, sizeof(slug), "%s_%s_%s", group, app, feature);
+    };
+    auto fillHelp = [&](const char* group, const char* app, const bool help) {
+        fill(group, app, help ? "help" : "main");
+    };
+
     switch (currentState) {
         case AppState::MENU:
-            return "menu";
+            fill("menu", "home", "main");
+            break;
         case AppState::VERSION:
-            return "version";
+            fill("version", "about", "main");
+            break;
         case AppState::KEYBOARD:
-            return "keyboard";
+            fill("keyboard", "keys", "main");
+            break;
         case AppState::BMI:
-            return "imu";
+            fill("hardware", "imu", "main");
+            break;
         case AppState::MIC:
-            return "mic";
+            fillHelp("hardware", "mic", false);
+            break;
         case AppState::NEON_FX:
-            return "neonfx";
+            fill("gamemini", "neonfx", "main");
+            break;
         case AppState::DICE:
-            return "dice";
+            fill("gamemini", "dice", "main");
+            break;
         case AppState::NEWTON_CRADLE:
-            return "newton";
+            fill("gamemini", "phys", "main");
+            break;
         case AppState::GAMES:
-            return "games";
-        case AppState::HARDWARE_TESTS:
-            // Mic 在 Test 子项里时用 mic 截图名
-            if (hardwareTestMode == HardwareTestMode::MIC) {
-                return "mic";
+            getGamesShotSlug(slug, sizeof(slug));
+            break;
+        case AppState::HARDWARE_TESTS: {
+            const char* app = "hub";
+            bool help = false;
+            switch (hardwareTestMode) {
+                case HardwareTestMode::HUB:
+                    app = "hub";
+                    break;
+                case HardwareTestMode::SCREEN:
+                    app = "display";
+                    break;
+                case HardwareTestMode::IMU:
+                    app = "imu";
+                    break;
+                case HardwareTestMode::FONT:
+                    app = "font";
+                    break;
+                case HardwareTestMode::ICONS:
+                    app = "icons";
+                    break;
+                case HardwareTestMode::LED:
+                    app = "led";
+                    help = g_led_help_visible;
+                    break;
+                case HardwareTestMode::BLE:
+                    app = "ble";
+                    break;
+                case HardwareTestMode::IN_I2C:
+                    app = "ini2";
+                    break;
+                case HardwareTestMode::EX_I2C:
+                    app = "exi2";
+                    break;
+                case HardwareTestMode::MIC:
+                    app = "mic";
+                    break;
             }
-            return "hardware";
+            if (hardwareTestMode == HardwareTestMode::IN_I2C ||
+                hardwareTestMode == HardwareTestMode::EX_I2C) {
+                char feature[16];
+                getI2cScanShotFeature(feature, sizeof(feature));
+                fill("hardware", app, feature);
+            } else if (hardwareTestMode == HardwareTestMode::MIC) {
+                fillHelp("hardware", "mic", false);
+            } else {
+                fillHelp("hardware", app, help);
+            }
+            break;
+        }
         case AppState::SETTINGS:
-            return "options";
+            fill("options", "main", "main");
+            break;
         case AppState::RTC:
-            return "time";
-        case AppState::IN_I2C:
-            return "ini2c";
-        case AppState::EX_I2C:
-            return "exi2c";
+            getRtcShotSlug(slug, sizeof(slug));
+            break;
+        case AppState::IN_I2C: {
+            char feature[16];
+            getI2cScanShotFeature(feature, sizeof(feature));
+            fill("hardware", "ini2", feature);
+            break;
+        }
+        case AppState::EX_I2C: {
+            char feature[16];
+            getI2cScanShotFeature(feature, sizeof(feature));
+            fill("hardware", "exi2", feature);
+            break;
+        }
         case AppState::WIFI:
-            return "wifi";
+            fill("wifi", "main", "main");
+            break;
         case AppState::BLE:
-            return "ble";
+            fill("hardware", "ble", "main");
+            break;
         case AppState::DISP:
-            return "display";
+            fill("hardware", "display", "main");
+            break;
         case AppState::ICONS:
-            return "icons";
+            fill("hardware", "icons", "main");
+            break;
         case AppState::SLEEP:
-            return "sleep";
+            fill("sleep", "main", "main");
+            break;
         case AppState::MIJIA:
-            return "mijia";
+            fill("mijia", "main", "main");
+            break;
         case AppState::WEB:
-            return "config";
+            fill("config", "web", "main");
+            break;
         case AppState::CURSOR:
-            return "cursor";
+            fill("cursor", "main", "main");
+            break;
         case AppState::MORSE:
-            return "morse";
+            fill("morse", "main", "main");
+            break;
         case AppState::IR:
-            return "ir";
+            fill("ir", "main", "main");
+            break;
         case AppState::FONT_DEMO:
-            return "font";
+            fill("hardware", "font", "main");
+            break;
         case AppState::LED:
-            return "led";
+            fillHelp("hardware", "led", g_led_help_visible);
+            break;
         case AppState::BATTERY:
-            return "battery";
+            fill("battery", "main", "main");
+            break;
         case AppState::HID_KEYBOARD:
-            return "hidkeyboard";
+            fill("hidkeyboard", "main", "main");
+            break;
         case AppState::INFO:
-            return "info";
+            fill("info", "main", "main");
+            break;
         case AppState::CALENDAR:
-            return "calendar";
+            fill("calendar", "main", "main");
+            break;
         case AppState::AC_AUTO:
-            return "acauto";
+            fill("acauto", "main", "main");
+            break;
         case AppState::EX_I2C_APPS:
-            if (isExI2cRadioActive()) {
-                return "radio";
-            }
-            if (isExI2cCc1101Active()) {
-                return "cc1101";
-            }
-            return "exi2c";
+            getExI2cShotSlug(slug, sizeof(slug));
+            break;
         case AppState::VOCAB:
-            return "vocab";
+            fill("vocab", "main", "main");
+            break;
         default:
-            return "unknown";
+            fill("unknown", "main", "main");
+            break;
     }
+    return slug;
 }
 static constexpr int MENU_COLS = APP_HUB_CARD_COLS;
 static constexpr int MENU_ROWS_PER_PAGE = 4;
@@ -2001,7 +2087,6 @@ void handleSettingsApp(const Keyboard_Class::KeysState& status) {
 
 static constexpr int LED_PIN_FALLBACK = 21;
 static bool g_led_app_active = false;
-static bool g_led_help_visible = false;
 static bool g_led_on = false;
 static uint8_t g_led_r = 255;
 static uint8_t g_led_g = 255;
@@ -3145,7 +3230,8 @@ void setup() {
                    static_cast<unsigned>(ESP.getFreeHeap()));
 }
 
-// Help 打开时 ESC/BtnGO ≡ 按 h 关闭 Help，不回主菜单 / 不退子界面
+// Help 打开时 ESC ≡ 按 h 关闭 Help，不回主菜单 / 不退子界面
+// （返回键是 ESC/`；侧边 BtnGO 不是返回键）
 static bool tryCloseCurrentAppHelp() {
     switch (currentState) {
         case AppState::RTC:

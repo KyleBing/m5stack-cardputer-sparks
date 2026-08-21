@@ -6,6 +6,7 @@
 #include "app_i2c_scan.h"
 #include "app_nfc.h"
 #include "app_radio.h"
+#include <cstdio>
 
 namespace {
 
@@ -39,7 +40,7 @@ static constexpr int EXI2C_HUB_ITEM_COUNT =
 static ExI2cMode g_mode = ExI2cMode::HUB;
 static int g_hub_page = 0;
 
-// ExI2 hub 用暖绿主题（与 Games 金、Test 青区分）
+// Grove hub 用暖绿主题（与 Games 金、Test 青区分）
 static uint16_t exI2cHubRgb(const uint8_t r, const uint8_t g, const uint8_t b) {
     return M5Cardputer.Display.color565(r, g, b);
 }
@@ -102,7 +103,7 @@ static void drawExI2cHubCards() {
 
 static void showExI2cHubScreen() {
     g_mode = ExI2cMode::HUB;
-    beginAppHubScreen("EX I2C", exI2cHubBg(), g_hub_page, getExI2cHubPageCount());
+    beginAppHubScreen("GROVE", exI2cHubBg(), g_hub_page, getExI2cHubPageCount());
     drawExI2cHubCards();
 }
 
@@ -241,7 +242,13 @@ bool closeExI2cHelp() {
         return closeNfcHelp();
     }
     if (g_mode == ExI2cMode::GPS) {
-        return closeGpsHelp();
+        if (closeGpsHelp()) {
+            return true;
+        }
+        if (closeGpsSettings()) {
+            return true;
+        }
+        return closeGpsHistoryChart();
     }
     return false;
 }
@@ -271,4 +278,38 @@ bool isExI2cRadioActive() {
 
 bool isExI2cCc1101Active() {
     return g_mode == ExI2cMode::CC1101;
+}
+
+void getExI2cShotSlug(char* out, const size_t out_len) {
+    if (out == nullptr || out_len == 0) {
+        return;
+    }
+    char feature[16] = "main";
+    const char* app = "hub";
+    switch (g_mode) {
+        case ExI2cMode::HUB:
+            app = "hub";
+            break;
+        case ExI2cMode::RADIO:
+            app = "radio";
+            getRadioShotFeature(feature, sizeof(feature));
+            break;
+        case ExI2cMode::SCAN:
+            app = "exi2";
+            getI2cScanShotFeature(feature, sizeof(feature));
+            break;
+        case ExI2cMode::CC1101:
+            app = "cc1101";
+            getCc1101ShotFeature(feature, sizeof(feature));
+            break;
+        case ExI2cMode::NFC:
+            app = "nfc";
+            getNfcShotFeature(feature, sizeof(feature));
+            break;
+        case ExI2cMode::GPS:
+            app = "gps";
+            getGpsShotFeature(feature, sizeof(feature));
+            break;
+    }
+    snprintf(out, out_len, "exi2c_%s_%s", app, feature);
 }

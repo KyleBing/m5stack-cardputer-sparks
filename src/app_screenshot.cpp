@@ -589,8 +589,12 @@ static bool endsWithIgnoreCase(const char* s, const char* suffix) {
 }
 
 // 新截图为 .png；仍识别旧版 .bmp 便于列表/清理
+// 新名：组_app_功能[.png]；旧名：app_*_NNN.png
 static bool isShotFileName(const char* base) {
-    if (base == nullptr || strncmp(base, "app_", 4) != 0) {
+    if (base == nullptr || base[0] == '\0' || base[0] == '.') {
+        return false;
+    }
+    if (strchr(base, '/') != nullptr) {
         return false;
     }
     return endsWithIgnoreCase(base, ".png") || endsWithIgnoreCase(base, ".bmp");
@@ -607,30 +611,46 @@ static size_t fsFreeBytes(fs::FS& fs, const bool is_sd) {
     return total > used ? total - used : 0;
 }
 
-// 扫描同前缀最大序号（app_<slug>_NNN.png / .bmp）
-static int findNextShotIndexOn(fs::FS& fs, const char* slug) {
-    char prefix[40];
-    snprintf(prefix, sizeof(prefix), "app_%s_", slug);
+// 为 slug 生成不冲突文件名：优先 slug.png，已存在则 slug_002.png …
+static bool buildUniqueShotFilename(fs::FS& fs, const char* slug, char* filename,
+                                    const size_t filename_len) {
+    if (slug == nullptr || slug[0] == '\0' || filename == nullptr || filename_len < 8) {
+        return false;
+    }
+
+    char path[80];
+    snprintf(filename, filename_len, "%s.png", slug);
+    snprintf(path, sizeof(path), "%s/%s", SHOT_DIR, filename);
+    if (!fs.exists(path)) {
+        return true;
+    }
+
+    char prefix[48];
+    snprintf(prefix, sizeof(prefix), "%s_", slug);
     const size_t prefix_len = strlen(prefix);
 
-    int max_n = 0;
+    int max_n = 1; // 无序号的 slug.png 视为 1
     File dir = fs.open(SHOT_DIR);
-    if (!dir || !dir.isDirectory()) {
-        return 1;
-    }
-    File f = dir.openNextFile();
-    while (f) {
-        const char* base = shotBaseName(f.name());
-        if (isShotFileName(base) && strncmp(base, prefix, prefix_len) == 0) {
-            int n = 0;
-            if (sscanf(base + prefix_len, "%d", &n) == 1 && n > max_n) {
-                max_n = n;
+    if (dir && dir.isDirectory()) {
+        File f = dir.openNextFile();
+        while (f) {
+            const char* base = shotBaseName(f.name());
+            if (isShotFileName(base) && strncmp(base, prefix, prefix_len) == 0) {
+                int n = 0;
+                if (sscanf(base + prefix_len, "%d", &n) == 1 && n > max_n) {
+                    max_n = n;
+                }
             }
+            f = dir.openNextFile();
         }
-        f = dir.openNextFile();
+        dir.close();
     }
-    dir.close();
-    return max_n + 1;
+
+    if (max_n >= 999) {
+        return false;
+    }
+    snprintf(filename, filename_len, "%s_%03d.png", slug, max_n + 1);
+    return true;
 }
 
 // 记录最后一张文件名（写在对应 FS）
@@ -681,7 +701,7 @@ static bool findNewestShotNameOn(fs::FS& fs, char* out, const size_t out_len) {
         return false;
     }
     time_t best_t = 0;
-    char best[48] = "";
+    char best[56] = "";
     bool any = false;
     File f = dir.openNextFile();
     while (f) {
@@ -707,13 +727,13 @@ static bool findNewestShotNameOn(fs::FS& fs, char* out, const size_t out_len) {
 }
 
 static bool deleteLastOn(fs::FS& fs, const bool is_sd) {
-    char name[48];
+    char name[56];
     if (!readLastShotNameOn(fs, name, sizeof(name))) {
         if (!findNewestShotNameOn(fs, name, sizeof(name))) {
             return false;
         }
     }
-    char path[64];
+    char path[80];
     snprintf(path, sizeof(path), "%s/%s", SHOT_DIR, name);
     if (!fs.exists(path)) {
         if (!findNewestShotNameOn(fs, name, sizeof(name))) {
@@ -788,7 +808,7 @@ static int clearAllOn(fs::FS& fs) {
         if (!dir || !dir.isDirectory()) {
             break;
         }
-        char to_del[48] = "";
+        char to_del[56] = "";
         File f = dir.openNextFile();
         while (f) {
             const char* base = shotBaseName(f.name());
@@ -804,7 +824,7 @@ static int clearAllOn(fs::FS& fs) {
         if (to_del[0] == '\0') {
             break;
         }
-        char path[64];
+        char path[80];
         snprintf(path, sizeof(path), "%s/%s", SHOT_DIR, to_del);
         if (fs.remove(path)) {
             n++;
@@ -891,18 +911,15 @@ static bool saveToFs(fs::FS& fs, const bool is_sd, const char* app_slug, char* o
         return false;
     }
 
-    char slug[24];
+    char slug[36];
     sanitizeSlug(app_slug, slug, sizeof(slug));
 
-    const int idx = findNextShotIndexOn(fs, slug);
-    if (idx > 999) {
+    char filename[56];
+    if (!buildUniqueShotFilename(fs, slug, filename, sizeof(filename))) {
         snprintf(err, err_len, "too many %s shots", slug);
         return false;
     }
-
-    char filename[48];
-    snprintf(filename, sizeof(filename), "app_%s_%03d.png", slug, idx);
-    char path[64];
+    char path[80];
     snprintf(path, sizeof(path), "%s/%s", SHOT_DIR, filename);
 
     File out = fs.open(path, "w");
@@ -1004,7 +1021,7 @@ bool tryHandleScreenshotHotkey() {
 
     const char* slug = getCurrentAppShotSlug();
 
-    char name[48];
+    char name[56];
     char err[96];
     if (saveScreenshotToFlash(slug, name, sizeof(name), err, sizeof(err))) {
         // 先闪屏再响，避免音效期间用户误以为还没拍完
@@ -1169,7 +1186,7 @@ bool deleteScreenshotFile(const char* storage, const char* basename) {
     if (storage == nullptr || !isShotFileName(basename)) {
         return false;
     }
-    char path[64];
+    char path[80];
     snprintf(path, sizeof(path), "%s/%s", SHOT_DIR, basename);
     // 路径安全：与 isSafeShotPath 同规则
     String uri = String(path);
@@ -1202,7 +1219,7 @@ bool deleteScreenshotFile(const char* storage, const char* basename) {
     }
 
     // 若删的是 .last 记录的那张，清掉指针
-    char last[48];
+    char last[56];
     if (readLastShotNameOn(*fs, last, sizeof(last)) && strcmp(last, basename) == 0) {
         fs->remove(SHOT_LAST);
     }
@@ -1212,14 +1229,21 @@ bool deleteScreenshotFile(const char* storage, const char* basename) {
 }
 
 bool isSafeShotPath(const String& uri) {
-    // 允许 /shot/app_xxx_001.png（及旧版 .bmp）
-    if (!uri.startsWith("/shot/app_")) {
+    // 允许 /shot/<slug>.png（及旧版 app_* / .bmp）
+    if (!uri.startsWith("/shot/")) {
         return false;
     }
     if (!uri.endsWith(".png") && !uri.endsWith(".bmp")) {
         return false;
     }
-    if (uri.indexOf("..") >= 0 || uri.length() > 64) {
+    if (uri.indexOf("..") >= 0 || uri.length() > 80) {
+        return false;
+    }
+    if (uri.length() <= 6) {
+        return false;
+    }
+    const char first = uri.charAt(6); // 紧跟 /shot/
+    if (first == '.' || first == '/') {
         return false;
     }
     for (size_t i = 0; i < uri.length(); i++) {

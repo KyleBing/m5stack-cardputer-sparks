@@ -6,6 +6,23 @@
 
 ---
 
+## 2026-08-21
+
+### 新增
+
+- **NFC 历史卡模拟**：History / Detail 按 `e` 用已存 UID + 完整 Type2 页镜像模拟 Ultralight / NTAG；Reader 下 `e` 仍为默认 NDEF 文本标签
+
+### 改进
+
+- **Grove**：主菜单 / Hub 由「EX I2C」改名为 Grove（含 I2C / UART / SPI 外设，不再暗示全是 I2C）
+- **GPS Sky plot**：方位改为固定上北下南，不再随航向旋转
+- **NFC 读卡 UI**：左侧仅状态图标（`nfc_signal*`）；右侧内容左对齐；`blk` 无边框且与 USR/TOT 进度条对齐；dump 只列可读块；去掉底栏 tip；History 入口改为 `l`
+- **NFC 读卡**：Type2 改为保存完整页（含 UID/CC），便于 1:1 回放；NDEF 摘要从用户区解析并跳过 CC
+- **NFC Help / ESC**：补充模拟说明；模拟中 ESC 退出回原视图
+- **Help / ESC / tip**：返回统一用 ESC；侧边 BtnGO 不作返回；Help 打开时 ESC 只关 Help；主界面默认不画底栏 tip（快捷键进 Help）
+
+---
+
 ## 2026-08-20
 
 ### 新增

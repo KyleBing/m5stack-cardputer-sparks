@@ -5,6 +5,7 @@
 #include "app_icons.h"
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <time.h>
@@ -212,15 +213,95 @@ int drawAppHelpTextColored(const int x, const int y, const char* text, const uin
     return y + APP_HELP_LINE_H;
 }
 
+int drawAppHelpSection(const int x, int y, const char* text, const uint16_t color) {
+    y += APP_HELP_SECTION_PAD_TOP;
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setFont(&fonts::Font0);
+    M5Cardputer.Display.setTextColor(color, BLACK);
+    M5Cardputer.Display.setCursor(x, y);
+    M5Cardputer.Display.print(text);
+    return y + 8 + APP_HELP_SECTION_PAD_BOTTOM;
+}
+
 int drawAppHelpLabelText(const int x, const int y, const char* label, const uint16_t label_color,
                          const char* text) {
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(label_color, BLACK);
-    M5Cardputer.Display.setCursor(x, y);
-    M5Cardputer.Display.print(label);
-    M5Cardputer.Display.setTextColor(APP_COLOR_HINT, BLACK); // 标签后恢复说明色
-    M5Cardputer.Display.print(text);
+    auto& d = M5Cardputer.Display;
+    d.setTextSize(1);
+    // Font8x8C64 与 Font0 同高 8px，字形更醒目；value 仍用 Font0
+    d.setFont(&fonts::Font8x8C64);
+    d.setTextColor(label_color, BLACK);
+    d.setCursor(x, y);
+    d.print(label);
+    d.setFont(&fonts::Font0);
+    d.setTextColor(APP_COLOR_HINT, BLACK); // 标签后恢复说明色
+    d.print(text);
     return y + APP_HELP_LINE_H;
+}
+
+int drawAppHelpLabelTextPlain(const int x, const int y, const char* label,
+                              const uint16_t label_color, const char* text) {
+    auto& d = M5Cardputer.Display;
+    d.setTextSize(1);
+    d.setFont(&fonts::Font0);
+    d.setTextColor(label_color, BLACK);
+    d.setCursor(x, y);
+    d.print(label);
+    // 比 HINT 略暗，便于与白/亮色 label 区分
+    d.setTextColor(APP_COLOR_MUTED, BLACK);
+    d.print(text);
+    return y + APP_HELP_LINE_H;
+}
+
+int drawAppHelpIndexTable(const int x, const int y, const char* const* names, const int count) {
+    if (names == nullptr || count <= 0) {
+        return y;
+    }
+    auto& d = M5Cardputer.Display;
+    constexpr int cell_pad = 5; // 单元格内边距至少 5px
+    constexpr int row_h = 8 + cell_pad * 2;
+    constexpr int num_w = cell_pad * 2 + 8;
+    const int table_w = d.width() - x - APP_HELP_EDGE;
+    // 超过 5 行时双列，避免 5px padding 后超出 135 屏高
+    const int cols = count > 5 ? 2 : 1;
+    const int rows = (count + cols - 1) / cols;
+    const int col_w = table_w / cols;
+    const int table_h = rows * row_h + 1;
+
+    d.drawRect(x, y, table_w, table_h, APP_COLOR_MUTED);
+    for (int c = 1; c < cols; ++c) {
+        d.drawFastVLine(x + c * col_w, y, table_h, APP_COLOR_MUTED);
+    }
+    for (int r = 1; r < rows; ++r) {
+        d.drawFastHLine(x, y + r * row_h, table_w, APP_COLOR_MUTED);
+    }
+    for (int c = 0; c < cols; ++c) {
+        d.drawFastVLine(x + c * col_w + num_w, y, table_h, APP_COLOR_MUTED);
+    }
+
+    d.setTextSize(1);
+    d.setFont(&fonts::Font0);
+    for (int r = 0; r < rows; ++r) {
+        for (int c = 0; c < cols; ++c) {
+            const int idx = r + c * rows;
+            if (idx >= count) {
+                continue;
+            }
+            const int cell_x = x + c * col_w;
+            char num[4];
+            snprintf(num, sizeof(num), "%d", idx + 1);
+            const int num_tw = d.textWidth(num);
+            const int row_y = y + r * row_h + cell_pad;
+            d.setTextColor(APP_COLOR_VALUE, BLACK);
+            d.setCursor(cell_x + (num_w - num_tw) / 2, row_y);
+            d.print(num);
+            d.setTextColor(APP_COLOR_HINT, BLACK);
+            d.setCursor(cell_x + num_w + cell_pad, row_y);
+            if (names[idx] != nullptr) {
+                d.print(names[idx]);
+            }
+        }
+    }
+    return y + table_h + 4;
 }
 
 // 多页：左下箭头徽章 + N/M；右侧统一 h close

@@ -414,3 +414,11 @@ bool closeI2cScanHelp(m5::I2C_Class& bus, const char* title, const bool internal
 void resetI2cScanHelp() {
     g_i2c_help_visible = false;
 }
+
+void getI2cScanShotFeature(char* out, const size_t out_len) {
+    if (out == nullptr || out_len == 0) {
+        return;
+    }
+    strncpy(out, g_i2c_help_visible ? "help" : "main", out_len - 1);
+    out[out_len - 1] = '\0';
+}

@@ -1975,10 +1975,12 @@ static void handleShotsList() {
     body += F("<p class='hint'>");
     body += T("任意界面按 <code>Fn+s</code> 截图："
               "有 TF 卡优先存卡，否则存 Flash；"
-              "文件名 <code>app_&lt;界面&gt;_001.png</code> 序号递增。"
+              "文件名 <code>组_app_功能.png</code>（如 <code>exi2c_gps_live.png</code>），"
+              "重名则加 <code>_002</code>。"
               "本页可预览、单张下载 / 删除，或打包 ZIP。",
               "Press <code>Fn+s</code> on any screen to capture: TF card preferred, else Flash. "
-              "Names look like <code>app_&lt;screen&gt;_001.png</code> with rising numbers. "
+              "Names look like <code>group_app_feature.png</code> "
+              "(e.g. <code>exi2c_gps_live.png</code>); duplicates get <code>_002</code>. "
               "Preview, download/delete one, or ZIP here.");
     body += F("</p>"
               "<p class='hint'>");
@@ -2115,8 +2117,8 @@ static bool g_shot_zip_busy = false;
 
 struct ShotZipEntry {
     char storage[8];   // "TF" / "Flash"
-    char basename[40];
-    char zip_name[48]; // ZIP 内路径；全部打包时带 TF/ Flash/ 前缀防重名
+    char basename[56];
+    char zip_name[64]; // ZIP 内路径；全部打包时带 TF/ Flash/ 前缀防重名
     uint32_t size = 0;
     uint32_t crc = 0;
     uint32_t offset = 0;
@@ -2160,7 +2162,7 @@ static void shotZipCollectCb(const char* storage, const char* basename, const si
 }
 
 static bool shotZipOpenEntry(const ShotZipEntry& e, File& out) {
-    char path[64];
+    char path[80];
     snprintf(path, sizeof(path), "%s/%s", SHOT_DIR, e.basename);
     if (strcmp(e.storage, "TF") == 0) {
         if (!isScreenshotSdReady()) {
@@ -3091,7 +3093,7 @@ static bool tryServeSdFile() {
     return true;
 }
 
-// 提供 /shot/app_*.png（及旧 .bmp）：默认内联预览；?dl=1 强制下载（SD 优先）
+// 提供 /shot/*.png（及旧 .bmp）：默认内联预览；?dl=1 强制下载（SD 优先）
 static bool tryServeShotFile() {
     const String uri = g_server.uri();
     File file;

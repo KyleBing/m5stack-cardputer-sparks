@@ -798,6 +798,28 @@ bool closeRtcHelp() {
     return true;
 }
 
+void getRtcShotSlug(char* out, const size_t out_len) {
+    if (out == nullptr || out_len == 0) {
+        return;
+    }
+    const char* mode = "uptime";
+    switch (timeMode) {
+        case TimeMode::UPTIME:
+            mode = "uptime";
+            break;
+        case TimeMode::CLOCK:
+            mode = rtcPureLargeClockVisible ? "big" : "clock";
+            break;
+        case TimeMode::COUNTDOWN:
+            mode = "cd";
+            break;
+        case TimeMode::STOPWATCH:
+            mode = "sw";
+            break;
+    }
+    snprintf(out, out_len, "time_%s_%s", mode, timeHelpVisible ? "help" : "main");
+}
+
 bool isTimeClockLikeMode() {
     // Uptime / Clock（含 big time）可降频；CD/SW 需更高刷新
     return !timeHelpVisible &&

@@ -45,7 +45,7 @@ app_{app}_{子功能}.png
 - app_morse_001.png
 - app_mic_001.png / app_mic_002.png
 
-### Radio / EX I2C GPS
+### Radio / Grove GPS
 - app_radio_playing.png / app_radio_no_module.png / app_radio_station_list.png
 - app_exi2c_gps_live.png / app_exi2c_gps_nofix.png / app_exi2c_gps_speed.png / app_exi2c_gps_satellites.png
 - app_exi2c_gps_sky.png / app_exi2c_gps_history.png / app_exi2c_gps_chart.png / app_exi2c_gps_settings.png

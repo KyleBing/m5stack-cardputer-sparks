@@ -1524,3 +1524,58 @@ bool closeGamesHelp() {
 bool isGamesHelpVisible() {
     return g_help;
 }
+
+void getGamesShotSlug(char* out, const size_t out_len) {
+    if (out == nullptr || out_len == 0) {
+        return;
+    }
+    const char* app = "hub";
+    switch (g_mode) {
+        case GameMode::HUB:
+            app = "hub";
+            break;
+        case GameMode::COIN:
+            app = "coin";
+            break;
+        case GameMode::DOUBLE_PENDULUM:
+            app = "chaos";
+            break;
+        case GameMode::WHEEL:
+            app = "wheel";
+            break;
+        case GameMode::DICE:
+            app = "dice";
+            break;
+        case GameMode::NEWTON_CRADLE:
+            app = "phys";
+            break;
+        case GameMode::NEON_FX:
+            app = "neonfx";
+            break;
+        case GameMode::CURVES:
+            app = "curves";
+            break;
+        case GameMode::MINESWEEPER:
+            app = "mines";
+            break;
+        case GameMode::SNAKE:
+            app = "snake";
+            break;
+        case GameMode::LIFE:
+            app = "life";
+            break;
+        case GameMode::MATRIX_RAIN:
+            app = "matrix";
+            break;
+        case GameMode::BEZIER_WAVE:
+            app = "wave";
+            break;
+        case GameMode::PARTICLE_CLOCK:
+            app = "pclock";
+            break;
+        case GameMode::LISSAJOUS:
+            app = "lissa";
+            break;
+    }
+    snprintf(out, out_len, "gamemini_%s_%s", app, g_help ? "help" : "main");
+}

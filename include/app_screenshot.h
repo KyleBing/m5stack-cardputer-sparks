@@ -7,7 +7,8 @@
 // 截图目录（SD 优先，否则 LittleFS）
 static constexpr const char* SHOT_DIR = "/shot";
 
-// 把当前屏存为 /shot/app_<slug>_NNN.png（序号自动递增；流式 zlib，体积远小于 BMP）
+// 把当前屏存为 /shot/<slug>.png（同名则 _002/_003…；流式 zlib，体积远小于 BMP）
+// slug 形如 组名_app名_功能名（exi2c_gps_live）；仍识别旧版 app_*_NNN.png
 // 有 TF 卡时优先写 SD，否则写 LittleFS
 // 成功时 out_name 写入文件名（不含路径）；失败时 err 有原因
 bool saveScreenshotToFlash(const char* app_slug, char* out_name, size_t out_name_len, char* err,
@@ -51,7 +52,7 @@ int clearAllScreenshots();
 int clearTfScreenshots();
 int clearFlashScreenshots();
 
-// 删除单张：storage 为 "TF" 或 "Flash"；basename 如 app_menu_001.png
+// 删除单张：storage 为 "TF" 或 "Flash"；basename 如 exi2c_gps_live.png
 bool deleteScreenshotFile(const char* storage, const char* basename);
 
 // 删除 LittleFS 上最后一张截图（开机腾 Flash 用），成功返回 true
@@ -64,5 +65,5 @@ void recoverScreenshotsOnBoot();
 // setup 正常跑完后调用，清除 boot_pending
 void markScreenshotBootOk();
 
-// 校验并打开截图文件路径（允许 /shot/app_*.png 与旧版 .bmp）
+// 校验并打开截图文件路径（允许 /shot/*.png 与旧版 .bmp）
 bool isSafeShotPath(const String& uri);

@@ -312,3 +312,11 @@ bool closeCc1101Help() {
 bool isCc1101HelpVisible() {
     return g_help_visible;
 }
+
+void getCc1101ShotFeature(char* out, const size_t out_len) {
+    if (out == nullptr || out_len == 0) {
+        return;
+    }
+    strncpy(out, g_help_visible ? "help" : "main", out_len - 1);
+    out[out_len - 1] = '\0';
+}

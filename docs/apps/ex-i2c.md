@@ -1,8 +1,8 @@
-# EX I2C 外设
+# Grove 外设
 
 主菜单按键：`e`
 
-外接模块集合：左侧 Grove 的 **I2C**（收音机、总线扫描）与背面 EXT14 的 **SPI**（CC1101）。选择页每页最多 8 项；数字键按当前页从 `1` 编号，字母快捷键**不依赖当前页**即可直达。子应用中 `ESC` / `GO` 回到本集合；在选择页再按一次返回主菜单。
+外接模块集合：左侧 Grove 的 **I2C**（收音机、NFC、总线扫描）、**UART**（GPS）与背面 EXT14 的 **SPI**（CC1101）。选择页每页最多 8 项；数字键按当前页从 `1` 编号，字母快捷键**不依赖当前页**即可直达。子应用中 `ESC` / `GO` 回到本集合；在选择页再按一次返回主菜单。
 
 本页说明固件里**已经落地的芯片接线、功能，以及源码 API**。收音机见 [Radio](./radio)；NFC 见 [NFC](./nfc)；GPS 见 [GPS](./gps)；总线扫描见 [I2C 扫描](./i2c)。
 
@@ -25,7 +25,7 @@
 | `1` / `r` | [RADIO](./radio) | Grove I2C | TEA5767 / RDA5807M | FM 收音、搜台、电台列表；RDA 另有音量 / RDS |
 | `2` / `e` | [EXI2](./i2c) | Grove I2C | 扫描到的任意地址 | 列地址、猜测芯片名与用途 |
 | `3` / `c` | CC1101 | EXT14 SPI | CC1101 | 433 MHz 收发测试、RSSI、调频 |
-| `4` / `n` | [NFC](./nfc) | Grove I2C | ST25R3916（Unit NFC） | 读 / 写 13.56 MHz、NDEF 模拟、历史 |
+| `4` / `n` | [NFC](./nfc) | Grove I2C | ST25R3916（Unit NFC） | 读 / 写 13.56 MHz、NDEF / 历史卡模拟、历史 |
 | `5` / `g` | [GPS](./gps) | Grove UART | AT6668 GPS Unit | Live / 速度 / 星图 / 录制；G1/G2 切串口 |
 
 ## 快捷键
@@ -42,7 +42,7 @@
 
 ## 硬件接口
 
-Cardputer-ADV 对外有两路常用外设口。EX I2C 集合把它们放在同一个入口，但**协议不同，不能混插电源**。
+Cardputer-ADV 对外有两路常用外设口。Grove 集合把它们放在同一个入口，但**协议不同，不能混插电源**。
 
 ### 左侧 Grove（Ex_I2C）
 
@@ -202,7 +202,7 @@ bool isI2cScanHelpVisible();
 void resetI2cScanHelp();
 ```
 
-EX I2C 集合传入 `M5Cardputer.Ex_I2C, "ExI2", false`。Hardware Test 的 InI2 / ExI2 共用同一套函数。`drawI2cScanApp` 内部 `bus.scanID(found)`，随后 `silenceFmRadioOnBus(bus)`。
+Grove 集合传入 `M5Cardputer.Ex_I2C, "ExI2", false`。Hardware Test 的 InI2 / ExI2 共用同一套函数。`drawI2cScanApp` 内部 `bus.scanID(found)`，随后 `silenceFmRadioOnBus(bus)`。
 
 ### `app_cc1101`
 
@@ -364,7 +364,7 @@ g_radio.standby();
 
 ## 使用说明
 
-1. 主菜单按 `e` 打开 EX I2C。暖绿卡片：`1` RADIO、`2` EXI2、`3` CC1101、`4` NFC、`5` GPS。
+1. 主菜单按 `e` 打开 Grove。暖绿卡片：`1` RADIO、`2` EXI2、`3` CC1101、`4` NFC、`5` GPS。
 2. **收音机**：4 pin 成品板插左侧 Grove（G2=SDA、G1=SCL），耳机插模块孔。无芯片显示 `NO MOD`。操作见 [Radio](./radio)。
 3. **扫描**：插上外设后进 EXI2，或 Hardware Test `8`。`r` 再扫。扫 FM 地址可能短暂出声，扫完会 mute + standby。
 4. **CC1101**：3.3 V + EXT14 SPI。`r` 初始化，`t` 发测试包，`l` 听包，方向键改频率。

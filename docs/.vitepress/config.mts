@@ -221,7 +221,7 @@ export default defineConfig({
                 ],
               },
               {
-                text: 'EX I2C 外设',
+                text: 'Grove 外设',
                 link: '/apps/ex-i2c',
                 collapsed: false,
                 items: [
@@ -368,7 +368,7 @@ export default defineConfig({
                 ],
               },
               {
-                text: 'EX I2C',
+                text: 'Grove',
                 link: '/en/apps/ex-i2c',
                 collapsed: false,
                 items: [

@@ -62,6 +62,8 @@ static constexpr int APP_HELP_EDGE = 5; // 内容距屏幕边缘至少 5px
 static constexpr int APP_HELP_CONTENT_X = APP_HELP_EDGE;
 static constexpr int APP_HELP_MAX_LINES = 7;
 static constexpr int APP_HELP_SUBTITLE_GAP = 10; // 主标题与副标题间距
+static constexpr int APP_HELP_SECTION_PAD_TOP = 10;    // 内容副标题上方留白
+static constexpr int APP_HELP_SECTION_PAD_BOTTOM = 5; // 内容副标题下方留白
 // 全屏黑底 + size-2 "Help" + 可选浅色副标题，返回内容区起始 y
 int drawAppHelpBegin(const char* subtitle = nullptr);
 // 按键徽章 / 文本徽章 / 纯说明；徽章后恢复 APP_COLOR_HINT
@@ -71,8 +73,15 @@ int drawAppHelpText(int x, int y, const char* text);
 int drawAppHelpArrows(int x, int y, const char* text);
 // 整行着色（章节标题 / 警告等）
 int drawAppHelpTextColored(int x, int y, const char* text, uint16_t color);
-// 彩色标签 + 灰色说明（如 "CLIP" + " = too loud"）
+// 内容副标题：上 10px / 下 5px 留白
+int drawAppHelpSection(int x, int y, const char* text, uint16_t color);
+// 彩色标签（Font8x8C64）+ 灰色说明 Font0（如 "CLIP" + " = too loud"）
 int drawAppHelpLabelText(int x, int y, const char* label, uint16_t label_color, const char* text);
+// 彩色标签 + 灰色说明，全程 Font0（无特殊字体）
+int drawAppHelpLabelTextPlain(int x, int y, const char* label, uint16_t label_color,
+                              const char* text);
+// 两列表格：左列居中序号 1..n，右列功能名；返回下一行起始 y
+int drawAppHelpIndexTable(int x, int y, const char* const* names, int count);
 // 多页底栏：左箭头+页码，右 h close；单页仅 close
 void drawAppHelpFooter(int page, int page_count);
 // 行列表自动按 APP_HELP_MAX_LINES 分页；章节只是普通行，不强制换页

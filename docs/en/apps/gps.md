@@ -1,6 +1,6 @@
 # GPS
 
-Open from: main menu `e` → [EX I2C](./ex-i2c) `5` / `g`
+Open from: main menu `e` → [Grove](./ex-i2c) `5` / `g`
 
 Official **AT6668 GPS Unit** (NMEA 0183). Plug into the left Grove; firmware switches **G1/G2 to UART** (115200). On enter it `Ex_I2C.release()`s; on leave it restores I2C so Radio / NFC / scan keep working.
 
@@ -11,7 +11,6 @@ Official **AT6668 GPS Unit** (NMEA 0183). Plug into the left Grove; firmware swi
 <div class="shot-row">
 
 ![gps-live](/shots/app_exi2c_gps_live.png)
-![gps-nofix](/shots/app_exi2c_gps_nofix.png)
 ![gps-speed](/shots/app_exi2c_gps_speed.png)
 ![gps-sats](/shots/app_exi2c_gps_satellites.png)
 
@@ -48,7 +47,7 @@ Baud **115200**. Do not share the left Grove with Radio / NFC at the same time.
 | `1` | Live | Speed, lat/lon/alt, HDOP, sats, course, UTC |
 | `2` / `s` | Speed | Trip stats, 0–50 / 0–100, braking, peak g |
 | `3` | Satellites | GPS / BeiDou / GLONASS / Galileo / QZSS + PDOP/VDOP |
-| `4` | Sky plot | Sky map (heading-up) + SNR list |
+| `4` | Sky plot | Sky map (north-up) + SNR list |
 | `5` / `l` | History | Saved runs; `Enter` opens chart, `Bk` deletes |
 | `6` / `o` | Settings | Module rate 1 / 2 / 5 / 10 Hz (PCAS02, stored in NVS) |
 

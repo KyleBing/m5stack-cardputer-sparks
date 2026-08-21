@@ -10,6 +10,8 @@ void pollTimeAppBtnA();
 void handleTimeApp(const Keyboard_Class::KeysState& status);
 // Help 打开时 ESC/BtnGO 关闭 Help（等同按 h），不回主菜单
 bool closeRtcHelp();
+// 截图 slug：time_<mode>_<feature>（如 time_clock_help）
+void getRtcShotSlug(char* out, size_t out_len);
 // Uptime / Clock（含 big time）：可降频省电的纯时间显示
 bool isTimeClockLikeMode();
 // 无操作满 1 分钟后主循环可降到 1s 一拍

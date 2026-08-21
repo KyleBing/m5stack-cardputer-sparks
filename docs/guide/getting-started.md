@@ -25,7 +25,7 @@ Sparks 是跑在 [M5Stack Cardputer](https://docs.m5stack.com/en/core/Cardputer)
 | `i` | Inf | [Info](/apps/info) | `p` | Bat | [Battery](/apps/battery) | `c` | Cur | [Cursor](/apps/cursor) |
 | `a` | Cal | [Calendar](/apps/calendar) | `v` | Ver | [Version](/apps/version) | `j` | Mor | [Morse](/apps/morse) |
 | `x` | IR | [Infrared](/apps/infrared) | `k` | KB | [Keyboard](/apps/hid-keyboard) | `g` | Game | [Mini Games](/apps/mini-games) |
-| `h` | Test | [Hardware Test](/apps/hardware-test) | `e` | ExI2 | [EX I2C](/apps/ex-i2c) |  |  |  |
+| `h` | Test | [Hardware Test](/apps/hardware-test) | `e` | Grove | [Grove](/apps/ex-i2c) |  |  |  |
 
 菜单可翻页： 对应键盘上的上下左右 箭头键，无需按 **Fn** 。
 

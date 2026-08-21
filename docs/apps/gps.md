@@ -1,6 +1,6 @@
 # GPS 定位
 
-进入方式：主菜单 `e` → [EX I2C](./ex-i2c) `5` / `g`
+进入方式：主菜单 `e` → [Grove](./ex-i2c) `5` / `g`
 
 官方 **AT6668 GPS Unit**（NMEA 0183）。插左侧 Grove；固件把 **G1/G2 切成 UART**（115200），进入时会先 `Ex_I2C.release()`，离开再恢复 I2C，避免占住收音机 / NFC / 扫描。
 
@@ -11,7 +11,6 @@
 <div class="shot-row">
 
 ![gps-live](/shots/app_exi2c_gps_live.png)
-![gps-nofix](/shots/app_exi2c_gps_nofix.png)
 ![gps-speed](/shots/app_exi2c_gps_speed.png)
 ![gps-sats](/shots/app_exi2c_gps_satellites.png)
 
@@ -48,7 +47,7 @@
 | `1` | Live | 速度、经纬高、HDOP、星数、航向、UTC |
 | `2` / `s` | Speed | 行程统计、0–50 / 0–100、制动、峰值 g |
 | `3` | Satellites | GPS / BeiDou / GLONASS / Galileo / QZSS 可见星与 PDOP/VDOP |
-| `4` | Sky plot | 天空图（航向朝上）+ SNR 列表 |
+| `4` | Sky plot | 天空图（上北下南）+ SNR 列表 |
 | `5` / `l` | History | 已存行程；`Enter` 开曲线，`Bk` 删除 |
 | `6` / `o` | Settings | 模块刷新率 1 / 2 / 5 / 10 Hz（PCAS02，写入 NVS） |
 

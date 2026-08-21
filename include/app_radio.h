@@ -15,3 +15,5 @@ bool closeRadioHelp();
 bool closeRadioStations();
 // 取消正在进行的搜台 / 自动扫描
 bool closeRadioSeek();
+// 截图功能名：main / stations / rename / tuner / rds / help
+void getRadioShotFeature(char* out, size_t out_len);

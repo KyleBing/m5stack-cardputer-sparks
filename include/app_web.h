@@ -22,7 +22,7 @@ const char* getConfigWebApPass();
 const char* getConfigWebUrl();
 const char* getConfigWebStatus();
 
-// 当前界面短名（main 实现），截图文件为 app_<slug>_NNN.png
+// 当前截图 slug：组名_app名_功能名（如 exi2c_gps_live）
 const char* getCurrentAppShotSlug();
 
 // Config 全程无 header：禁止全局刷电池 / WiFi / BLE 图标
