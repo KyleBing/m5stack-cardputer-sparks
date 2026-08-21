@@ -19,7 +19,7 @@
 |------|------|
 | `Fn` + `s` | 将当前屏幕保存为 PNG |
 
-- 优先写入 TF 卡；否则写入 Flash LittleFS：`/shot/app_<界面>_NNN.png`
+- 优先写入 TF 卡；否则写入 Flash LittleFS：`/shot/<组>_<app>_<功能>.png`（如 `exi2c_gps_live.png`；重名加 `_002`）
 - 空间不足时**不删除**已有截图，仅提示 `no space for shot`
 - 成功后屏幕反色闪一下；提示音由 Options → Sound → `screenshot`（`sound.screenshot`）控制
 - 在 [Config](/apps/config) Web 的 `/shots` 可预览、单张下载 / 删除、清空 TF / Flash

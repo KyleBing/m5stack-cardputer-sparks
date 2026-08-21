@@ -4,17 +4,17 @@ Main menu key: `e`
 
 External-module shelf: **I2C** on the left Grove (FM radio, bus scan) and **SPI** on the rear EXT14 header (CC1101). Up to 8 cards per page; number keys restart at `1` on the current page; letter shortcuts work **from any page**. `ESC` / `GO` returns a child to this shelf; press again on the shelf to return to the main menu.
 
-This page covers **wiring, behavior, and source APIs** for chips the firmware already drives. Radio UI details: [Radio](./radio). Scan UI: [I2C Scan](./i2c).
+This page covers **wiring, behavior, and source APIs** for chips the firmware already drives. Radio: [Radio](./radio). NFC: [NFC](./nfc). GPS: [GPS](./gps). Scan: [I2C Scan](./i2c).
 
 ## Screenshots
 
-**Shelf / radio / external scan**
+**Shelf / radio / GPS Live**
 
 <div class="shot-row">
 
 ![exi2c-hub](/shots/app_exi2c_001.png)
 ![radio-playing](/shots/app_radio_playing.png)
-![i2c-ex](/shots/app_hardware_exi2.png)
+![gps-live](/shots/app_exi2c_gps_live.png)
 
 </div>
 
@@ -23,15 +23,17 @@ This page covers **wiring, behavior, and source APIs** for chips the firmware al
 | Key | Child | Bus | Chip | Role |
 |-----|-------|-----|------|------|
 | `1` / `r` | [RADIO](./radio) | Grove I2C | TEA5767 / RDA5807M | FM, seek, station list; RDA also has volume / RDS |
-| `2` / `i` | [EXI2](./i2c) | Grove I2C | any ACK | List addresses with a likely chip name and role |
+| `2` / `e` | [EXI2](./i2c) | Grove I2C | any ACK | List addresses with a likely chip name and role |
 | `3` / `c` | CC1101 | EXT14 SPI | CC1101 | 433 MHz TX/RX test, RSSI, tune |
+| `4` / `n` | [NFC](./nfc) | Grove I2C | ST25R3916 (Unit NFC) | Read / write 13.56 MHz, NDEF emulate, history |
+| `5` / `g` | [GPS](./gps) | Grove UART | AT6668 GPS Unit | Live / speed / sky / record; G1/G2 as UART |
 
 ## Shortcuts
 
 | Key | Action |
 |-----|--------|
 | `1`–`8` | Open the child on the current page |
-| `r` / `i` / `c` | Jump to RADIO / EXI2 / CC1101 |
+| `r` / `e` / `c` / `n` / `g` | Jump to RADIO / EXI2 / CC1101 / NFC / GPS |
 | `[` `]` / arrows | Flip the shelf (when there are more than 8 items) |
 | `ESC` / `GO` | Child → shelf → main menu |
 | `h` | Help inside a child (the shelf has none) |
@@ -167,13 +169,13 @@ void leaveExI2cApp();
 void updateExI2cApp();
 void handleExI2cApp(const Keyboard_Class::KeysState& status);
 bool handleExI2cBack();          // child → hub; false if already on hub
-bool closeExI2cHelp();           // delegates Radio / scan / CC1101 Help
+bool closeExI2cHelp();           // delegates Radio / scan / CC1101 / NFC / GPS Help
 bool isExI2cHelpVisible();
 bool isExI2cRadioActive();       // screenshot slug
 bool isExI2cCc1101Active();
 ```
 
-`main.cpp` calls `handleExI2cBack()` before leaving for the main menu. Leaving the shelf stops Radio, mutes any FM on the bus, and stands by CC1101.
+`main.cpp` calls `handleExI2cBack()` before leaving for the main menu. Leaving the shelf stops Radio, mutes any FM on the bus, and stands by CC1101 / NFC / GPS.
 
 ### `app_radio`
 
@@ -362,8 +364,10 @@ See `api/M5Unified.md` (I2C_Class) in the repo for the lower-level list.
 
 ## Usage
 
-1. Main menu `e` opens EX I2C. Warm-green cards: `1` RADIO, `2` EXI2, `3` CC1101.
+1. Main menu `e` opens EX I2C. Warm-green cards: `1` RADIO, `2` EXI2, `3` CC1101, `4` NFC, `5` GPS.
 2. **Radio**: plug a ready-made 4-pin board into the left Grove (G2=SDA, G1=SCL); headphones into the module jack. No chip → `NO MOD`. Keys: [Radio](./radio).
 3. **Scan**: open EXI2 after plugging a device, or Hardware Test `8`. `r` rescans. Probing FM addresses may briefly unmute; the App mutes and standbys afterwards.
 4. **CC1101**: 3.3 V + EXT14 SPI. `r` init, `t` ping, `l` listen, arrows change frequency.
-5. Leaving a child or the whole shelf standbys FM / CC1101 so they do not hiss or stay on air.
+5. **NFC**: Unit NFC (ST25R3916) on the left Grove. See [NFC](./nfc).
+6. **GPS**: AT6668 Unit on the left Grove; the App switches G1/G2 to UART. See [GPS](./gps).
+7. Leaving a child or the whole shelf stops FM / CC1101 / NFC / GPS so ports are not left busy.

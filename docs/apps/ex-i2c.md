@@ -4,17 +4,17 @@
 
 外接模块集合：左侧 Grove 的 **I2C**（收音机、总线扫描）与背面 EXT14 的 **SPI**（CC1101）。选择页每页最多 8 项；数字键按当前页从 `1` 编号，字母快捷键**不依赖当前页**即可直达。子应用中 `ESC` / `GO` 回到本集合；在选择页再按一次返回主菜单。
 
-本页说明固件里**已经落地的芯片接线、功能，以及源码 API**。收音机操作细节见 [Radio](./radio)；总线扫描界面见 [I2C 扫描](./i2c)。
+本页说明固件里**已经落地的芯片接线、功能，以及源码 API**。收音机见 [Radio](./radio)；NFC 见 [NFC](./nfc)；GPS 见 [GPS](./gps)；总线扫描见 [I2C 扫描](./i2c)。
 
 ## 截图
 
-**选择页 / 收音机 / 外部扫描**
+**选择页 / 收音机 / GPS Live**
 
 <div class="shot-row">
 
 ![exi2c-hub](/shots/app_exi2c_001.png)
 ![radio-playing](/shots/app_radio_playing.png)
-![i2c-ex](/shots/app_hardware_exi2.png)
+![gps-live](/shots/app_exi2c_gps_live.png)
 
 </div>
 
@@ -23,15 +23,17 @@
 | 按键 | 子应用 | 总线 | 芯片 | 功能 |
 |------|--------|------|------|------|
 | `1` / `r` | [RADIO](./radio) | Grove I2C | TEA5767 / RDA5807M | FM 收音、搜台、电台列表；RDA 另有音量 / RDS |
-| `2` / `i` | [EXI2](./i2c) | Grove I2C | 扫描到的任意地址 | 列地址、猜测芯片名与用途 |
+| `2` / `e` | [EXI2](./i2c) | Grove I2C | 扫描到的任意地址 | 列地址、猜测芯片名与用途 |
 | `3` / `c` | CC1101 | EXT14 SPI | CC1101 | 433 MHz 收发测试、RSSI、调频 |
+| `4` / `n` | [NFC](./nfc) | Grove I2C | ST25R3916（Unit NFC） | 读 / 写 13.56 MHz、NDEF 模拟、历史 |
+| `5` / `g` | [GPS](./gps) | Grove UART | AT6668 GPS Unit | Live / 速度 / 星图 / 录制；G1/G2 切串口 |
 
 ## 快捷键
 
 | 按键 | 作用 |
 |------|------|
 | `1`–`8` | 进入当前页对应子应用 |
-| `r` / `i` / `c` | 直达 RADIO / EXI2 / CC1101 |
+| `r` / `e` / `c` / `n` / `g` | 直达 RADIO / EXI2 / CC1101 / NFC / GPS |
 | `[` `]` / 方向键 | 选择页翻页（超过 8 项时） |
 | `ESC` / `GO` | 子应用 → 选择页 → 主菜单 |
 | `h` | 子应用内 Help（选择页无 Help） |
@@ -167,13 +169,13 @@ void leaveExI2cApp();
 void updateExI2cApp();
 void handleExI2cApp(const Keyboard_Class::KeysState& status);
 bool handleExI2cBack();          // 子应用内回 hub；已在 hub 返回 false
-bool closeExI2cHelp();           // Radio / 扫描 / CC1101 的 Help 委托
+bool closeExI2cHelp();           // Radio / 扫描 / CC1101 / NFC / GPS Help 委托
 bool isExI2cHelpVisible();
 bool isExI2cRadioActive();       // 截图 slug
 bool isExI2cCc1101Active();
 ```
 
-`handleExI2cBack()` 在 `main.cpp` 里先于回主菜单调用。离开集合时会停 Radio / 静音总线上的 FM / 停 CC1101。
+`handleExI2cBack()` 在 `main.cpp` 里先于回主菜单调用。离开集合时会停 Radio / 静音总线上的 FM / 停 CC1101 / 停 NFC / 停 GPS。
 
 ### `app_radio`
 
@@ -362,8 +364,10 @@ g_radio.standby();
 
 ## 使用说明
 
-1. 主菜单按 `e` 打开 EX I2C。暖绿卡片：`1` RADIO、`2` EXI2、`3` CC1101。
+1. 主菜单按 `e` 打开 EX I2C。暖绿卡片：`1` RADIO、`2` EXI2、`3` CC1101、`4` NFC、`5` GPS。
 2. **收音机**：4 pin 成品板插左侧 Grove（G2=SDA、G1=SCL），耳机插模块孔。无芯片显示 `NO MOD`。操作见 [Radio](./radio)。
 3. **扫描**：插上外设后进 EXI2，或 Hardware Test `8`。`r` 再扫。扫 FM 地址可能短暂出声，扫完会 mute + standby。
 4. **CC1101**：3.3 V + EXT14 SPI。`r` 初始化，`t` 发测试包，`l` 听包，方向键改频率。
-5. 退出子应用或整个集合时，FM / CC1101 会 standby，避免嘶声和占空。
+5. **NFC**：Unit NFC（ST25R3916）插左侧 Grove。见 [NFC](./nfc)。
+6. **GPS**：AT6668 Unit 插左侧 Grove；App 把 G1/G2 切成 UART。见 [GPS](./gps)。
+7. 退出子应用或整个集合时，FM / CC1101 / NFC / GPS 会停总线或 standby，避免占口。

@@ -134,6 +134,38 @@ Device captures (`Fn+s`), sorted by filename.
 <img src="/shots/app_exi2c_001.png" alt="app_exi2c_001.png" />
 <figcaption>app_exi2c_001.png</figcaption>
 </figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_gps_chart.png" alt="app_exi2c_gps_chart.png" />
+<figcaption>app_exi2c_gps_chart.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_gps_history.png" alt="app_exi2c_gps_history.png" />
+<figcaption>app_exi2c_gps_history.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_gps_live.png" alt="app_exi2c_gps_live.png" />
+<figcaption>app_exi2c_gps_live.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_gps_nofix.png" alt="app_exi2c_gps_nofix.png" />
+<figcaption>app_exi2c_gps_nofix.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_gps_satellites.png" alt="app_exi2c_gps_satellites.png" />
+<figcaption>app_exi2c_gps_satellites.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_gps_settings.png" alt="app_exi2c_gps_settings.png" />
+<figcaption>app_exi2c_gps_settings.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_gps_sky.png" alt="app_exi2c_gps_sky.png" />
+<figcaption>app_exi2c_gps_sky.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_gps_speed.png" alt="app_exi2c_gps_speed.png" />
+<figcaption>app_exi2c_gps_speed.png</figcaption>
+</figure>
 
 <figure class="shot-item">
 <img src="/shots/app_games_chaos.png" alt="app_games_chaos.png" />

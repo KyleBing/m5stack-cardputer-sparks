@@ -45,8 +45,10 @@ app_{app}_{子功能}.png
 - app_morse_001.png
 - app_mic_001.png / app_mic_002.png
 
-### Radio
+### Radio / EX I2C GPS
 - app_radio_playing.png / app_radio_no_module.png / app_radio_station_list.png
+- app_exi2c_gps_live.png / app_exi2c_gps_nofix.png / app_exi2c_gps_speed.png / app_exi2c_gps_satellites.png
+- app_exi2c_gps_sky.png / app_exi2c_gps_history.png / app_exi2c_gps_chart.png / app_exi2c_gps_settings.png
 
 ### HID / IR
 - app_hidkeyboard_main.png / app_hidkeyboard_usb_mode.png / app_hidkeyboard_mouse_mode.png

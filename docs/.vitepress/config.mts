@@ -226,6 +226,8 @@ export default defineConfig({
                 collapsed: false,
                 items: [
                   { text: 'Radio 收音机', link: '/apps/radio' },
+                  { text: 'NFC', link: '/apps/nfc' },
+                  { text: 'GPS', link: '/apps/gps' },
                 ],
               },
             ],
@@ -371,6 +373,8 @@ export default defineConfig({
                 collapsed: false,
                 items: [
                   { text: 'Radio', link: '/en/apps/radio' },
+                  { text: 'NFC', link: '/en/apps/nfc' },
+                  { text: 'GPS', link: '/en/apps/gps' },
                 ],
               },
             ],

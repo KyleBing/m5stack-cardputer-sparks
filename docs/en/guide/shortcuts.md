@@ -19,7 +19,7 @@ Most screens share the keys below. Each App may also have its own shortcuts — 
 |-----|--------|
 | `Fn` + `s` | Save the current screen as PNG |
 
-- Prefer TF card; otherwise Flash LittleFS: `/shot/app_<screen>_NNN.png`
+- Prefer TF card; otherwise Flash LittleFS: `/shot/<group>_<app>_<feature>.png` (e.g. `exi2c_gps_live.png`; duplicates get `_002`)
 - When space is low, existing shots are **not** deleted; the device shows `no space for shot`
 - On success the screen flashes once (invert); beep is controlled by Options → Sound → `screenshot` (`sound.screenshot`)
 - Preview, download, delete one, or clear TF / Flash shots at `/shots` in [Config](/en/apps/config) Web

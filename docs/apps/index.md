@@ -81,12 +81,12 @@
 |----|-----|------|
 | `g` | [Mini Games](./mini-games) | [硬币](./coin-toss)、[双摆](./double-pendulum)、[抽奖轮](./prize-wheel)、[Dice](./dice)、[牛顿摆](./newton-cradle)、[Neon FX](./neon-fx)、[曲线](./curves)、[扫雷](./minesweeper)、[贪吃蛇](./snake)、[生命游戏](./conway-life)、[代码雨](./matrix)、[丝波](./wave)、[粒子时钟](./particle-clock)、[利萨茹](./lissa) |
 | `h` | [Hardware Test](./hardware-test) | [Display](./display)、[IMU](./imu)、[Font](./font)、[Icons](./icons)、[LED](./rgb-led)、[BLE](./ble)、[I2C](./i2c)、第 2 页 [Mic](./mic) |
-| `e` | [EX I2C](./ex-i2c) | [Radio](./radio)（TEA5767 / RDA5807M）、ExI2 扫描、CC1101 433 MHz |
+| `e` | [EX I2C](./ex-i2c) | [Radio](./radio)、[NFC](./nfc)、[GPS](./gps)、ExI2 扫描、CC1101 |
 
 <div class="shot-row">
 
 ![exi2c-hub](/shots/app_exi2c_001.png)
 ![radio-playing](/shots/app_radio_playing.png)
-![radio-no-module](/shots/app_radio_no_module.png)
+![gps-live](/shots/app_exi2c_gps_live.png)
 
 </div>
