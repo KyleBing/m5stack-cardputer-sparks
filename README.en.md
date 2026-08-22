@@ -2,7 +2,7 @@
 
 [中文](./README.md) | **English**
 
-Personal firmware for Cardputer-ADV (**v1.12**), focused on Mi Home control, IR / AC automation, and Cursor usage info.
+Personal firmware for Cardputer-ADV (**v1.13**), focused on Mi Home control, IR / AC automation, and Cursor usage info.
 
 _The firmware UI is entirely in English, with many abbreviations — a solid English foundation helps a lot._
 
@@ -69,7 +69,7 @@ Cardputer-ADV (StampS3) has **8 MB** on-chip Flash. The partition table is `part
 
 Flash offsets match Release notes: firmware `0x10000`, filesystem `0x340000`, full image `0x0`.
 
-### Current usage (v1.12 local build, approximate)
+### Current usage (v1.13 local build, approximate)
 
 | Item | Used | Partition | Usage |
 |------|------|-----------|-------|

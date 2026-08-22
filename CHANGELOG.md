@@ -6,7 +6,7 @@
 
 ---
 
-## 2026-08-22
+## 2026-08-22 — v1.13
 
 ### 新增
 
@@ -23,6 +23,7 @@
 - **NFC 读卡 UI**：状态图标、USR/BLOCK/NDEF 排版与 dump；History / Detail / Write / Emulate 截图补齐
 - **进度条**：`drawPercentBar` / `drawPercentBarV` 先画整条边框再填充，避免半填充时边框断裂
 - **文档**：GPS / NFC / Grove / 截图总览中英同步；设备实拍 `app_exi2c_*` 更新
+- **版本**：固件 / M5Burner / README 统一为 **v1.13**（`APP_VERSION` / `m5burner.json`）；`APP_UPDATE_TIME` → `2026.08.22`
 
 ---
 
