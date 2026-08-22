@@ -158,6 +158,12 @@ void leaveExI2cApp() {
     g_mode = ExI2cMode::HUB;
 }
 
+void pollExI2cBtnA() {
+    if (g_mode == ExI2cMode::RADIO) {
+        pollRadioBtnA();
+    }
+}
+
 void updateExI2cApp() {
     if (g_mode == ExI2cMode::RADIO) {
         updateRadioApp();

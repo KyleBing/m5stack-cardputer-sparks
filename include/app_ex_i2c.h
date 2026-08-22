@@ -7,6 +7,8 @@ void enterExI2cApp();
 void leaveExI2cApp();
 void updateExI2cApp();
 void handleExI2cApp(const Keyboard_Class::KeysState& status);
+// Radio 等子项的侧键轮询（BtnA 边沿仅当帧有效）
+void pollExI2cBtnA();
 // 子 app 中 ESC/BtnGO 回 hub；已在 hub 时返回 false 交给主菜单。
 bool handleExI2cBack();
 // Help 打开时关闭并重绘；Radio / CC1101 子项委托对应 close*。

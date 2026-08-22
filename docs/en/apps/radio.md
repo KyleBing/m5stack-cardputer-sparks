@@ -63,10 +63,13 @@ Full list: `h` Help (multi-page).
 | `[` `]` | Previous / next saved station |
 | `a` | Auto scan and save |
 | `m` / `o` | Mute / force mono |
+| `s` / **BtnA** | Blank screen; any key or BtnA wakes |
 | `l` | Station list |
 | `t` | Open / close Tuner |
 | `i` | RDS info (RDA only) |
 | `1`–`0` | Jump to station slot |
+
+On the main screen, **30s** idle auto-blanks (audio keeps playing). Help / list / Tuner / seek do not auto-blank.
 
 In the list: arrows select, `Enter` tunes and exits, `r` rename, `n` add current freq, `d` / Backspace delete, `c` clear all and save, `p` pin to top.
 

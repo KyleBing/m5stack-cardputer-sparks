@@ -3428,6 +3428,8 @@ void loop() {
     } else if (currentState == AppState::DICE) {
         updateDiceApp();
     } else if (currentState == AppState::EX_I2C_APPS) {
+        // BtnA 边沿只在当帧有效，需每帧轮询（Radio 灭屏等）
+        pollExI2cBtnA();
         updateExI2cApp();
     } else if (currentState == AppState::NEWTON_CRADLE) {
         pollNewtonCradleBtnA();

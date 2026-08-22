@@ -7,6 +7,7 @@
 #include "app_ir.h"
 #include "app_mijia.h"
 #include "app_mijia_ui.h"
+#include "app_radio.h"
 #include "app_web.h"
 #include "M5Cardputer.h"
 #include <cstring>
@@ -299,7 +300,7 @@ bool isAppHeaderStatusRefreshEnabled() {
     }
     // 同 app 内临时全屏（Help 外遥控 / 快捷键编辑 / Config UI / 灭屏等）
     if (hidKeyboardSuppressesHeader() || mijiaAppSuppressesHeader() || webAppSuppressesHeader() ||
-        irAppSuppressesHeader() || isCursorDisplayBlanked()) {
+        irAppSuppressesHeader() || isCursorDisplayBlanked() || isRadioDisplayBlanked()) {
         return false;
     }
     return true;

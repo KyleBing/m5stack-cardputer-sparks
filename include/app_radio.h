@@ -8,6 +8,9 @@ void leaveRadioApp();
 void silenceFmRadioOnBus(m5::I2C_Class& bus);
 void updateRadioApp();
 void handleRadioApp(const Keyboard_Class::KeysState& status);
+// 侧边 BtnA：亮屏灭屏 / 灭屏亮屏（边沿仅当帧有效）
+void pollRadioBtnA();
+bool isRadioDisplayBlanked();
 
 bool isRadioHelpVisible();
 bool closeRadioHelp();

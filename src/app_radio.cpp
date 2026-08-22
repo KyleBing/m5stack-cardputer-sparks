@@ -118,6 +118,8 @@ static constexpr uint32_t RADIO_SEEK_SETTLE_MS = 60;
 static constexpr uint32_t RADIO_RDA_SEEK_SETTLE_MS = 120; // RDA 需更久才稳 FM_TRUE/RSSI
 static constexpr uint32_t RADIO_RSSI_POLL_MS = 250; // 空闲信号刷新周期（kick + 60ms settle）
 static constexpr uint32_t RADIO_HW_SEEK_TIMEOUT_MS = 8000;
+static constexpr uint32_t RADIO_BLANK_IDLE_MS = 30000; // 主界面无操作后灭屏
+static constexpr uint32_t RADIO_BLANK_LOOP_MS = 150;   // 灭屏后降频轮询按键
 static bool g_japan = false;
 static bool g_deemph75 = false;
 static bool g_hw_seek_pref = false; // false=软件步进，true=芯片 SM
@@ -158,6 +160,9 @@ static RadioRepeatKind g_repeat_kind = RadioRepeatKind::None;
 static int8_t g_tune_repeat_dir = 0;
 static uint32_t g_tune_repeat_since_ms = 0;
 static uint32_t g_tune_repeat_last_ms = 0;
+static bool g_display_blanked = false;
+static uint8_t g_saved_brightness = 30;
+static uint32_t g_last_input_ms = 0;
 static constexpr uint32_t RADIO_TUNE_REPEAT_DELAY_MS = 320;
 static constexpr uint32_t RADIO_TUNE_REPEAT_RATE_MS = 90;
 
@@ -1457,7 +1462,7 @@ static void drawRadioChrome() {
     drawRadioMain();
 }
 
-static constexpr int RADIO_HELP_LINE_CAP = 32;
+static constexpr int RADIO_HELP_LINE_CAP = 40;
 static AppHelpLine g_help_lines[RADIO_HELP_LINE_CAP];
 
 static void addRadioHelpLine(AppHelpLine* lines, int& n, const AppHelpLine& line) {
@@ -1519,6 +1524,9 @@ static int fillRadioHelpLines(AppHelpLine* lines) {
             addRadioHelpLine(lines, n, appHelpKey('a', "auto scan + save"));
             addRadioHelpLine(lines, n, appHelpBadge("m o", "mute / mono"));
             addRadioHelpLine(lines, n, appHelpBadge("l t", "stations / tuner"));
+            addRadioHelpLine(lines, n, appHelpKey('s', "blank screen"));
+            addRadioHelpLine(lines, n, appHelpBadge("BtnA", "blank / wake"));
+            addRadioHelpLine(lines, n, appHelpText("Auto blank after 30s idle; any key wakes"));
             addRadioHelpLine(lines, n, appHelpTextColored("Badges", APP_COLOR_LABEL));
             addRadioHelpLine(lines, n, appHelpLabelText("ST", APP_COLOR_LABEL, " = stereo signal"));
             addRadioHelpLine(lines, n,
@@ -2604,6 +2612,44 @@ static void restoreAfterHelp() {
     drawRadioChrome();
 }
 
+static void noteRadioActivity() {
+    g_last_input_ms = millis();
+}
+
+static void blankRadioDisplay() {
+    if (g_display_blanked) {
+        return;
+    }
+    g_saved_brightness = M5Cardputer.Display.getBrightness();
+    if (g_saved_brightness == 0) {
+        g_saved_brightness = 30;
+    }
+    M5Cardputer.Display.sleep();
+    M5Cardputer.Display.waitDisplay();
+    M5Cardputer.Display.setBrightness(0);
+    g_display_blanked = true;
+}
+
+static void wakeRadioDisplay(const bool redraw) {
+    if (!g_display_blanked) {
+        return;
+    }
+    M5Cardputer.Display.wakeup();
+    M5Cardputer.Display.setBrightness(g_saved_brightness);
+    g_display_blanked = false;
+    noteRadioActivity();
+    if (redraw) {
+        g_bat_drawn = false;
+        M5Cardputer.Display.fillScreen(BLACK);
+        drawRadioChrome();
+    }
+}
+
+static bool radioCanAutoBlank() {
+    return g_ready && !g_display_blanked && g_view == RadioView::Main &&
+           g_help_kind == RadioHelpKind::None && !g_seeking && g_tune_repeat_dir == 0;
+}
+
 static void openRadioHelp(const RadioHelpKind kind) {
     g_help_kind = kind;
     g_help_page = 0;
@@ -2621,6 +2667,7 @@ void enterRadioApp() {
     g_seeking = false;
     g_auto_scanning = false;
     g_seek_hw = false;
+    g_display_blanked = false;
     g_freq = 9850;
     g_rssi = 0;
     g_if_counter = 0;
@@ -2642,6 +2689,7 @@ void enterRadioApp() {
     g_rssi_kick_ms = 0;
     g_rds_poll_ms = 0;
     g_rda_volume_dirty = false;
+    noteRadioActivity();
 
     loadTunerSettings(); // 先读频段，再装电台
     loadRadioPresets();
@@ -2686,6 +2734,9 @@ void silenceFmRadioOnBus(m5::I2C_Class& bus) {
 }
 
 void leaveRadioApp() {
+    if (g_display_blanked) {
+        wakeRadioDisplay(false);
+    }
     g_help_kind = RadioHelpKind::None;
     g_view = RadioView::Main;
     g_rename_buf[0] = '\0';
@@ -2789,11 +2840,19 @@ bool closeRadioSeek() {
 }
 
 void updateRadioApp() {
+    if (g_display_blanked) {
+        delay(RADIO_BLANK_LOOP_MS);
+        return;
+    }
     if (g_help_kind != RadioHelpKind::None) {
         return;
     }
 
     const uint32_t now = millis();
+    if (radioCanAutoBlank() && (now - g_last_input_ms) >= RADIO_BLANK_IDLE_MS) {
+        blankRadioDisplay();
+        return;
+    }
     if (g_view == RadioView::Rds) {
         if (g_ready && g_radio.isRda() && g_rda_rds && now - g_rds_poll_ms >= 100) {
             g_rds_poll_ms = now;
@@ -2897,6 +2956,13 @@ void updateRadioApp() {
 }
 
 void handleRadioApp(const Keyboard_Class::KeysState& status) {
+    // 息屏：任意键只亮屏，本帧不执行功能
+    if (g_display_blanked) {
+        wakeRadioDisplay(true);
+        return;
+    }
+    noteRadioActivity();
+
     const String key = getPressedKey();
 
     // 重命名时 h 当作普通字符；其余界面 h 开/关对应 Help
@@ -2964,6 +3030,10 @@ void handleRadioApp(const Keyboard_Class::KeysState& status) {
         return;
     }
 
+    if (key == "s" || key == "S") {
+        blankRadioDisplay();
+        return;
+    }
     if (key == "l" || key == "L") {
         openStationsList();
         return;
@@ -3048,4 +3118,23 @@ void handleRadioApp(const Keyboard_Class::KeysState& status) {
     } else if (seek_delta > 0) {
         beginSeek(true);
     }
+}
+
+void pollRadioBtnA() {
+    if (!M5Cardputer.BtnA.wasPressed()) {
+        return;
+    }
+    noteRadioActivity();
+    if (g_display_blanked) {
+        wakeRadioDisplay(true);
+        return;
+    }
+    // 亮屏时手动熄屏（与 S 相同）；仅主界面
+    if (g_view == RadioView::Main && g_help_kind == RadioHelpKind::None && !g_seeking) {
+        blankRadioDisplay();
+    }
+}
+
+bool isRadioDisplayBlanked() {
+    return g_display_blanked;
 }
