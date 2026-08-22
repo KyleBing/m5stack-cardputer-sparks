@@ -9,9 +9,11 @@
 #include <LittleFS.h>
 #include <Preferences.h>
 #include <cmath>
+#include <cstdarg>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -19,13 +21,23 @@
 
 namespace {
 
-// Unit GPS v1.1 / Unit GPS SMA：黄线 RX 接主机 TX(G2)，白线 TX 接主机 RX(G1)。
-static constexpr int GPS_RX_PIN = 1;
-static constexpr int GPS_TX_PIN = 2;
+// Grove Unit GPS：黄线 RX → 主机 TX(G2)，白线 TX → 主机 RX(G1)。
+static constexpr int GPS_GROVE_RX_PIN = 1;
+static constexpr int GPS_GROVE_TX_PIN = 2;
+// Cap LoRa-1262 GNSS（Cardputer-Adv）：官方示例 Serial1 RX=G15 TX=G13。
+static constexpr int GPS_CAP_RX_PIN = 15;
+static constexpr int GPS_CAP_TX_PIN = 13;
 static constexpr uint32_t GPS_BAUD = 115200;
+static constexpr uint32_t GPS_PROBE_MS = 1000;
 static constexpr uint32_t GPS_STALE_MS = 2500;
+
+enum class GpsSource : uint8_t {
+    None = 0,
+    Grove,
+    Cap,
+};
 static constexpr uint32_t GPS_LOG_MS = 1000;
-static constexpr int GPS_HISTORY_MAX = 12;
+static constexpr int GPS_HISTORY_MAX = GPS_HISTORY_CAPACITY;
 static constexpr int GPS_HISTORY_PAD = 2;
 static constexpr int GPS_HISTORY_ROW_H = 8 + GPS_HISTORY_PAD * 2;
 static constexpr int GPS_HISTORY_VISIBLE = 7;
@@ -43,6 +55,9 @@ static constexpr const char* GPS_INDEX_PATH = "/gps_index.bin";
 static constexpr const char* GPS_PREFS_NS = "gps";
 static constexpr const char* GPS_PREFS_RATE_HZ = "rate_hz";
 static constexpr int GPS_SAT_MAX = 64;
+// NMEA GSV SNR is C/N0 in dB-Hz (0..99). Consumer sky-view bars commonly
+// treat ~50 dB-Hz as full scale (outdoor strong); values above still clamp to 100%.
+static constexpr int GPS_SNR_BAR_FULL_DB = 50;
 static constexpr int GPS_SKY_R = 46;
 static constexpr uint32_t GPS_SAT_STALE_MS = 3500;
 
@@ -75,6 +90,9 @@ enum class ChartMetric : uint8_t {
     Speed = 0,
     Altitude,
     Accel,
+    Combined, // Speed + Alt + Accel overlay
+    Map,      // lat/lon route
+    Count,
 };
 
 enum GnssMask : uint8_t {
@@ -254,6 +272,8 @@ static GpsPage g_page = GpsPage::Live;
 static GpsPage g_page_before_help = GpsPage::Live;
 static GpsPage g_page_before_settings = GpsPage::Live;
 static ChartMetric g_chart_metric = ChartMetric::Speed;
+static GpsSource g_source = GpsSource::None;
+static bool g_grove_i2c_released = false;
 static bool g_recording = false;
 static bool g_history_loaded = false;
 static bool g_imu_ok = false;
@@ -357,6 +377,71 @@ static void applyGpsUpdateRate() {
     char cmd[40];
     snprintf(cmd, sizeof(cmd), "$%s*%02X\r\n", body, nmeaChecksum(body));
     g_gps_serial.print(cmd);
+}
+
+static const char* gpsSourceLabel() {
+    switch (g_source) {
+        case GpsSource::Grove:
+            return "Grove G1/G2";
+        case GpsSource::Cap:
+            return "Cap LoRa G15/G13";
+        case GpsSource::None:
+        default:
+            return "none";
+    }
+}
+
+static void closeGpsSerial() {
+    g_gps_serial.end();
+    if (g_grove_i2c_released) {
+        M5Cardputer.Ex_I2C.begin();
+        g_grove_i2c_released = false;
+    }
+    g_source = GpsSource::None;
+}
+
+static void openGpsUart(const int rx_pin, const int tx_pin) {
+    g_gps_serial.end();
+    delay(20);
+    g_gps_serial.begin(GPS_BAUD, SERIAL_8N1, rx_pin, tx_pin);
+    while (g_gps_serial.available() > 0) {
+        (void)g_gps_serial.read();
+    }
+}
+
+// 等一段 NMEA 起始 '$'；AT6668 无星时也会持续吐句，约 1 Hz。
+static bool probeGpsUart(const int rx_pin, const int tx_pin) {
+    openGpsUart(rx_pin, tx_pin);
+    const uint32_t deadline = millis() + GPS_PROBE_MS;
+    while (millis() < deadline) {
+        while (g_gps_serial.available() > 0) {
+            if (static_cast<char>(g_gps_serial.read()) == '$') {
+                return true;
+            }
+        }
+        delay(5);
+    }
+    return false;
+}
+
+static bool detectGpsSource() {
+    closeGpsSerial();
+    // Cap 不占 Grove I2C，优先探测，便于 Adv + Cap 时继续用 Radio / NFC。
+    if (probeGpsUart(GPS_CAP_RX_PIN, GPS_CAP_TX_PIN)) {
+        g_source = GpsSource::Cap;
+        g_grove_i2c_released = false;
+        return true;
+    }
+    g_gps_serial.end();
+    M5Cardputer.Ex_I2C.release();
+    g_grove_i2c_released = true;
+    if (probeGpsUart(GPS_GROVE_RX_PIN, GPS_GROVE_TX_PIN)) {
+        g_source = GpsSource::Grove;
+        return true;
+    }
+    // 未探测到仍保持 Grove 监听，慢启动模块稍后仍可能出 NMEA。
+    g_source = GpsSource::None;
+    return false;
 }
 
 static void setGpsUpdateRate(const int hz) {
@@ -752,6 +837,9 @@ static uint32_t satsSkyFingerprint() {
 }
 
 static void parseNmeaLine(char* line) {
+    if (g_source == GpsSource::None && g_grove_i2c_released) {
+        g_source = GpsSource::Grove;
+    }
     if (line[0] != '$') {
         return;
     }
@@ -1411,7 +1499,8 @@ static void drawSatellitesSky(const bool full) {
             d.setTextColor(APP_COLOR_VALUE, BLACK);
             d.setCursor(list_x + 36, ry);
             d.print(snr_buf);
-            const int bar_pct = sat.snr > 0 ? min(100, static_cast<int>(sat.snr)) : 0;
+            const int bar_pct =
+                sat.snr > 0 ? min(100, static_cast<int>(sat.snr) * 100 / GPS_SNR_BAR_FULL_DB) : 0;
             const int bar_w = min(42, d.width() - pad - (list_x + 54));
             if (bar_w >= 8) {
                 drawPercentBar(list_x + 54, ry + 1, bar_w, 5, bar_pct, satSystemColor(sat.system));
@@ -1612,24 +1701,32 @@ static void drawHistory() {
                      GPS_HISTORY_VISIBLE, first);
 }
 
-static float chartSampleValue(const RunSample& sample) {
-    if (g_chart_metric == ChartMetric::Altitude) {
-        return sample.altitude_d10 / 10.0f;
+static const char* chartMetricName() {
+    switch (g_chart_metric) {
+        case ChartMetric::Altitude:
+            return "Alt m";
+        case ChartMetric::Accel:
+            return "Acc g";
+        case ChartMetric::Combined:
+            return "All";
+        case ChartMetric::Map:
+            return "Map";
+        case ChartMetric::Speed:
+        default:
+            return "Speed km/h";
     }
-    if (g_chart_metric == ChartMetric::Accel) {
-        return sample.accel_mg / 1000.0f;
-    }
-    return sample.speed_d10 / 10.0f;
 }
 
-static const char* chartMetricName() {
-    if (g_chart_metric == ChartMetric::Altitude) {
-        return "Alt m";
+static uint16_t chartMetricColor(const ChartMetric metric) {
+    switch (metric) {
+        case ChartMetric::Altitude:
+            return GREEN;
+        case ChartMetric::Accel:
+            return ORANGE;
+        case ChartMetric::Speed:
+        default:
+            return CYAN;
     }
-    if (g_chart_metric == ChartMetric::Accel) {
-        return "Acc g";
-    }
-    return "Speed km/h";
 }
 
 static void drawChartKv(const int x, const int y, const char* label, const char* value,
@@ -1652,9 +1749,51 @@ static void formatTiming(const float seconds, char* out, const size_t size) {
     }
 }
 
+static void normalizeSeriesRange(float* min_value, float* max_value, const bool zero_floor) {
+    if (*min_value > *max_value) {
+        *min_value = 0;
+        *max_value = 1;
+    }
+    if (zero_floor) {
+        *min_value = 0;
+    }
+    if (*max_value - *min_value < 0.1f) {
+        *max_value = *min_value + 0.1f;
+    }
+}
+
+static void drawChartPolyline(const float* values, const uint16_t* counts, const int buckets,
+                              const float min_value, const float max_value, const int chart_x,
+                              const int chart_y, const int chart_w, const int chart_h,
+                              const uint16_t color) {
+    auto& d = M5Cardputer.Display;
+    int px = chart_x + 1;
+    int py = chart_y + chart_h - 2;
+    bool have_prev = false;
+    const float span = max_value - min_value;
+    for (int i = 0; i < buckets; ++i) {
+        if (counts[i] == 0) {
+            continue;
+        }
+        const float value = values[i] / counts[i];
+        const int x = chart_x + 1 + i * (chart_w - 3) / (buckets - 1);
+        const int y = chart_y + chart_h - 2 -
+                      static_cast<int>((value - min_value) * (chart_h - 3) / span);
+        const int cy = constrain(y, chart_y + 1, chart_y + chart_h - 2);
+        if (have_prev) {
+            d.drawLine(px, py, x, cy, color);
+        }
+        px = x;
+        py = cy;
+        have_prev = true;
+    }
+}
+
 static void drawHistoryChart() {
     loadIndex();
-    drawTopChrome("Record");
+    const bool is_map = g_chart_metric == ChartMetric::Map;
+    // Map 用小号顶栏，把高度留给左侧正方形
+    drawTopChrome("Record", is_map ? 1 : GPS_TITLE_SIZE);
     drawFixStatus(nullptr, 0, nullptr);
     auto& d = M5Cardputer.Display;
     if (g_index.count == 0 || g_history_selected >= g_index.count) {
@@ -1681,21 +1820,39 @@ static void drawHistoryChart() {
 
     constexpr int pad = APP_HELP_EDGE;
     constexpr int label_w = 22;
+    constexpr int title_to_chart_gap = 3; // 顶栏摘要与图表间距
     constexpr int axis_h = 9;
+    constexpr int stats_top_gap = 3; // 轴标签与下方统计区拉开一点
     constexpr int stats_rows = 4;
     constexpr int stats_row_h = 10;
     constexpr int stats_h = stats_rows * stats_row_h;
     // 内容贴近 header，少留空
     const int title_y = APP_HELP_EDGE + g_chrome_title_size * 8 + 3;
     const int chart_x = pad + label_w;
-    const int chart_y = title_y + 9;
+    const int chart_y = title_y + 8 + title_to_chart_gap;
     const int chart_w = d.width() - chart_x - pad;
-    const int chart_h = max(24, d.height() - chart_y - pad - axis_h - stats_h);
+    const int chart_h =
+        max(24, d.height() - chart_y - pad - axis_h - stats_top_gap - stats_h);
     constexpr int buckets = 103;
-    float min_value = 1e9f;
-    float max_value = -1e9f;
-    float values[buckets]{};
-    uint16_t counts[buckets]{};
+    const bool is_combined = g_chart_metric == ChartMetric::Combined;
+
+    // 静态缓冲，避免三组曲线 + 地图局部变量撑爆任务栈
+    static float spd_sum[buckets];
+    static float alt_sum[buckets];
+    static float acc_sum[buckets];
+    static uint16_t counts[buckets];
+    memset(spd_sum, 0, sizeof(spd_sum));
+    memset(alt_sum, 0, sizeof(alt_sum));
+    memset(acc_sum, 0, sizeof(acc_sum));
+    memset(counts, 0, sizeof(counts));
+
+    float min_spd = 1e9f, max_spd = -1e9f;
+    float min_alt = 1e9f, max_alt = -1e9f;
+    float min_acc = 1e9f, max_acc = -1e9f;
+    double min_lat = 90.0, max_lat = -90.0;
+    double min_lon = 180.0, max_lon = -180.0;
+    uint32_t map_pts = 0;
+
     float peak_accel_g = file_meta.max_accel_g;
     float peak_brake_g = file_meta.max_brake_g;
     float t_0_30 = file_meta.t_0_30;
@@ -1708,13 +1865,32 @@ static void drawHistoryChart() {
                                                    (static_cast<uint64_t>(sample.elapsed_ms) * buckets) /
                                                    file_meta.duration_ms))
                             : 0;
-        const float value = chartSampleValue(sample);
-        values[idx] += value;
-        counts[idx]++;
-        min_value = min(min_value, value);
-        max_value = max(max_value, value);
-
         const float spd = sample.speed_d10 / 10.0f;
+        const float alt = sample.altitude_d10 / 10.0f;
+        const float acc = sample.accel_mg / 1000.0f;
+        if (!is_map) {
+            spd_sum[idx] += spd;
+            alt_sum[idx] += alt;
+            acc_sum[idx] += acc;
+            counts[idx]++;
+            min_spd = min(min_spd, spd);
+            max_spd = max(max_spd, spd);
+            min_alt = min(min_alt, alt);
+            max_alt = max(max_alt, alt);
+            min_acc = min(min_acc, acc);
+            max_acc = max(max_acc, acc);
+        }
+
+        const double lat = sample.lat_e7 / 1e7;
+        const double lon = sample.lon_e7 / 1e7;
+        if (is_map && !(lat == 0.0 && lon == 0.0)) {
+            min_lat = min(min_lat, lat);
+            max_lat = max(max_lat, lat);
+            min_lon = min(min_lon, lon);
+            max_lon = max(max_lon, lon);
+            ++map_pts;
+        }
+
         if (t_0_30 <= 0.0f && spd >= 30.0f) {
             t_0_30 = sample.elapsed_ms / 1000.0f;
         }
@@ -1728,17 +1904,6 @@ static void drawHistoryChart() {
         }
         prev_spd = spd;
         prev_ms = sample.elapsed_ms;
-    }
-    f.close();
-    if (min_value > max_value) {
-        min_value = 0;
-        max_value = 1;
-    }
-    if (g_chart_metric == ChartMetric::Speed) {
-        min_value = 0;
-    }
-    if (max_value - min_value < 0.1f) {
-        max_value = min_value + 0.1f;
     }
 
     // 优先用索引里更新后的摘要（录制结束写入）
@@ -1763,12 +1928,170 @@ static void drawHistoryChart() {
                    sizeof(duration));
     char buf[24];
 
+    char t030[8];
+    char t050[8];
+    char t0100[8];
+    char t1000[8];
+    formatTiming(t_0_30, t030, sizeof(t030));
+    formatTiming(show_t050, t050, sizeof(t050));
+    formatTiming(show_t0100, t0100, sizeof(t0100));
+    formatTiming(show_t1000, t1000, sizeof(t1000));
+    const bool has_accel = peak_accel_g > 0.01f || peak_brake_g < -0.01f;
+
+    // —— Map：左侧最大正方形路线，右侧竖排摘要 ——
+    if (is_map) {
+        f.close();
+        constexpr int gap = 4;
+        constexpr int min_right_w = 92;
+        constexpr int info_row = 10; // size-1 字高 8 + 行距 2px
+        const int content_top = APP_HELP_EDGE + g_chrome_title_size * 8 + 2;
+        const int avail_h = max(40, d.height() - content_top - pad);
+        const int map_side =
+            min(avail_h, max(40, d.width() - pad * 2 - gap - min_right_w));
+        const int map_x = pad;
+        const int map_y = content_top + max(0, (avail_h - map_side) / 2);
+        const int info_x = map_x + map_side + gap;
+        int iy = map_y;
+
+        d.drawRect(map_x, map_y, map_side, map_side, APP_COLOR_MUTED);
+        d.setTextSize(1);
+        d.setTextColor(APP_COLOR_HINT, BLACK);
+        d.setCursor(map_x + map_side / 2 - 3, map_y + 2);
+        d.print("N");
+
+        if (map_pts == 0) {
+            d.setTextColor(APP_COLOR_HINT, BLACK);
+            d.setCursor(map_x + 6, map_y + map_side / 2 - 4);
+            d.print("no pts");
+        } else {
+            double lat_span = max_lat - min_lat;
+            double lon_span = max_lon - min_lon;
+            if (lat_span < 1e-7) {
+                lat_span = 1e-7;
+            }
+            if (lon_span < 1e-7) {
+                lon_span = 1e-7;
+            }
+            const double mid_lat = (min_lat + max_lat) * 0.5;
+            double cos_lat = cos(mid_lat * (M_PI / 180.0));
+            if (cos_lat < 0.2) {
+                cos_lat = 0.2;
+            }
+            const double span_x = lon_span * cos_lat;
+            const double span_y = lat_span;
+            const double pad_frac = 0.06;
+            const double usable = max(1.0, static_cast<double>(map_side - 4));
+            const double scale =
+                min(usable / (span_x * (1.0 + 2.0 * pad_frac)),
+                    usable / (span_y * (1.0 + 2.0 * pad_frac)));
+            const double draw_w = span_x * scale;
+            const double draw_h = span_y * scale;
+            const double origin_x = map_x + 2 + (usable - draw_w) * 0.5;
+            const double origin_y = map_y + 2 + (usable - draw_h) * 0.5;
+            const int x_lo = map_x + 1;
+            const int x_hi = map_x + map_side - 2;
+            const int y_lo = map_y + 1;
+            const int y_hi = map_y + map_side - 2;
+
+            f = LittleFS.open(path, "r");
+            RunMeta skip{};
+            if (f && readRunMeta(f, &skip)) {
+                int px = 0, py = 0;
+                bool have_prev = false;
+                int start_x = 0, start_y = 0, end_x = 0, end_y = 0;
+                bool have_start = false;
+                while (f.read(reinterpret_cast<uint8_t*>(&sample), sizeof(sample)) ==
+                       sizeof(sample)) {
+                    const double lat = sample.lat_e7 / 1e7;
+                    const double lon = sample.lon_e7 / 1e7;
+                    if (lat == 0.0 && lon == 0.0) {
+                        continue;
+                    }
+                    const int x = constrain(
+                        static_cast<int>(origin_x + (lon - min_lon) * cos_lat * scale), x_lo,
+                        x_hi);
+                    const int y =
+                        constrain(static_cast<int>(origin_y + (max_lat - lat) * scale), y_lo,
+                                  y_hi);
+                    if (!have_start) {
+                        start_x = x;
+                        start_y = y;
+                        have_start = true;
+                    }
+                    end_x = x;
+                    end_y = y;
+                    if (have_prev) {
+                        d.drawLine(px, py, x, y, CYAN);
+                    }
+                    px = x;
+                    py = y;
+                    have_prev = true;
+                }
+                if (have_start) {
+                    d.fillCircle(start_x, start_y, 2, APP_COLOR_OK);
+                    d.fillCircle(end_x, end_y, 2, APP_COLOR_ERROR);
+                }
+            }
+            if (f) {
+                f.close();
+            }
+        }
+
+        d.setTextColor(APP_COLOR_LABEL, BLACK);
+        d.setCursor(info_x, iy);
+        d.print("Map");
+        iy += info_row;
+        drawChartKv(info_x, iy, "Time", duration, APP_COLOR_VALUE);
+        iy += info_row;
+        snprintf(buf, sizeof(buf), "%.2fkm", static_cast<double>(show_dist / 1000.0f));
+        drawChartKv(info_x, iy, "Dist", buf, APP_COLOR_VALUE);
+        iy += info_row;
+        snprintf(buf, sizeof(buf), "%.1f", static_cast<double>(show_max));
+        drawChartKv(info_x, iy, "Max", buf, APP_COLOR_WARN);
+        iy += info_row;
+        snprintf(buf, sizeof(buf), "%.1f", static_cast<double>(show_avg));
+        drawChartKv(info_x, iy, "Avg", buf, APP_COLOR_VALUE);
+        iy += info_row;
+        drawChartKv(info_x, iy, "0-30", t030, t_0_30 > 0.0f ? APP_COLOR_OK : APP_COLOR_HINT);
+        iy += info_row;
+        drawChartKv(info_x, iy, "0-50", t050, show_t050 > 0.0f ? APP_COLOR_OK : APP_COLOR_HINT);
+        iy += info_row;
+        drawChartKv(info_x, iy, "0-100", t0100,
+                    show_t0100 > 0.0f ? APP_COLOR_OK : APP_COLOR_HINT);
+        iy += info_row;
+        drawChartKv(info_x, iy, "100-0", t1000,
+                    show_t1000 > 0.0f ? APP_COLOR_OK : APP_COLOR_HINT);
+        iy += info_row;
+        snprintf(buf, sizeof(buf), "+%.2f/%.2f", static_cast<double>(peak_accel_g),
+                 static_cast<double>(peak_brake_g));
+        drawChartKv(info_x, iy, "Acc", has_accel ? buf : "--",
+                    has_accel ? APP_COLOR_WARN : APP_COLOR_HINT);
+        iy += info_row;
+        snprintf(buf, sizeof(buf), "%lu", static_cast<unsigned long>(map_pts));
+        drawChartKv(info_x, iy, "Pts", buf, APP_COLOR_VALUE);
+        return;
+    }
+
     // 顶栏：指标名 + 着色摘要
     d.setTextSize(1);
     d.setTextColor(APP_COLOR_LABEL, BLACK);
     d.setCursor(pad, title_y);
     d.print(chartMetricName());
     int tx = pad + d.textWidth(chartMetricName()) + 6;
+    if (is_combined) {
+        d.setTextColor(CYAN, BLACK);
+        d.setCursor(tx, title_y);
+        d.print("S");
+        tx += d.textWidth("S") + 4;
+        d.setTextColor(GREEN, BLACK);
+        d.setCursor(tx, title_y);
+        d.print("A");
+        tx += d.textWidth("A") + 4;
+        d.setTextColor(ORANGE, BLACK);
+        d.setCursor(tx, title_y);
+        d.print("G");
+        tx += d.textWidth("G") + 6;
+    }
     d.setTextColor(APP_COLOR_HINT, BLACK);
     d.setCursor(tx, title_y);
     d.print("Max");
@@ -1786,32 +2109,50 @@ static void drawHistoryChart() {
     if (chart_w > 4 && chart_h > 4) {
         d.drawRect(chart_x, chart_y, chart_w, chart_h, APP_COLOR_MUTED);
     }
-    d.setTextColor(APP_COLOR_HINT, BLACK);
-    d.setCursor(pad, chart_y);
-    d.printf("%.0f", static_cast<double>(max_value));
-    d.setCursor(pad, chart_y + chart_h - 8);
-    d.printf("%.0f", static_cast<double>(min_value));
-    int px = chart_x + 1;
-    int py = chart_y + chart_h - 2;
-    bool have_prev = false;
-    const uint16_t color = g_chart_metric == ChartMetric::Speed
-                               ? CYAN
-                               : (g_chart_metric == ChartMetric::Altitude ? GREEN : ORANGE);
-    for (int i = 0; i < buckets; ++i) {
-        if (counts[i] == 0) {
-            continue;
+
+    {
+        float min_value = 0;
+        float max_value = 1;
+        if (is_combined) {
+            normalizeSeriesRange(&min_spd, &max_spd, true);
+            normalizeSeriesRange(&min_alt, &max_alt, false);
+            normalizeSeriesRange(&min_acc, &max_acc, false);
+            d.setTextColor(APP_COLOR_HINT, BLACK);
+            d.setCursor(pad, chart_y);
+            d.print("max");
+            d.setCursor(pad, chart_y + chart_h - 8);
+            d.print("min");
+            drawChartPolyline(spd_sum, counts, buckets, min_spd, max_spd, chart_x, chart_y, chart_w,
+                              chart_h, CYAN);
+            drawChartPolyline(alt_sum, counts, buckets, min_alt, max_alt, chart_x, chart_y, chart_w,
+                              chart_h, GREEN);
+            drawChartPolyline(acc_sum, counts, buckets, min_acc, max_acc, chart_x, chart_y, chart_w,
+                              chart_h, ORANGE);
+        } else {
+            const float* series = spd_sum;
+            min_value = min_spd;
+            max_value = max_spd;
+            if (g_chart_metric == ChartMetric::Altitude) {
+                series = alt_sum;
+                min_value = min_alt;
+                max_value = max_alt;
+            } else if (g_chart_metric == ChartMetric::Accel) {
+                series = acc_sum;
+                min_value = min_acc;
+                max_value = max_acc;
+            }
+            normalizeSeriesRange(&min_value, &max_value, g_chart_metric == ChartMetric::Speed);
+            d.setTextColor(APP_COLOR_HINT, BLACK);
+            d.setCursor(pad, chart_y);
+            d.printf("%.0f", static_cast<double>(max_value));
+            d.setCursor(pad, chart_y + chart_h - 8);
+            d.printf("%.0f", static_cast<double>(min_value));
+            drawChartPolyline(series, counts, buckets, min_value, max_value, chart_x, chart_y,
+                              chart_w, chart_h, chartMetricColor(g_chart_metric));
         }
-        const float value = values[i] / counts[i];
-        const int x = chart_x + 1 + i * (chart_w - 3) / (buckets - 1);
-        const int y = chart_y + chart_h - 2 -
-                      static_cast<int>((value - min_value) * (chart_h - 3) /
-                                       (max_value - min_value));
-        if (have_prev) {
-            d.drawLine(px, py, x, constrain(y, chart_y + 1, chart_y + chart_h - 2), color);
-        }
-        px = x;
-        py = constrain(y, chart_y + 1, chart_y + chart_h - 2);
-        have_prev = true;
+    }
+    if (f) {
+        f.close();
     }
 
     // X 轴：左侧 0，时长靠右
@@ -1824,7 +2165,7 @@ static void drawHistoryChart() {
     d.print(duration);
 
     // 测速详情：Time/Max/Dist/Avg + 0-30/0-50/0-100/100-0 + Accel
-    const int stats_y = axis_y + axis_h;
+    const int stats_y = axis_y + axis_h + stats_top_gap;
     const int col2 = 128;
     drawChartKv(pad, stats_y, "Time", duration, APP_COLOR_VALUE);
     snprintf(buf, sizeof(buf), "%.1f", static_cast<double>(show_max));
@@ -1835,14 +2176,6 @@ static void drawHistoryChart() {
     snprintf(buf, sizeof(buf), "%.1f", static_cast<double>(show_avg));
     drawChartKv(col2, stats_y + stats_row_h, "Avg", buf, APP_COLOR_VALUE);
 
-    char t030[8];
-    char t050[8];
-    char t0100[8];
-    char t1000[8];
-    formatTiming(t_0_30, t030, sizeof(t030));
-    formatTiming(show_t050, t050, sizeof(t050));
-    formatTiming(show_t0100, t0100, sizeof(t0100));
-    formatTiming(show_t1000, t1000, sizeof(t1000));
     drawChartKv(pad, stats_y + stats_row_h * 2, "0-30", t030,
                 t_0_30 > 0.0f ? APP_COLOR_OK : APP_COLOR_HINT);
     drawChartKv(72, stats_y + stats_row_h * 2, "0-50", t050,
@@ -1854,7 +2187,6 @@ static void drawHistoryChart() {
                 show_t1000 > 0.0f ? APP_COLOR_OK : APP_COLOR_HINT);
     snprintf(buf, sizeof(buf), "+%.2f/%.2f", static_cast<double>(peak_accel_g),
              static_cast<double>(peak_brake_g));
-    const bool has_accel = peak_accel_g > 0.01f || peak_brake_g < -0.01f;
     drawChartKv(88, stats_y + stats_row_h * 3, "Accel", has_accel ? buf : "--",
                 has_accel ? APP_COLOR_WARN : APP_COLOR_HINT);
 }
@@ -1915,18 +2247,18 @@ static int drawGpsModuleHelp(const int x, int y) {
             y = drawAppHelpBadge(x, y, "BtnGO", "same as Space");
             break;
         case GpsPage::HistoryChart:
-            y = drawAppHelpKey(x, y, 'm', "cycle Speed/Alt/Accel");
+            y = drawAppHelpKey(x, y, 'm', "cycle Speed/Alt/Acc/All/Map");
             y = drawAppHelpBadge(x, y, "ESC", "back to history");
-            y = drawAppHelpText(x, y, "Curve from selected run.");
-            y = drawAppHelpText(x, y, "Stats below: peak / times.");
+            y = drawAppHelpText(x, y, "Curve or route from selected run.");
+            y = drawAppHelpText(x, y, "All = overlay; Map = lat/lon path.");
             break;
         case GpsPage::Settings:
+            y = drawAppHelpText(x, y, "Source: auto Cap / Grove");
             y = drawAppHelpArrows(x, y, "select update rate");
             y = drawAppHelpBadge(x, y, "Enter", "apply rate");
             y = drawAppHelpBadge(x, y, "ESC", "back");
             y = drawAppHelpText(x, y, "Rates: 1 / 2 / 5 / 10 Hz");
             y = drawAppHelpText(x, y, "PCAS02; saved in NVS.");
-            y = drawAppHelpText(x, y, "Reapplied each GPS open.");
             break;
         case GpsPage::Live:
         default:
@@ -1979,13 +2311,21 @@ static void drawSettings() {
     d.setTextSize(1);
     d.setTextColor(APP_COLOR_LABEL, BLACK);
     d.setCursor(5, y0);
+    d.print("Source");
+    d.setTextColor(APP_COLOR_VALUE, BLACK);
+    d.setCursor(5, y0 + 12);
+    d.print(gpsSourceLabel());
+
+    const int rate_y = y0 + 28;
+    d.setTextColor(APP_COLOR_LABEL, BLACK);
+    d.setCursor(5, rate_y);
     d.print("Update rate");
     d.setTextColor(APP_COLOR_HINT, BLACK);
-    d.setCursor(5, y0 + 12);
+    d.setCursor(5, rate_y + 12);
     d.printf("active %d Hz", g_rate_hz);
 
     for (int i = 0; i < GPS_RATE_OPTION_COUNT; ++i) {
-        const int ry = y0 + 28 + i * GPS_HISTORY_ROW_H;
+        const int ry = rate_y + 28 + i * GPS_HISTORY_ROW_H;
         const bool selected = i == g_rate_cursor;
         const bool active = GPS_RATE_OPTIONS[i].hz == g_rate_hz;
         if (selected) {
@@ -2025,7 +2365,853 @@ static void setPage(const GpsPage page) {
     redraw();
 }
 
+// —— GPX 导入 / 导出（Config Web）——
+
+static constexpr const char* GPS_GPX_NS =
+    "xmlns=\"http://www.topografix.com/GPX/1/1\" "
+    "xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" "
+    "xmlns:gpxtpx=\"http://www.garmin.com/xmlschemas/TrackPointExtension/v1\" "
+    "xmlns:cardputer=\"https://github.com/m5stack/cardputer/gps\" "
+    "xsi:schemaLocation=\"http://www.topografix.com/GPX/1/1 "
+    "http://www.topografix.com/GPX/1/1/gpx.xsd\" "
+    "version=\"1.1\" creator=\"Cardputer GPS\"";
+
+static bool gpxEmit(GpsGpxWriteFn write, void* user, const char* data, const size_t len) {
+    return write != nullptr && write(data, len, user);
+}
+
+static bool gpxEmitStr(GpsGpxWriteFn write, void* user, const char* s) {
+    return gpxEmit(write, user, s, strlen(s));
+}
+
+static bool gpxEmitFmt(GpsGpxWriteFn write, void* user, const char* fmt, ...) {
+    // trackpoint / meta 行可能较长；过短会截断 XML → “not a valid GPX”
+    char buf[768];
+    va_list args;
+    va_start(args, fmt);
+    const int n = vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    if (n <= 0 || n >= static_cast<int>(sizeof(buf))) {
+        return false;
+    }
+    return gpxEmit(write, user, buf, static_cast<size_t>(n));
+}
+
+// ESP32 newlib 无 timegm：按 UTC 民事日期换算 epoch（Howard Hinnant 算法）
+static time_t gpsCivilToEpoch(const uint32_t date, const uint32_t time_hhmmss) {
+    if (date < 19700101u) {
+        return 0;
+    }
+    const int y = static_cast<int>(date / 10000u);
+    const int mo = static_cast<int>((date / 100u) % 100u);
+    const int d = static_cast<int>(date % 100u);
+    const int h = static_cast<int>(time_hhmmss / 10000u);
+    const int mi = static_cast<int>((time_hhmmss / 100u) % 100u);
+    const int s = static_cast<int>(time_hhmmss % 100u);
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) {
+        return 0;
+    }
+    int year = y;
+    unsigned month = static_cast<unsigned>(mo);
+    if (month <= 2) {
+        --year;
+        month += 9;
+    } else {
+        month -= 3;
+    }
+    const int era = (year >= 0 ? year : year - 399) / 400;
+    const unsigned yoe = static_cast<unsigned>(year - era * 400);
+    const unsigned doy = (153u * month + 2u) / 5u + static_cast<unsigned>(d) - 1u;
+    const unsigned doe = yoe * 365u + yoe / 4u - yoe / 100u + doy;
+    const int64_t days = static_cast<int64_t>(era) * 146097LL + static_cast<int64_t>(doe) - 719468LL;
+    return static_cast<time_t>(days * 86400LL + h * 3600LL + mi * 60LL + s);
+}
+
+static void gpsEpochToCivil(const time_t epoch, uint32_t* date, uint32_t* time_hhmmss) {
+    struct tm t = {};
+#if defined(ESP_PLATFORM)
+    gmtime_r(&epoch, &t);
+#else
+    gmtime_r(&epoch, &t);
+#endif
+    *date = static_cast<uint32_t>((t.tm_year + 1900) * 10000 + (t.tm_mon + 1) * 100 + t.tm_mday);
+    *time_hhmmss = static_cast<uint32_t>(t.tm_hour * 10000 + t.tm_min * 100 + t.tm_sec);
+}
+
+static void formatIso8601(const time_t epoch, const uint32_t frac_ms, char* out, const size_t out_len) {
+    if (epoch <= 0) {
+        snprintf(out, out_len, "1970-01-01T00:00:00.%03luZ",
+                 static_cast<unsigned long>(frac_ms % 1000u));
+        return;
+    }
+    struct tm t = {};
+    gmtime_r(&epoch, &t);
+    snprintf(out, out_len, "%04d-%02d-%02dT%02d:%02d:%02d.%03luZ", t.tm_year + 1900, t.tm_mon + 1,
+             t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, static_cast<unsigned long>(frac_ms % 1000u));
+}
+
+static bool parseIso8601(const char* s, time_t* epoch, uint32_t* frac_ms) {
+    *epoch = 0;
+    *frac_ms = 0;
+    if (s == nullptr || strlen(s) < 19) {
+        return false;
+    }
+    int y = 0, mo = 0, d = 0, h = 0, mi = 0, sec = 0, ms = 0;
+    if (sscanf(s, "%d-%d-%dT%d:%d:%d.%d", &y, &mo, &d, &h, &mi, &sec, &ms) < 6) {
+        if (sscanf(s, "%d-%d-%dT%d:%d:%d", &y, &mo, &d, &h, &mi, &sec) < 6) {
+            return false;
+        }
+    }
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) {
+        return false;
+    }
+    const uint32_t date = static_cast<uint32_t>(y * 10000 + mo * 100 + d);
+    const uint32_t tod = static_cast<uint32_t>(h * 10000 + mi * 100 + sec);
+    *epoch = gpsCivilToEpoch(date, tod);
+    if (ms < 0) {
+        ms = 0;
+    }
+    if (ms > 999) {
+        ms = 999;
+    }
+    *frac_ms = static_cast<uint32_t>(ms);
+    return *epoch > 0 || (y == 1970 && mo == 1 && d == 1);
+}
+
+static bool exportOneTrackBody(const RunMeta& meta, GpsGpxWriteFn write, void* user) {
+    char path[24];
+    runPath(meta.id, path, sizeof(path));
+    File f = LittleFS.open(path, "r");
+    if (!f) {
+        return false;
+    }
+    RunMeta file_meta{};
+    if (!readRunMeta(f, &file_meta)) {
+        f.close();
+        return false;
+    }
+
+    const time_t base = gpsCivilToEpoch(file_meta.utc_date, file_meta.utc_time);
+    char name[48];
+    snprintf(name, sizeof(name), "run_%08lu", static_cast<unsigned long>(file_meta.id));
+
+    if (!gpxEmitFmt(write, user, "<trk>\n<name>%s</name>\n<extensions>\n<cardputer:meta>\n",
+                    name) ||
+        !gpxEmitFmt(write, user,
+                    "<cardputer:id>%lu</cardputer:id>\n"
+                    "<cardputer:utc_date>%lu</cardputer:utc_date>\n"
+                    "<cardputer:utc_time>%lu</cardputer:utc_time>\n"
+                    "<cardputer:duration_ms>%lu</cardputer:duration_ms>\n"
+                    "<cardputer:moving_ms>%lu</cardputer:moving_ms>\n"
+                    "<cardputer:samples>%lu</cardputer:samples>\n",
+                    static_cast<unsigned long>(file_meta.id),
+                    static_cast<unsigned long>(file_meta.utc_date),
+                    static_cast<unsigned long>(file_meta.utc_time),
+                    static_cast<unsigned long>(file_meta.duration_ms),
+                    static_cast<unsigned long>(file_meta.moving_ms),
+                    static_cast<unsigned long>(file_meta.samples)) ||
+        !gpxEmitFmt(write, user,
+                    "<cardputer:distance_m>%.3f</cardputer:distance_m>\n"
+                    "<cardputer:max_kmh>%.2f</cardputer:max_kmh>\n"
+                    "<cardputer:avg_kmh>%.2f</cardputer:avg_kmh>\n"
+                    "<cardputer:t_0_30>%.2f</cardputer:t_0_30>\n"
+                    "<cardputer:t_0_50>%.2f</cardputer:t_0_50>\n"
+                    "<cardputer:t_0_100>%.2f</cardputer:t_0_100>\n"
+                    "<cardputer:t_100_0>%.2f</cardputer:t_100_0>\n",
+                    static_cast<double>(file_meta.distance_m),
+                    static_cast<double>(file_meta.max_kmh),
+                    static_cast<double>(file_meta.avg_kmh),
+                    static_cast<double>(file_meta.t_0_30),
+                    static_cast<double>(file_meta.t_0_50),
+                    static_cast<double>(file_meta.t_0_100),
+                    static_cast<double>(file_meta.t_100_0)) ||
+        !gpxEmitFmt(write, user,
+                    "<cardputer:sats_used>%u</cardputer:sats_used>\n"
+                    "<cardputer:sats_vis>%u</cardputer:sats_vis>\n"
+                    "<cardputer:max_accel_g>%.3f</cardputer:max_accel_g>\n"
+                    "<cardputer:max_brake_g>%.3f</cardputer:max_brake_g>\n"
+                    "</cardputer:meta>\n</extensions>\n<trkseg>\n",
+                    static_cast<unsigned>(file_meta.sats_used),
+                    static_cast<unsigned>(file_meta.sats_vis),
+                    static_cast<double>(file_meta.max_accel_g),
+                    static_cast<double>(file_meta.max_brake_g))) {
+        f.close();
+        return false;
+    }
+
+    RunSample sample{};
+    uint32_t written = 0;
+    while (f.read(reinterpret_cast<uint8_t*>(&sample), sizeof(sample)) == sizeof(sample)) {
+        const double lat = sample.lat_e7 / 1e7;
+        const double lon = sample.lon_e7 / 1e7;
+        if (lat == 0.0 && lon == 0.0) {
+            continue;
+        }
+        const float speed_kmh = sample.speed_d10 / 10.0f;
+        const float gps_speed_kmh = sample.gps_speed_d10 / 10.0f;
+        const float alt = sample.altitude_d10 / 10.0f;
+        const float accel_g = sample.accel_mg / 1000.0f;
+        const float course = sample.course_d10 / 10.0f;
+        const float hdop = sample.hdop_d10 / 10.0f;
+        const float speed_ms = speed_kmh / 3.6f;
+        const time_t epoch = base + static_cast<time_t>(sample.elapsed_ms / 1000u);
+        const uint32_t frac = sample.elapsed_ms % 1000u;
+        char iso[36];
+        formatIso8601(epoch, frac, iso, sizeof(iso));
+
+        if (!gpxEmitFmt(write, user,
+                        "<trkpt lat=\"%.7f\" lon=\"%.7f\">"
+                        "<ele>%.1f</ele>"
+                        "<time>%s</time>"
+                        "<extensions>"
+                        "<gpxtpx:TrackPointExtension>"
+                        "<gpxtpx:speed>%.3f</gpxtpx:speed>"
+                        "<gpxtpx:course>%.1f</gpxtpx:course>"
+                        "</gpxtpx:TrackPointExtension>",
+                        lat, lon, static_cast<double>(alt), iso, static_cast<double>(speed_ms),
+                        static_cast<double>(course)) ||
+            !gpxEmitFmt(write, user,
+                        "<cardputer:pt>"
+                        "<cardputer:elapsed_ms>%lu</cardputer:elapsed_ms>"
+                        "<cardputer:speed_kmh>%.1f</cardputer:speed_kmh>"
+                        "<cardputer:gps_speed_kmh>%.1f</cardputer:gps_speed_kmh>"
+                        "<cardputer:accel_g>%.3f</cardputer:accel_g>"
+                        "<cardputer:sats_used>%u</cardputer:sats_used>"
+                        "<cardputer:sats_vis>%u</cardputer:sats_vis>"
+                        "<cardputer:hdop>%.1f</cardputer:hdop>"
+                        "</cardputer:pt>"
+                        "</extensions>"
+                        "</trkpt>\n",
+                        static_cast<unsigned long>(sample.elapsed_ms),
+                        static_cast<double>(speed_kmh), static_cast<double>(gps_speed_kmh),
+                        static_cast<double>(accel_g), static_cast<unsigned>(sample.sats_used),
+                        static_cast<unsigned>(sample.sats_vis), static_cast<double>(hdop))) {
+            f.close();
+            return false;
+        }
+        ++written;
+        if ((written & 0x1Fu) == 0u) {
+            yield();
+        }
+    }
+    f.close();
+    return gpxEmitStr(write, user, "</trkseg>\n</trk>\n");
+}
+
+static bool exportGpxDocument(const uint32_t* ids, const int id_count, GpsGpxWriteFn write,
+                              void* user) {
+    if (!gpxEmitStr(write, user, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<gpx ") ||
+        !gpxEmitStr(write, user, GPS_GPX_NS) || !gpxEmitStr(write, user, ">\n")) {
+        return false;
+    }
+    for (int i = 0; i < id_count; ++i) {
+        loadIndex();
+        bool found = false;
+        RunMeta meta{};
+        for (int j = 0; j < g_index.count; ++j) {
+            if (g_index.runs[j].id == ids[i]) {
+                meta = g_index.runs[j];
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return false;
+        }
+        if (!exportOneTrackBody(meta, write, user)) {
+            return false;
+        }
+    }
+    return gpxEmitStr(write, user, "</gpx>\n");
+}
+
+static void forceReloadIndex() {
+    g_history_loaded = false;
+    loadIndex();
+}
+
+static bool deleteHistoryById(const uint32_t id) {
+    if (g_recording) {
+        return false;
+    }
+    forceReloadIndex();
+    int idx = -1;
+    for (int i = 0; i < g_index.count; ++i) {
+        if (g_index.runs[i].id == id) {
+            idx = i;
+            break;
+        }
+    }
+    if (idx < 0) {
+        return false;
+    }
+    char path[24];
+    runPath(id, path, sizeof(path));
+    LittleFS.remove(path);
+    for (int i = idx; i + 1 < g_index.count; ++i) {
+        g_index.runs[i] = g_index.runs[i + 1];
+    }
+    g_index.count--;
+    if (g_history_selected >= g_index.count && g_history_selected > 0) {
+        g_history_selected--;
+    }
+    return saveIndex();
+}
+
+static const char* xmlFindTag(const char* hay, const char* tag, const char** end_out) {
+    char open[48];
+    char close[48];
+    snprintf(open, sizeof(open), "<%s>", tag);
+    snprintf(close, sizeof(close), "</%s>", tag);
+    const char* a = strstr(hay, open);
+    if (a == nullptr) {
+        snprintf(open, sizeof(open), "<%s ", tag);
+        a = strstr(hay, open);
+        if (a == nullptr) {
+            return nullptr;
+        }
+        a = strchr(a, '>');
+        if (a == nullptr) {
+            return nullptr;
+        }
+        ++a;
+    } else {
+        a += strlen(open);
+    }
+    const char* b = strstr(a, close);
+    if (b == nullptr) {
+        return nullptr;
+    }
+    if (end_out != nullptr) {
+        *end_out = b;
+    }
+    return a;
+}
+
+static bool xmlCopyTag(const char* hay, const char* tag, char* out, const size_t out_len) {
+    const char* end = nullptr;
+    const char* start = xmlFindTag(hay, tag, &end);
+    if (start == nullptr || end == nullptr || out_len == 0) {
+        return false;
+    }
+    size_t n = static_cast<size_t>(end - start);
+    if (n >= out_len) {
+        n = out_len - 1;
+    }
+    memcpy(out, start, n);
+    out[n] = '\0';
+    return true;
+}
+
+static float xmlTagFloat(const char* hay, const char* tag, const float def) {
+    char buf[48];
+    if (!xmlCopyTag(hay, tag, buf, sizeof(buf))) {
+        return def;
+    }
+    return static_cast<float>(atof(buf));
+}
+
+static uint32_t xmlTagU32(const char* hay, const char* tag, const uint32_t def) {
+    char buf[48];
+    if (!xmlCopyTag(hay, tag, buf, sizeof(buf))) {
+        return def;
+    }
+    return static_cast<uint32_t>(strtoul(buf, nullptr, 10));
+}
+
+static bool parseTrkptAttrs(const char* open_tag, double* lat, double* lon) {
+    *lat = 0;
+    *lon = 0;
+    const char* la = strstr(open_tag, "lat=\"");
+    const char* lo = strstr(open_tag, "lon=\"");
+    if (la == nullptr || lo == nullptr) {
+        return false;
+    }
+    *lat = atof(la + 5);
+    *lon = atof(lo + 5);
+    return true;
+}
+
+static bool readUntil(File& f, const char* needle, char* buf, const size_t buf_len, size_t* used) {
+    *used = 0;
+    if (buf_len < 2) {
+        return false;
+    }
+    const size_t nlen = strlen(needle);
+    while (f.available()) {
+        const int c = f.read();
+        if (c < 0) {
+            break;
+        }
+        if (*used + 1 >= buf_len) {
+            const size_t keep = nlen + 64;
+            if (*used > keep) {
+                memmove(buf, buf + (*used - keep), keep);
+                *used = keep;
+            } else {
+                return false;
+            }
+        }
+        buf[(*used)++] = static_cast<char>(c);
+        buf[*used] = '\0';
+        if (*used >= nlen && memcmp(buf + *used - nlen, needle, nlen) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool skipUntil(File& f, const char* needle) {
+    char buf[192];
+    size_t used = 0;
+    return readUntil(f, needle, buf, sizeof(buf), &used);
+}
+
+static void makeRoomForImport() {
+    forceReloadIndex();
+    while (g_index.count >= GPS_HISTORY_MAX) {
+        char old_path[24];
+        runPath(g_index.runs[g_index.count - 1].id, old_path, sizeof(old_path));
+        LittleFS.remove(old_path);
+        g_index.count--;
+    }
+}
+
+static void recomputeMetaFromSamples(RunMeta& meta, File& sample_file, const size_t header_size) {
+    sample_file.seek(header_size);
+    RunSample sample{};
+    float dist = 0;
+    float max_kmh = 0;
+    double speed_sum = 0;
+    uint32_t speed_n = 0;
+    uint32_t moving_ms = 0;
+    uint32_t last_elapsed = 0;
+    bool have_prev = false;
+    double prev_lat = 0;
+    double prev_lon = 0;
+    uint32_t samples = 0;
+    while (sample_file.read(reinterpret_cast<uint8_t*>(&sample), sizeof(sample)) == sizeof(sample)) {
+        ++samples;
+        const float kmh = sample.speed_d10 / 10.0f;
+        if (kmh > max_kmh) {
+            max_kmh = kmh;
+        }
+        if (kmh > 1.0f) {
+            speed_sum += kmh;
+            ++speed_n;
+            if (samples > 1) {
+                moving_ms += sample.elapsed_ms - last_elapsed;
+            }
+        }
+        last_elapsed = sample.elapsed_ms;
+        const double lat = sample.lat_e7 / 1e7;
+        const double lon = sample.lon_e7 / 1e7;
+        if (have_prev && !(lat == 0.0 && lon == 0.0)) {
+            const double dlat = (lat - prev_lat) * (M_PI / 180.0);
+            const double dlon = (lon - prev_lon) * (M_PI / 180.0);
+            const double a =
+                sin(dlat / 2) * sin(dlat / 2) + cos(prev_lat * (M_PI / 180.0)) *
+                                                    cos(lat * (M_PI / 180.0)) * sin(dlon / 2) *
+                                                    sin(dlon / 2);
+            const double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+            dist += static_cast<float>(6371000.0 * c);
+        }
+        if (!(lat == 0.0 && lon == 0.0)) {
+            prev_lat = lat;
+            prev_lon = lon;
+            have_prev = true;
+        }
+    }
+    meta.samples = samples;
+    meta.distance_m = dist;
+    meta.max_kmh = max_kmh;
+    meta.avg_kmh = speed_n > 0 ? static_cast<float>(speed_sum / speed_n) : 0;
+    meta.moving_ms = moving_ms;
+    if (samples > 0) {
+        meta.duration_ms = last_elapsed;
+    }
+}
+
+static void fillMetaFromXml(RunMeta& meta, const char* meta_xml, bool* had_meta) {
+    *had_meta = meta_xml != nullptr && meta_xml[0] != '\0';
+    if (!*had_meta) {
+        return;
+    }
+    meta.utc_date = xmlTagU32(meta_xml, "cardputer:utc_date", 0);
+    meta.utc_time = xmlTagU32(meta_xml, "cardputer:utc_time", 0);
+    meta.duration_ms = xmlTagU32(meta_xml, "cardputer:duration_ms", 0);
+    meta.moving_ms = xmlTagU32(meta_xml, "cardputer:moving_ms", 0);
+    meta.samples = xmlTagU32(meta_xml, "cardputer:samples", 0);
+    meta.distance_m = xmlTagFloat(meta_xml, "cardputer:distance_m", 0);
+    meta.max_kmh = xmlTagFloat(meta_xml, "cardputer:max_kmh", 0);
+    meta.avg_kmh = xmlTagFloat(meta_xml, "cardputer:avg_kmh", 0);
+    meta.t_0_30 = xmlTagFloat(meta_xml, "cardputer:t_0_30", 0);
+    meta.t_0_50 = xmlTagFloat(meta_xml, "cardputer:t_0_50", 0);
+    meta.t_0_100 = xmlTagFloat(meta_xml, "cardputer:t_0_100", 0);
+    meta.t_100_0 = xmlTagFloat(meta_xml, "cardputer:t_100_0", 0);
+    meta.sats_used = static_cast<uint8_t>(xmlTagU32(meta_xml, "cardputer:sats_used", 0));
+    meta.sats_vis = static_cast<uint8_t>(xmlTagU32(meta_xml, "cardputer:sats_vis", 0));
+    meta.max_accel_g = xmlTagFloat(meta_xml, "cardputer:max_accel_g", 0);
+    meta.max_brake_g = xmlTagFloat(meta_xml, "cardputer:max_brake_g", 0);
+}
+
+static bool writeSampleFromTrkptXml(File& out, const char* open_tag, const char* body,
+                                    time_t* first_epoch, RunMeta& meta, uint32_t* sample_count) {
+    double lat = 0;
+    double lon = 0;
+    if (!parseTrkptAttrs(open_tag, &lat, &lon)) {
+        return true; // skip
+    }
+    RunSample sample{};
+    sample.lat_e7 = static_cast<int32_t>(llround(lat * 1e7));
+    sample.lon_e7 = static_cast<int32_t>(llround(lon * 1e7));
+    const float ele = xmlTagFloat(body, "ele", 0);
+    sample.altitude_d10 = static_cast<int16_t>(lroundf(ele * 10.0f));
+
+    char time_buf[40];
+    time_t epoch = 0;
+    uint32_t frac = 0;
+    if (xmlCopyTag(body, "time", time_buf, sizeof(time_buf)) &&
+        parseIso8601(time_buf, &epoch, &frac)) {
+        if (*first_epoch == 0) {
+            *first_epoch = epoch;
+            if (meta.utc_date == 0) {
+                gpsEpochToCivil(epoch, &meta.utc_date, &meta.utc_time);
+            }
+        }
+        const int64_t elapsed =
+            (static_cast<int64_t>(epoch - *first_epoch) * 1000) + static_cast<int64_t>(frac);
+        sample.elapsed_ms = elapsed > 0 ? static_cast<uint32_t>(elapsed) : 0;
+    } else {
+        sample.elapsed_ms = xmlTagU32(body, "cardputer:elapsed_ms", (*sample_count) * 1000u);
+    }
+
+    float speed_kmh = xmlTagFloat(body, "cardputer:speed_kmh", -1);
+    if (speed_kmh < 0) {
+        const float speed_ms = xmlTagFloat(body, "gpxtpx:speed", -1);
+        speed_kmh = speed_ms >= 0 ? speed_ms * 3.6f : 0;
+    }
+    float gps_speed = xmlTagFloat(body, "cardputer:gps_speed_kmh", speed_kmh);
+    float course = xmlTagFloat(body, "gpxtpx:course", -1);
+    if (course < 0) {
+        course = xmlTagFloat(body, "course", 0);
+    }
+    const float accel = xmlTagFloat(body, "cardputer:accel_g", 0);
+    const float hdop = xmlTagFloat(body, "cardputer:hdop", 0);
+    sample.speed_d10 = static_cast<int16_t>(lroundf(speed_kmh * 10.0f));
+    sample.gps_speed_d10 = static_cast<int16_t>(lroundf(gps_speed * 10.0f));
+    sample.accel_mg = static_cast<int16_t>(lroundf(accel * 1000.0f));
+    sample.course_d10 = static_cast<uint16_t>(lroundf(course * 10.0f));
+    sample.sats_used = static_cast<uint8_t>(xmlTagU32(body, "cardputer:sats_used", 0));
+    sample.sats_vis = static_cast<uint8_t>(xmlTagU32(body, "cardputer:sats_vis", 0));
+    sample.hdop_d10 = static_cast<uint8_t>(lroundf(hdop * 10.0f));
+
+    if (out.write(reinterpret_cast<const uint8_t*>(&sample), sizeof(sample)) != sizeof(sample)) {
+        return false;
+    }
+    ++(*sample_count);
+    return true;
+}
+
+static bool skipUntilTrackStart(File& f) {
+    // 匹配 <trk> / <trk ...>，避免误吃 <trkseg> / <trkpt>
+    char buf[8];
+    size_t n = 0;
+    while (f.available()) {
+        const int c = f.read();
+        if (c < 0) {
+            break;
+        }
+        if (n < sizeof(buf) - 1) {
+            buf[n++] = static_cast<char>(c);
+            buf[n] = '\0';
+        } else {
+            memmove(buf, buf + 1, sizeof(buf) - 2);
+            buf[sizeof(buf) - 2] = static_cast<char>(c);
+            buf[sizeof(buf) - 1] = '\0';
+            n = sizeof(buf) - 1;
+        }
+        if (n >= 4 && memcmp(buf + n - 4, "<trk", 4) == 0) {
+            // 再读一个字符判定
+            const int next = f.read();
+            if (next < 0) {
+                return false;
+            }
+            if (next == '>' || next == ' ' || next == '\n' || next == '\r' || next == '\t') {
+                return true;
+            }
+            // 不是 track 起点，把 next 当作后续滑动的一部分
+            if (n < sizeof(buf) - 1) {
+                buf[n++] = static_cast<char>(next);
+                buf[n] = '\0';
+            }
+        }
+    }
+    return false;
+}
+
+static bool importNextTrackFromFile(File& f, char* err, const size_t err_len) {
+    if (!skipUntilTrackStart(f)) {
+        snprintf(err, err_len, "no track");
+        return false;
+    }
+
+    forceReloadIndex();
+    RunMeta meta{};
+    meta.magic = GPS_RUN_MAGIC;
+    meta.id = g_index.next_id;
+    bool had_meta = false;
+    char meta_xml[768];
+    meta_xml[0] = '\0';
+
+    char head[1024];
+    size_t head_used = 0;
+    bool saw_trkpt = false;
+    bool empty_track = false;
+    while (f.available() && head_used + 1 < sizeof(head)) {
+        const int c = f.read();
+        if (c < 0) {
+            break;
+        }
+        head[head_used++] = static_cast<char>(c);
+        head[head_used] = '\0';
+        if (head_used >= 6 && memcmp(head + head_used - 6, "</trk>", 6) == 0) {
+            empty_track = true;
+            break;
+        }
+        if (head_used >= 6 && memcmp(head + head_used - 6, "<trkpt", 6) == 0) {
+            saw_trkpt = true;
+            f.seek(f.position() - 6);
+            head_used -= 6;
+            head[head_used] = '\0';
+            break;
+        }
+    }
+    if (empty_track) {
+        snprintf(err, err_len, "empty track");
+        return false;
+    }
+    {
+        const char* mend = nullptr;
+        const char* mbody = xmlFindTag(head, "cardputer:meta", &mend);
+        if (mbody != nullptr && mend != nullptr) {
+            size_t n = static_cast<size_t>(mend - mbody);
+            if (n >= sizeof(meta_xml)) {
+                n = sizeof(meta_xml) - 1;
+            }
+            memcpy(meta_xml, mbody, n);
+            meta_xml[n] = '\0';
+            fillMetaFromXml(meta, meta_xml, &had_meta);
+        }
+    }
+    if (!saw_trkpt) {
+        snprintf(err, err_len, "no track points");
+        return false;
+    }
+
+    g_index.next_id++;
+    saveIndex();
+
+    char path[24];
+    runPath(meta.id, path, sizeof(path));
+    File out = LittleFS.open(path, "w+");
+    if (!out) {
+        snprintf(err, err_len, "cannot create run file");
+        return false;
+    }
+    if (out.write(reinterpret_cast<const uint8_t*>(&meta), sizeof(meta)) != sizeof(meta)) {
+        out.close();
+        LittleFS.remove(path);
+        snprintf(err, err_len, "write header failed");
+        return false;
+    }
+
+    time_t first_epoch = 0;
+    uint32_t sample_count = 0;
+    char pt_buf[768];
+    while (f.available()) {
+        size_t used = 0;
+        if (!readUntil(f, "</trkpt>", pt_buf, sizeof(pt_buf), &used)) {
+            break;
+        }
+        const char* trkpt = strstr(pt_buf, "<trkpt");
+        if (trkpt == nullptr) {
+            break;
+        }
+        const char* open_end = strchr(trkpt, '>');
+        if (open_end == nullptr) {
+            continue;
+        }
+        char open_tag[160];
+        size_t open_n = static_cast<size_t>(open_end - trkpt + 1);
+        if (open_n >= sizeof(open_tag)) {
+            open_n = sizeof(open_tag) - 1;
+        }
+        memcpy(open_tag, trkpt, open_n);
+        open_tag[open_n] = '\0';
+        if (!writeSampleFromTrkptXml(out, open_tag, open_end + 1, &first_epoch, meta,
+                                     &sample_count)) {
+            out.close();
+            LittleFS.remove(path);
+            snprintf(err, err_len, "write sample failed");
+            return false;
+        }
+        if ((sample_count & 0x1Fu) == 0u) {
+            yield();
+        }
+    }
+    // 走到轨尾
+    skipUntil(f, "</trk>");
+
+    if (sample_count == 0) {
+        out.close();
+        LittleFS.remove(path);
+        snprintf(err, err_len, "no track points");
+        return false;
+    }
+
+    if (!had_meta || meta.duration_ms == 0) {
+        recomputeMetaFromSamples(meta, out, sizeof(RunMeta));
+    } else {
+        meta.samples = sample_count;
+    }
+    out.seek(0);
+    out.write(reinterpret_cast<const uint8_t*>(&meta), sizeof(meta));
+    out.close();
+
+    forceReloadIndex();
+    makeRoomForImport();
+    for (int i = g_index.count; i > 0; --i) {
+        g_index.runs[i] = g_index.runs[i - 1];
+    }
+    g_index.runs[0] = meta;
+    g_index.count++;
+    g_history_selected = 0;
+    if (!saveIndex()) {
+        snprintf(err, err_len, "index save failed");
+        return false;
+    }
+    return true;
+}
+
+static bool importGpxFileImpl(const char* path, char* err, const size_t err_len) {
+    if (err != nullptr && err_len > 0) {
+        err[0] = '\0';
+    }
+    if (g_recording) {
+        snprintf(err, err_len, "recording active");
+        return false;
+    }
+    File f = LittleFS.open(path, "r");
+    if (!f) {
+        snprintf(err, err_len, "cannot open gpx");
+        return false;
+    }
+
+    int imported = 0;
+    char track_err[64];
+    while (f.available()) {
+        const size_t pos = f.position();
+        if (!skipUntilTrackStart(f)) {
+            break;
+        }
+        f.seek(pos);
+        if (!importNextTrackFromFile(f, track_err, sizeof(track_err))) {
+            if (imported == 0 && err != nullptr) {
+                snprintf(err, err_len, "%s", track_err);
+            }
+            // 避免卡死：至少前进一点
+            if (!f.available()) {
+                break;
+            }
+            f.read();
+            continue;
+        }
+        ++imported;
+        yield();
+    }
+    f.close();
+    if (imported == 0) {
+        if (err != nullptr && err[0] == '\0') {
+            snprintf(err, err_len, "no tracks imported");
+        }
+        return false;
+    }
+    if (err != nullptr) {
+        snprintf(err, err_len, "imported %d", imported);
+    }
+    return true;
+}
+
+static bool exportGpxById(const uint32_t id, GpsGpxWriteFn write, void* user) {
+    forceReloadIndex();
+    uint32_t ids[1] = {id};
+    return exportGpxDocument(ids, 1, write, user);
+}
+
+static bool exportAllGpx(GpsGpxWriteFn write, void* user) {
+    forceReloadIndex();
+    if (g_index.count == 0) {
+        return false;
+    }
+    uint32_t ids[GPS_HISTORY_MAX];
+    for (int i = 0; i < g_index.count; ++i) {
+        ids[i] = g_index.runs[i].id;
+    }
+    return exportGpxDocument(ids, g_index.count, write, user);
+}
+
 } // namespace
+
+bool gpsIsRecording() {
+    return g_recording;
+}
+
+void gpsHistoryReload() {
+    g_history_loaded = false;
+    loadIndex();
+}
+
+int gpsHistoryCount() {
+    forceReloadIndex();
+    return g_index.count;
+}
+
+bool gpsHistoryGet(const int index, GpsHistoryEntry* out) {
+    if (out == nullptr) {
+        return false;
+    }
+    forceReloadIndex();
+    if (index < 0 || index >= g_index.count) {
+        return false;
+    }
+    const RunMeta& run = g_index.runs[index];
+    out->id = run.id;
+    out->utc_date = run.utc_date;
+    out->utc_time = run.utc_time;
+    out->duration_ms = run.duration_ms;
+    out->samples = run.samples;
+    out->distance_m = run.distance_m;
+    out->max_kmh = run.max_kmh;
+    out->avg_kmh = run.avg_kmh;
+    return true;
+}
+
+bool gpsHistoryDeleteById(const uint32_t id) {
+    return deleteHistoryById(id);
+}
+
+bool gpsHistoryExportGpx(const uint32_t id, GpsGpxWriteFn write, void* user) {
+    return exportGpxById(id, write, user);
+}
+
+bool gpsHistoryExportAllGpx(GpsGpxWriteFn write, void* user) {
+    return exportAllGpx(write, user);
+}
+
+bool gpsHistoryImportGpxFile(const char* path, char* err, const size_t err_len) {
+    return importGpxFileImpl(path, err, err_len);
+}
 
 void enterGpsApp() {
     leaveGpsApp();
@@ -2043,9 +3229,7 @@ void enterGpsApp() {
     loadGpsRatePrefs();
     M5.Imu.update();
     g_imu_ok = M5.Imu.isEnabled();
-    // 先释放 Grove I2C 外设，再把同一组 G1/G2 交给 UART。
-    M5Cardputer.Ex_I2C.release();
-    g_gps_serial.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+    detectGpsSource();
     delay(50);
     applyGpsUpdateRate();
     redraw();
@@ -2053,9 +3237,7 @@ void enterGpsApp() {
 
 void leaveGpsApp() {
     stopRecording();
-    g_gps_serial.end();
-    // 离开后恢复 Grove 外部 I2C，确保 Radio/NFC/扫描可继续使用。
-    M5Cardputer.Ex_I2C.begin();
+    closeGpsSerial();
     g_page = GpsPage::Live;
 }
 
@@ -2233,7 +3415,8 @@ void handleGpsApp(const Keyboard_Class::KeysState& status) {
             }
             setPage(GpsPage::Settings);
         } else if (c == 'm' && g_page == GpsPage::HistoryChart) {
-            g_chart_metric = static_cast<ChartMetric>((static_cast<int>(g_chart_metric) + 1) % 3);
+            g_chart_metric = static_cast<ChartMetric>(
+                (static_cast<int>(g_chart_metric) + 1) % static_cast<int>(ChartMetric::Count));
             drawHistoryChart();
         } else if (c == 'r') {
             const bool was_recording = g_recording;

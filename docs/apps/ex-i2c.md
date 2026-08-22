@@ -2,19 +2,17 @@
 
 主菜单按键：`e`
 
-外接模块集合：左侧 Grove 的 **I2C**（收音机、NFC、总线扫描）、**UART**（GPS）与背面 EXT14 的 **SPI**（CC1101）。选择页每页最多 8 项；数字键按当前页从 `1` 编号，字母快捷键**不依赖当前页**即可直达。子应用中 `ESC` / `GO` 回到本集合；在选择页再按一次返回主菜单。
+外接模块集合：左侧 Grove 的 **I2C**（收音机、NFC、总线扫描）、**UART**（GPS；亦支持 Adv 上 Cap LoRa-1262 GNSS）。选择页每页最多 8 项；数字键按当前页从 `1` 编号，字母快捷键**不依赖当前页**即可直达。子应用中 `ESC` / `GO` 回到本集合；在选择页再按一次返回主菜单。
 
-本页说明固件里**已经落地的芯片接线、功能，以及源码 API**。收音机见 [Radio](./radio)；NFC 见 [NFC](./nfc)；GPS 见 [GPS](./gps)；总线扫描见 [I2C 扫描](./i2c)。
+本页说明固件里**已经落地的芯片接线、功能，以及源码 API**。收音机见 [Radio](./radio)；NFC 见 [NFC](./nfc)；GPS 见 [GPS](./gps)；总线扫描见 [I2C 扫描](./i2c)。**CC1101** 驱动源码仍在，选择页入口暂隐藏（未完成）。
 
 ## 截图
 
-**选择页 / 收音机 / GPS Live**
+**选择页**
 
 <div class="shot-row">
 
 ![exi2c-hub](/shots/app_exi2c_001.png)
-![radio-playing](/shots/app_radio_playing.png)
-![gps-live](/shots/app_exi2c_gps_live.png)
 
 </div>
 
@@ -24,16 +22,15 @@
 |------|--------|------|------|------|
 | `1` / `r` | [RADIO](./radio) | Grove I2C | TEA5767 / RDA5807M | FM 收音、搜台、电台列表；RDA 另有音量 / RDS |
 | `2` / `e` | [EXI2](./i2c) | Grove I2C | 扫描到的任意地址 | 列地址、猜测芯片名与用途 |
-| `3` / `c` | CC1101 | EXT14 SPI | CC1101 | 433 MHz 收发测试、RSSI、调频 |
-| `4` / `n` | [NFC](./nfc) | Grove I2C | ST25R3916（Unit NFC） | 读 / 写 13.56 MHz、NDEF / 历史卡模拟、历史 |
-| `5` / `g` | [GPS](./gps) | Grove UART | AT6668 GPS Unit | Live / 速度 / 星图 / 录制；G1/G2 切串口 |
+| `3` / `n` | [NFC](./nfc) | Grove I2C | ST25R3916（Unit NFC） | 读 / 写 13.56 MHz、NDEF / 历史卡模拟、历史 |
+| `4` / `g` | [GPS](./gps) | Grove UART 或 Cap UART | AT6668（Unit / Cap LoRa GNSS） | Live / 速度 / 星图 / 录制；自动探测源 |
 
 ## 快捷键
 
 | 按键 | 作用 |
 |------|------|
 | `1`–`8` | 进入当前页对应子应用 |
-| `r` / `e` / `c` / `n` / `g` | 直达 RADIO / EXI2 / CC1101 / NFC / GPS |
+| `r` / `e` / `n` / `g` | 直达 RADIO / EXI2 / NFC / GPS |
 | `[` `]` / 方向键 | 选择页翻页（超过 8 项时） |
 | `ESC` / `GO` | 子应用 → 选择页 → 主菜单 |
 | `h` | 子应用内 Help（选择页无 Help） |
@@ -112,7 +109,9 @@ EXT14 上的 `5VIN` / `5VOUT` 是 5 V，不能给 CC1101 当 VCC。
 
 `FmTuner::begin()` **先探 RDA，再探 TEA**。两颗同时在线时走 RDA。
 
-### CC1101（433 MHz Sub-GHz）
+### CC1101（433 MHz Sub-GHz，入口暂隐藏）
+
+源码与 EXT14 接线仍保留，但 **Grove 选择页暂不显示**（功能未完成）。勿与 Cap LoRa GNSS 同时假定占用 **G13 / G15**。
 
 | 项 | 值 |
 |----|----|
@@ -123,11 +122,11 @@ EXT14 上的 `5VIN` / `5VOUT` 是 5 V，不能给 CC1101 当 VCC。
 | 调制 | `begin(freq, 4.8 kbps, 4.8 kHz 频偏, 58 kHz RX BW, 10 dBm, 32 bit 前导)` |
 | 源码 | `include/app_cc1101.h`、`src/app_cc1101.cpp` |
 
-功能：初始化 / 再初始化、发测试包 `CP-<序号>`、监听约 3 s 收包、方向键改频率、500 ms 刷新 RSSI。无芯片显示 `NOT FOUND`。离开 App 时 `standby()`。
+功能（代码已有）：初始化 / 再初始化、发测试包 `CP-<序号>`、监听约 3 s 收包、方向键改频率、500 ms 刷新 RSSI。无芯片显示 `NOT FOUND`。离开 App 时 `standby()`。
 
 ### I2C 扫描地址表（仅猜测）
 
-扫描地址 **8–119**（`0x08`–`0x77`）。绿点=表内已知映射，灰点=未知（显示 `--` / `unknown`）。ExI2 表是常见 Grove / Unit **猜测**，不是驱动清单。固件真正驱动的外接芯片只有上列 FM 与 CC1101。
+扫描地址 **8–119**（`0x08`–`0x77`）。绿点=表内已知映射，灰点=未知（显示 `--` / `unknown`）。ExI2 表是常见 Grove / Unit **猜测**，不是驱动清单。固件真正驱动的外接芯片主要是上列 FM、NFC、GPS（及暂隐藏的 CC1101）。
 
 | 地址 | 猜测芯片 | 用途 |
 |------|----------|------|
@@ -364,10 +363,9 @@ g_radio.standby();
 
 ## 使用说明
 
-1. 主菜单按 `e` 打开 Grove。暖绿卡片：`1` RADIO、`2` EXI2、`3` CC1101、`4` NFC、`5` GPS。
+1. 主菜单按 `e` 打开 Grove。暖绿卡片：`1` RADIO、`2` EXI2、`3` NFC、`4` GPS（CC1101 入口暂隐藏）。
 2. **收音机**：4 pin 成品板插左侧 Grove（G2=SDA、G1=SCL），耳机插模块孔。无芯片显示 `NO MOD`。操作见 [Radio](./radio)。
 3. **扫描**：插上外设后进 EXI2，或 Hardware Test `8`。`r` 再扫。扫 FM 地址可能短暂出声，扫完会 mute + standby。
-4. **CC1101**：3.3 V + EXT14 SPI。`r` 初始化，`t` 发测试包，`l` 听包，方向键改频率。
-5. **NFC**：Unit NFC（ST25R3916）插左侧 Grove。见 [NFC](./nfc)。
-6. **GPS**：AT6668 Unit 插左侧 Grove；App 把 G1/G2 切成 UART。见 [GPS](./gps)。
-7. 退出子应用或整个集合时，FM / CC1101 / NFC / GPS 会停总线或 standby，避免占口。
+4. **NFC**：Unit NFC（ST25R3916）插左侧 Grove。见 [NFC](./nfc)。
+5. **GPS**：Grove AT6668 Unit，或 Adv + Cap LoRa-1262 GNSS；进入时自动探测。见 [GPS](./gps)。
+6. 退出子应用或整个集合时，FM / NFC / GPS 会停总线或关串口，避免占口。

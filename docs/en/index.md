@@ -25,12 +25,12 @@ hero:
 features:
   - title: Mijia Control
     details: Local Mijia control (lights / fans / purifiers / fryers, etc.) and IR TV/AC remotes
-  - title: Connectivity
-    details: SoftAP / LAN Web provisioning, multi-WiFi profiles, BLE scanning
+  - title: Grove Peripherals
+    details: Left Grove — FM radio, NFC, GPS, I2C bus scan; Units and Cap LoRa GNSS supported
   - title: System Info
     details: Uptime, Clock, countdown, stopwatch, battery curve, light / deep sleep
   - title: Utilities
-    details: Cursor usage, HID keyboard, FM radio, IMU / Mic / LED / I2C hardware demos
+    details: Cursor usage, HID keyboard, SoftAP / LAN provisioning, IMU / Mic / LED hardware demos
 ---
 
 ## About This Documentation

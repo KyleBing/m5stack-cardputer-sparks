@@ -3,6 +3,7 @@
 #include "app_config.h"
 #include "app_connectivity.h"
 #include "app_device_icons.h"
+#include "app_gps.h"
 #include "app_header.h"
 #include "app_screenshot.h"
 #include "app_version.h"
@@ -374,6 +375,18 @@ static void sendHtmlPage(const String& body, const uint8_t css_flags = HTML_CSS_
         ".radio-row{display:inline-flex;align-items:center;gap:6px;margin:0;font-size:13px;"
         "color:var(--fg);cursor:pointer}"
         ".radio-row input{width:auto;margin:0;accent-color:#1a73e8}"
+        // 慢操作等待遮罩（截图列表 / ZIP 等）
+        "#wait-overlay{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;"
+        "justify-content:center;padding:24px;background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}"
+        "#wait-overlay[hidden]{display:none!important}"
+        "#wait-overlay .box{max-width:360px;padding:18px 20px;border-radius:10px;"
+        "background:var(--td-bg);border:1px solid var(--tab-bd);box-shadow:0 8px 28px rgba(0,0,0,.25);"
+        "text-align:center}"
+        "#wait-overlay .spin{width:28px;height:28px;margin:0 auto 12px;border-radius:50%;"
+        "border:3px solid var(--tab-bd);border-top-color:var(--tab-act);animation:wait-spin .8s linear infinite}"
+        "#wait-overlay .msg{font-size:14px;line-height:1.45;color:var(--fg-h)}"
+        "#wait-overlay .sub{margin-top:8px;font-size:12px;color:var(--hint)}"
+        "@keyframes wait-spin{to{transform:rotate(360deg)}}"
     ));
     if (css_flags & HTML_CSS_DEVICES) {
         g_server.sendContent_P(PSTR(
@@ -559,7 +572,39 @@ static void sendHtmlPage(const String& body, const uint8_t css_flags = HTML_CSS_
     }
     g_server.sendContent_P(PSTR("</style></head><body>"));
     g_server.sendContent(body);
-    g_server.sendContent_P(PSTR("</body></html>"));
+    // 全局等待遮罩：a[data-wait] 点击后立刻提示，避免慢请求像无响应
+    g_server.sendContent(F(
+        "<div id='wait-overlay' hidden><div class='box'>"
+        "<div class='spin' aria-hidden='true'></div>"
+        "<div class='msg' id='wait-overlay-msg'></div>"
+        "<div class='sub' id='wait-overlay-sub'></div>"
+        "</div></div><script>"
+        "(function(){"
+        "const ov=document.getElementById('wait-overlay');"
+        "const msgEl=document.getElementById('wait-overlay-msg');"
+        "const subEl=document.getElementById('wait-overlay-sub');"
+        "let hideT=0;"
+        "function showWait(msg,sub,ms){"
+        "if(!ov)return;"
+        "if(msgEl)msgEl.textContent=msg||'';"
+        "if(subEl){subEl.textContent=sub||'';subEl.hidden=!sub;}"
+        "ov.hidden=false;ov.setAttribute('aria-busy','true');"
+        "clearTimeout(hideT);"
+        "if(ms>0)hideT=setTimeout(function(){ov.hidden=true;},ms);"
+        "}"
+        "document.addEventListener('click',function(e){"
+        "const a=e.target.closest('a[data-wait]');"
+        "if(!a||e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;"
+        "const msg=a.getAttribute('data-wait')||'';"
+        "const sub=a.getAttribute('data-wait-sub')||'';"
+        "let ms=parseInt(a.getAttribute('data-wait-ms')||'0',10);"
+        "if(isNaN(ms))ms=0;"
+        // 新标签打开时本页不跳转，给短暂提示后自动关闭
+        "if(a.target==='_blank'&&ms<=0)ms=4000;"
+        "showWait(msg,sub,ms);"
+        "},true);"
+        "})();"
+        "</script></body></html>"));
     g_server.sendContent(""); // 结束 chunked 传输
 }
 
@@ -573,20 +618,32 @@ enum class WebNavTab : uint8_t {
     AcAuto,
     System,
     Shots,
+    Gps,
     Files,
     Advanced,
     Example,
     About,
 };
 
-// nav 链接：当前页加 active
+// nav 链接：当前页加 active；wait_msg 非空且非当前页时，点击先出等待遮罩
 static void appendNavLink(String& body, const WebNavTab tab, const WebNavTab active, const char* href,
-                          const char* label) {
+                          const char* label, const char* wait_msg = nullptr,
+                          const char* wait_sub = nullptr) {
     body += F("<a href='");
     body += href;
     body += '\'';
     if (tab == active) {
         body += F(" class='active'");
+    }
+    if (wait_msg != nullptr && tab != active) {
+        body += F(" data-wait=\"");
+        body += wait_msg;
+        body += '"';
+        if (wait_sub != nullptr) {
+            body += F(" data-wait-sub=\"");
+            body += wait_sub;
+            body += '"';
+        }
     }
     body += '>';
     body += label;
@@ -642,7 +699,11 @@ static void appendTopBar(String& body, const char* title, const WebNavTab active
     appendNavLink(body, WebNavTab::Cursor, active, "/cursor", "Cursor");
     appendNavLink(body, WebNavTab::AcAuto, active, "/ac-auto", T("空调自动化", "AC Auto"));
     appendNavLink(body, WebNavTab::System, active, "/system", T("系统", "System"));
-    appendNavLink(body, WebNavTab::Shots, active, "/shots", T("截图", "Shots"));
+    appendNavLink(body, WebNavTab::Shots, active, "/shots", T("截图", "Shots"),
+                  T("正在加载截图列表…", "Loading screenshots…"),
+                  T("设备读写较慢，请稍候，不要重复点击。",
+                    "Device I/O can be slow — please wait, do not click again."));
+    appendNavLink(body, WebNavTab::Gps, active, "/gps", "GPS");
     appendNavLink(body, WebNavTab::Files, active, "/files", T("TF文件", "TF Files"));
     appendNavLink(body, WebNavTab::Advanced, active, "/advanced", T("高级JSON", "Advanced"));
     appendNavLink(body, WebNavTab::Example, active, "/example", T("示例", "Example"));
@@ -1912,7 +1973,12 @@ static void appendShotCard(const char* storage, const char* basename, const size
     *body += F("<div class='shot-card'>"
                "<a class='thumb' href='/shot/");
     *body += basename;
-    *body += F("' target='_blank' rel='noopener'>"
+    *body += F("' target='_blank' rel='noopener' data-wait=\"");
+    *body += T("正在打开预览…", "Opening preview…");
+    *body += F("\" data-wait-sub=\"");
+    *body += T("新标签页加载中，设备较慢请稍候。",
+               "Loading in a new tab — please wait.");
+    *body += F("\" data-wait-ms='4000'>"
                "<img src='/shot/");
     *body += basename;
     *body += F("' alt='");
@@ -1920,7 +1986,12 @@ static void appendShotCard(const char* storage, const char* basename, const size
     *body += F("' loading='lazy'></a>"
                "<div class='meta'><a class='name' href='/shot/");
     *body += basename;
-    *body += F("' target='_blank' rel='noopener'>");
+    *body += F("' target='_blank' rel='noopener' data-wait=\"");
+    *body += T("正在打开预览…", "Opening preview…");
+    *body += F("\" data-wait-sub=\"");
+    *body += T("新标签页加载中，设备较慢请稍候。",
+               "Loading in a new tab — please wait.");
+    *body += F("\" data-wait-ms='4000'>");
     *body += basename;
     *body += F("</a><div class='size'>");
     *body += storage;
@@ -1930,7 +2001,11 @@ static void appendShotCard(const char* storage, const char* basename, const size
     *body += basename;
     *body += F("?dl=1' download='");
     *body += basename;
-    *body += F("'>");
+    *body += F("' data-wait=\"");
+    *body += T("正在准备下载…", "Preparing download…");
+    *body += F("\" data-wait-sub=\"");
+    *body += T("请稍候，不要重复点击。", "Please wait — do not click again.");
+    *body += F("\" data-wait-ms='5000'>");
     *body += T("下载", "Download");
     *body += F("</a>"
                "<form method='POST' action='/shots/delete'>"
@@ -3249,6 +3324,253 @@ static void handleBakeRgb565() {
     drawWebApp();
 }
 
+// —— GPS History（GPX 导入 / 导出）——
+static constexpr const char* GPS_UPLOAD_PATH = "/gps_upload.gpx";
+static File g_gps_upload_file;
+static bool g_gps_upload_ok = false;
+
+static bool gpsGpxWriteCb(const char* data, const size_t len, void* /*user*/) {
+    g_server.sendContent(data, len);
+    return true;
+}
+
+static void gpsRedirect(const char* msg, const bool ok) {
+    String loc = "/gps";
+    if (msg != nullptr && msg[0] != '\0') {
+        loc += ok ? "?ok=" : "?err=";
+        loc += urlEncodePath(String(msg));
+    }
+    g_server.sendHeader("Location", loc);
+    g_server.send(303, "text/plain", ok ? "ok" : "fail");
+}
+
+static void handleGpsList() {
+    const int count = gpsHistoryCount();
+    String body;
+    body.reserve(2048);
+    appendTopBar(body, T("GPS 记录", "GPS Records"), WebNavTab::Gps);
+    body += F("<p class='hint'>");
+    body += T("导出为 <strong>GPX 1.1</strong>（通用轨迹格式）。"
+              "自有字段（融合速度、加速度、星数、测速峰值等）放在 "
+              "<code>cardputer:</code> 扩展里，地图软件仍可读 lat/lon/ele/time/speed。"
+              "导入支持本机导出的 GPX，也尽量兼容常见第三方轨迹。",
+              "Export as <strong>GPX 1.1</strong> (universal track format). "
+              "Cardputer fields (fused speed, accel, sats, sprint peaks, …) live in "
+              "<code>cardputer:</code> extensions; map apps still read lat/lon/ele/time/speed. "
+              "Import accepts our GPX and most third-party tracks.");
+    body += F("</p>");
+
+    if (g_server.hasArg("ok")) {
+        body += F("<p class='fm-flash ok'>");
+        body += escapeHtmlText(g_server.arg("ok"));
+        body += F("</p>");
+    } else if (g_server.hasArg("err")) {
+        body += F("<p class='fm-flash err'>");
+        body += escapeHtmlText(g_server.arg("err"));
+        body += F("</p>");
+    }
+
+    if (gpsIsRecording()) {
+        body += F("<p class='fm-flash err'>");
+        body += T("设备正在录制 GPS，请先停止后再导入 / 删除。",
+                  "GPS recording is active — stop it before import / delete.");
+        body += F("</p>");
+    }
+
+    body += F("<form class='fm-mkdir' method='POST' action='/gps/import' "
+              "enctype='multipart/form-data' style='margin-bottom:14px'>"
+              "<label>");
+    body += T("导入 GPX", "Import GPX");
+    body += F("</label>"
+              "<input type='file' name='gpx' accept='.gpx,application/gpx+xml,text/xml' required>"
+              "<button type='submit' class='primary'>");
+    body += T("上传", "Upload");
+    body += F("</button></form>");
+
+    body += F("<div class='fm-toolbar'><span class='fm-count'>");
+    body += T("共 ", "");
+    body += String(count);
+    body += T(" 条（最多 ", " run(s) (max ");
+    body += String(GPS_HISTORY_CAPACITY);
+    body += T("）", ")");
+    body += F("</span>");
+    if (count > 0) {
+        body += F("<a class='btn primary' href='/gps/export?id=all'>");
+        body += T("全部导出 GPX", "Export all GPX");
+        body += F("</a>");
+    }
+    body += F("</div>");
+
+    if (count <= 0) {
+        body += F("<div class='fm-empty'><strong>");
+        body += T("暂无记录", "No records");
+        body += F("</strong>");
+        body += T("在 GPS App 录制行程，或上传 GPX。",
+                  "Record a run in the GPS app, or upload a GPX file.");
+        body += F("</div>");
+    } else {
+        body += F("<div style='overflow-x:auto'><table class='fm-table'>"
+                  "<thead><tr>"
+                  "<th class='col-name'>ID</th>"
+                  "<th class='col-time'>");
+        body += T("UTC 开始", "UTC start");
+        body += F("</th>"
+                  "<th class='col-size'>");
+        body += T("时长", "Duration");
+        body += F("</th>"
+                  "<th class='col-size'>");
+        body += T("距离", "Distance");
+        body += F("</th>"
+                  "<th class='col-size'>");
+        body += T("点", "Pts");
+        body += F("</th>"
+                  "<th class='col-act'>");
+        body += T("操作", "Actions");
+        body += F("</th></tr></thead><tbody>");
+
+        for (int i = 0; i < count; ++i) {
+            GpsHistoryEntry e{};
+            if (!gpsHistoryGet(i, &e)) {
+                continue;
+            }
+            const uint32_t sec = e.duration_ms / 1000u;
+            char dur[16];
+            snprintf(dur, sizeof(dur), "%02lu:%02lu:%02lu",
+                     static_cast<unsigned long>(sec / 3600u),
+                     static_cast<unsigned long>((sec / 60u) % 60u),
+                     static_cast<unsigned long>(sec % 60u));
+            char start[24];
+            snprintf(start, sizeof(start), "%08lu %06lu",
+                     static_cast<unsigned long>(e.utc_date),
+                     static_cast<unsigned long>(e.utc_time));
+
+            body += F("<tr><td class='col-name'><code>");
+            body += String(e.id);
+            body += F("</code></td><td class='col-time'>");
+            body += start;
+            body += F("</td><td class='col-size'>");
+            body += dur;
+            body += F("</td><td class='col-size'>");
+            body += String(e.distance_m, 0);
+            body += F(" m</td><td class='col-size'>");
+            body += String(e.samples);
+            body += F("</td><td class='col-act'><div class='acts'>"
+                      "<a class='btn' href='/gps/export?id=");
+            body += String(e.id);
+            body += F("'>GPX</a>"
+                      "<form method='POST' action='/gps/delete'>"
+                      "<input type='hidden' name='id' value='");
+            body += String(e.id);
+            body += F("'>"
+                      "<button type='submit' class='danger' onclick=\"return confirm('");
+            body += T("删除这条 GPS 记录？", "Delete this GPS record?");
+            body += F("')\">");
+            body += T("删除", "Delete");
+            body += F("</button></form></div></td></tr>");
+        }
+        body += F("</tbody></table></div>");
+    }
+
+    appendCardEnd(body);
+    sendHtmlPage(body, HTML_CSS_FILES);
+}
+
+static void handleGpsExport() {
+    const String id_arg = g_server.hasArg("id") ? g_server.arg("id") : "";
+    if (id_arg.length() == 0) {
+        g_server.send(400, "text/plain", "missing id");
+        return;
+    }
+
+    char disposition[80];
+    bool ok = false;
+    g_server.sendHeader("Cache-Control", "no-store");
+    g_server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+
+    if (id_arg == "all") {
+        snprintf(disposition, sizeof(disposition),
+                 "attachment; filename=\"cardputer-gps-all.gpx\"");
+        g_server.sendHeader("Content-Disposition", disposition);
+        g_server.send(200, "application/gpx+xml", "");
+        ok = gpsHistoryExportAllGpx(gpsGpxWriteCb, nullptr);
+    } else {
+        const uint32_t id = static_cast<uint32_t>(strtoul(id_arg.c_str(), nullptr, 10));
+        snprintf(disposition, sizeof(disposition),
+                 "attachment; filename=\"gps_%08lu.gpx\"", static_cast<unsigned long>(id));
+        g_server.sendHeader("Content-Disposition", disposition);
+        g_server.send(200, "application/gpx+xml", "");
+        ok = gpsHistoryExportGpx(id, gpsGpxWriteCb, nullptr);
+    }
+    g_server.sendContent("");
+    if (!ok) {
+        // 已开始 chunked，无法改状态码；客户端可能得到残缺 GPX
+        Serial.println("[web] gps export failed");
+    }
+}
+
+static void handleGpsDelete() {
+    if (gpsIsRecording()) {
+        gpsRedirect(T("recording active", "recording active"), false);
+        return;
+    }
+    if (!g_server.hasArg("id")) {
+        gpsRedirect("missing id", false);
+        return;
+    }
+    const uint32_t id =
+        static_cast<uint32_t>(strtoul(g_server.arg("id").c_str(), nullptr, 10));
+    if (!gpsHistoryDeleteById(id)) {
+        gpsRedirect(T("删除失败", "Delete failed"), false);
+        return;
+    }
+    gpsRedirect(T("已删除", "Deleted"), true);
+}
+
+static void handleGpsImportUpload() {
+    HTTPUpload& upload = g_server.upload();
+    if (upload.status == UPLOAD_FILE_START) {
+        g_gps_upload_ok = false;
+        LittleFS.remove(GPS_UPLOAD_PATH);
+        g_gps_upload_file = LittleFS.open(GPS_UPLOAD_PATH, "w");
+        g_gps_upload_ok = static_cast<bool>(g_gps_upload_file);
+    } else if (upload.status == UPLOAD_FILE_WRITE) {
+        if (g_gps_upload_file) {
+            g_gps_upload_file.write(upload.buf, upload.currentSize);
+        }
+    } else if (upload.status == UPLOAD_FILE_END) {
+        if (g_gps_upload_file) {
+            g_gps_upload_file.close();
+        }
+    } else if (upload.status == UPLOAD_FILE_ABORTED) {
+        if (g_gps_upload_file) {
+            g_gps_upload_file.close();
+        }
+        LittleFS.remove(GPS_UPLOAD_PATH);
+        g_gps_upload_ok = false;
+    }
+}
+
+static void handleGpsImportDone() {
+    if (gpsIsRecording()) {
+        LittleFS.remove(GPS_UPLOAD_PATH);
+        gpsRedirect(T("正在录制，无法导入", "Recording — cannot import"), false);
+        return;
+    }
+    if (!g_gps_upload_ok || !LittleFS.exists(GPS_UPLOAD_PATH)) {
+        gpsRedirect(T("上传失败", "Upload failed"), false);
+        return;
+    }
+    char err[64];
+    const bool ok = gpsHistoryImportGpxFile(GPS_UPLOAD_PATH, err, sizeof(err));
+    LittleFS.remove(GPS_UPLOAD_PATH);
+    g_gps_upload_ok = false;
+    if (!ok) {
+        gpsRedirect(err[0] ? err : "import failed", false);
+        return;
+    }
+    gpsRedirect(err, true);
+}
+
 // 注册 HTTP 路由（仅一次，避免重复 on()）
 static bool g_routes_registered = false;
 static void registerWebRoutes() {
@@ -3271,6 +3593,10 @@ static void registerWebRoutes() {
     g_server.on("/shots/clear-tf", HTTP_POST, handleShotsClearTf);
     g_server.on("/shots/clear-flash", HTTP_POST, handleShotsClearFlash);
     g_server.on("/shots/delete", HTTP_POST, handleShotsDeleteOne);
+    g_server.on("/gps", HTTP_GET, handleGpsList);
+    g_server.on("/gps/export", HTTP_GET, handleGpsExport);
+    g_server.on("/gps/delete", HTTP_POST, handleGpsDelete);
+    g_server.on("/gps/import", HTTP_POST, handleGpsImportDone, handleGpsImportUpload);
     g_server.on("/files", HTTP_GET, handleFilesList);
     g_server.on("/files/delete", HTTP_POST, handleFilesDelete);
     g_server.on("/files/mkdir", HTTP_POST, handleFilesMkdir);

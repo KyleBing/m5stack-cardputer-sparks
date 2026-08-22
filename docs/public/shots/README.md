@@ -45,10 +45,16 @@ app_{app}_{子功能}.png
 - app_morse_001.png
 - app_mic_001.png / app_mic_002.png
 
-### Radio / Grove GPS
+### Radio / Grove GPS / NFC
 - app_radio_playing.png / app_radio_no_module.png / app_radio_station_list.png
-- app_exi2c_gps_live.png / app_exi2c_gps_nofix.png / app_exi2c_gps_speed.png / app_exi2c_gps_satellites.png
-- app_exi2c_gps_sky.png / app_exi2c_gps_history.png / app_exi2c_gps_chart.png / app_exi2c_gps_settings.png
+- app_exi2c_001.png（Grove 选择页）
+- GPS empty：app_exi2c_gps_live_empty.png / app_exi2c_gps_satellites_empty.png / app_exi2c_gps_sky_empty.png / app_exi2c_gps_speed.png
+- GPS fix：app_exi2c_gps_live.png / app_exi2c_gps_satellites.png / app_exi2c_gps_sky.png / app_exi2c_gps_history.png / app_exi2c_gps_settings.png
+- GPS chart：app_exi2c_gps_chart.png / app_exi2c_gps_chart_alt.png / app_exi2c_gps_chart_accel.png / app_exi2c_gps_chart_all.png / app_exi2c_gps_chart_map.png
+- app_exi2c_nfc_main.png / app_exi2c_nfc_read.png / app_exi2c_nfc_dump.png
+- app_exi2c_nfc_history.png / app_exi2c_nfc_detail.png / app_exi2c_nfc_write.png / app_exi2c_nfc_emulate.png
+- app_exi2c_nfc_write_setup.png / app_exi2c_nfc_write_type.png / app_exi2c_nfc_write_uid.png / app_exi2c_nfc_write_ndef.png
+- app_exi2c_nfc_emu_setup.png / app_exi2c_nfc_emu_type.png
 
 ### HID / IR
 - app_hidkeyboard_main.png / app_hidkeyboard_usb_mode.png / app_hidkeyboard_mouse_mode.png

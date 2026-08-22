@@ -89,7 +89,7 @@ enum class AppState {
     INFO, // 系统信息 / 内存（字母 i）
     CALENDAR,
     AC_AUTO,    // 空调自动化
-    EX_I2C_APPS, // Grove 外设合集（Radio / NFC / GPS / CC1101 等）
+    EX_I2C_APPS, // Grove 外设合集（Radio / NFC / GPS 等；CC1101 入口暂隐藏）
     VOCAB,      // 单词学习
 };
 
@@ -131,13 +131,13 @@ static const MenuItem MENU_ITEMS[] = {
     {'j', "Mor", "MORSE", AppState::MORSE},
     {'x', "IR", "INFRARED", AppState::IR},
     {'n', "AC", "AC AUTO", AppState::AC_AUTO},
-    {'e', "Grove", "GROVE", AppState::EX_I2C_APPS},
     {'l', "Voc", "VOCAB", AppState::VOCAB},
 
-    // 系统功能测试
+    // 外设 / 系统功能测试（Grove 紧挨 Mini Games、Hardware 之前）
     {'k', "KB", "KEYBOARD", AppState::HID_KEYBOARD},
-    {'g', "Game", "Mini Games", AppState::GAMES},
-    {'h', "Test", "Hardware Test", AppState::HARDWARE_TESTS},
+    {'e', "Grove", "GROVE", AppState::EX_I2C_APPS},
+    {'g', "Game", "MINI GAMES", AppState::GAMES},
+    {'h', "Test", "HARDWARE TEST", AppState::HARDWARE_TESTS},
 };
 
 static const int MENU_ITEM_COUNT = sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0]);
@@ -167,16 +167,6 @@ bool enterAppByKey(const char key) {
 // ===== MENU =====
 
 static constexpr const char* APP_NAME = "Sparks";
-
-// 按 AppState 取菜单长名（用于子界面 header）
-const char* getMenuItemNameFull(const AppState state) {
-    for (int i = 0; i < MENU_ITEM_COUNT; i++) {
-        if (MENU_ITEMS[i].state == state) {
-            return MENU_ITEMS[i].name_full;
-        }
-    }
-    return "?";
-}
 
 // 截图文件名：组名_app名_功能名（如 exi2c_gps_live / gamemini_snake_help）
 const char* getCurrentAppShotSlug() {
@@ -2616,7 +2606,8 @@ static void drawHardwareTestHubCards() {
 static void showHardwareTestsHubScreen() {
     // 回到 hub 时必须清子模式，否则按键/刷新仍走子 app 并盖住主菜单
     hardwareTestMode = HardwareTestMode::HUB;
-    beginAppHubScreen(getMenuItemNameFull(AppState::HARDWARE_TESTS), hwHubBg(),
+    // Hub 标题用 Title Case；主菜单仍显示 MENU_ITEMS 的全大写
+    beginAppHubScreen("Hardware Test", hwHubBg(),
                       hardwareTestHubPage, getHardwareTestHubPageCount());
     drawHardwareTestHubCards();
 }

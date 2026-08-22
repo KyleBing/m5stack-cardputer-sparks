@@ -24,8 +24,8 @@ Sparks 是跑在 [M5Stack Cardputer](https://docs.m5stack.com/en/core/Cardputer)
 | `t` | Time | [Time](/apps/time) | `s` | Slp | [Sleep](/apps/sleep) | `o` | Opt | [Options](/apps/options) |
 | `i` | Inf | [Info](/apps/info) | `p` | Bat | [Battery](/apps/battery) | `c` | Cur | [Cursor](/apps/cursor) |
 | `a` | Cal | [Calendar](/apps/calendar) | `v` | Ver | [Version](/apps/version) | `j` | Mor | [Morse](/apps/morse) |
-| `x` | IR | [Infrared](/apps/infrared) | `k` | KB | [Keyboard](/apps/hid-keyboard) | `g` | Game | [Mini Games](/apps/mini-games) |
-| `h` | Test | [Hardware Test](/apps/hardware-test) | `e` | Grove | [Grove](/apps/ex-i2c) |  |  |  |
+| `x` | IR | [Infrared](/apps/infrared) | `k` | KB | [Keyboard](/apps/hid-keyboard) | `e` | Grove | [Grove](/apps/ex-i2c) |
+| `g` | Game | [Mini Games](/apps/mini-games) | `h` | Test | [Hardware Test](/apps/hardware-test) |  |  |  |
 
 菜单可翻页： 对应键盘上的上下左右 箭头键，无需按 **Fn** 。
 

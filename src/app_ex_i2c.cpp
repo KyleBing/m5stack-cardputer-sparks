@@ -27,10 +27,10 @@ struct ExI2cHubItem {
 
 static constexpr int EXI2C_HUB_ITEMS_PER_PAGE = 8;
 
+// CC1101 入口暂隐藏（功能未完成）；源码与 ExI2cMode::CC1101 仍保留。
 static constexpr ExI2cHubItem EXI2C_HUB_ITEMS[] = {
     {"RADIO", ExI2cMode::RADIO, 'r'},
     {"EXI2", ExI2cMode::SCAN, 'e'},
-    {"CC1101", ExI2cMode::CC1101, 'c'},
     {"NFC", ExI2cMode::NFC, 'n'},
     {"GPS", ExI2cMode::GPS, 'g'},
 };

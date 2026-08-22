@@ -139,6 +139,22 @@ Device captures (`Fn+s`), sorted by filename.
 <figcaption>app_exi2c_gps_chart.png</figcaption>
 </figure>
 <figure class="shot-item">
+<img src="/shots/app_exi2c_gps_chart_accel.png" alt="app_exi2c_gps_chart_accel.png" />
+<figcaption>app_exi2c_gps_chart_accel.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_gps_chart_all.png" alt="app_exi2c_gps_chart_all.png" />
+<figcaption>app_exi2c_gps_chart_all.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_gps_chart_alt.png" alt="app_exi2c_gps_chart_alt.png" />
+<figcaption>app_exi2c_gps_chart_alt.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_gps_chart_map.png" alt="app_exi2c_gps_chart_map.png" />
+<figcaption>app_exi2c_gps_chart_map.png</figcaption>
+</figure>
+<figure class="shot-item">
 <img src="/shots/app_exi2c_gps_history.png" alt="app_exi2c_gps_history.png" />
 <figcaption>app_exi2c_gps_history.png</figcaption>
 </figure>
@@ -147,12 +163,16 @@ Device captures (`Fn+s`), sorted by filename.
 <figcaption>app_exi2c_gps_live.png</figcaption>
 </figure>
 <figure class="shot-item">
-<img src="/shots/app_exi2c_gps_nofix.png" alt="app_exi2c_gps_nofix.png" />
-<figcaption>app_exi2c_gps_nofix.png</figcaption>
+<img src="/shots/app_exi2c_gps_live_empty.png" alt="app_exi2c_gps_live_empty.png" />
+<figcaption>app_exi2c_gps_live_empty.png</figcaption>
 </figure>
 <figure class="shot-item">
 <img src="/shots/app_exi2c_gps_satellites.png" alt="app_exi2c_gps_satellites.png" />
 <figcaption>app_exi2c_gps_satellites.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_gps_satellites_empty.png" alt="app_exi2c_gps_satellites_empty.png" />
+<figcaption>app_exi2c_gps_satellites_empty.png</figcaption>
 </figure>
 <figure class="shot-item">
 <img src="/shots/app_exi2c_gps_settings.png" alt="app_exi2c_gps_settings.png" />
@@ -163,8 +183,64 @@ Device captures (`Fn+s`), sorted by filename.
 <figcaption>app_exi2c_gps_sky.png</figcaption>
 </figure>
 <figure class="shot-item">
+<img src="/shots/app_exi2c_gps_sky_empty.png" alt="app_exi2c_gps_sky_empty.png" />
+<figcaption>app_exi2c_gps_sky_empty.png</figcaption>
+</figure>
+<figure class="shot-item">
 <img src="/shots/app_exi2c_gps_speed.png" alt="app_exi2c_gps_speed.png" />
 <figcaption>app_exi2c_gps_speed.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_nfc_detail.png" alt="app_exi2c_nfc_detail.png" />
+<figcaption>app_exi2c_nfc_detail.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_nfc_dump.png" alt="app_exi2c_nfc_dump.png" />
+<figcaption>app_exi2c_nfc_dump.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_nfc_emu_setup.png" alt="app_exi2c_nfc_emu_setup.png" />
+<figcaption>app_exi2c_nfc_emu_setup.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_nfc_emu_type.png" alt="app_exi2c_nfc_emu_type.png" />
+<figcaption>app_exi2c_nfc_emu_type.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_nfc_emulate.png" alt="app_exi2c_nfc_emulate.png" />
+<figcaption>app_exi2c_nfc_emulate.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_nfc_history.png" alt="app_exi2c_nfc_history.png" />
+<figcaption>app_exi2c_nfc_history.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_nfc_main.png" alt="app_exi2c_nfc_main.png" />
+<figcaption>app_exi2c_nfc_main.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_nfc_read.png" alt="app_exi2c_nfc_read.png" />
+<figcaption>app_exi2c_nfc_read.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_nfc_write.png" alt="app_exi2c_nfc_write.png" />
+<figcaption>app_exi2c_nfc_write.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_nfc_write_ndef.png" alt="app_exi2c_nfc_write_ndef.png" />
+<figcaption>app_exi2c_nfc_write_ndef.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_nfc_write_setup.png" alt="app_exi2c_nfc_write_setup.png" />
+<figcaption>app_exi2c_nfc_write_setup.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_nfc_write_type.png" alt="app_exi2c_nfc_write_type.png" />
+<figcaption>app_exi2c_nfc_write_type.png</figcaption>
+</figure>
+<figure class="shot-item">
+<img src="/shots/app_exi2c_nfc_write_uid.png" alt="app_exi2c_nfc_write_uid.png" />
+<figcaption>app_exi2c_nfc_write_uid.png</figcaption>
 </figure>
 
 <figure class="shot-item">

@@ -6,6 +6,26 @@
 
 ---
 
+## 2026-08-22
+
+### 新增
+
+- **GPS Cap LoRa**：进入时自动探测 Cap LoRa-1262 GNSS（G15/G13）或 Grove Unit（G1/G2）；Cap 优先以便 Adv 上继续用 Radio / NFC
+- **GPS GPX**：Config Web `/gps` 支持行程列表、单条 / 全部导出与 GPX 导入（可含多条 `<trk>`）
+- **GPS Chart**：新增路线 Map 与 Speed+Alt+Accel 叠加视图
+- **NFC 写入向导**：自定义 Type / UID / NDEF，以及从历史记录整卡镜像写入 Type2
+- **NFC 自定义模拟**：向导配置类型与载荷；与写入共用 SOURCE→RECORD / TYPE→UID→PAYLOAD 流程
+- **Config Web**：全局慢操作等待遮罩（截图 ZIP、GPS 导出等）
+
+### 改进
+
+- **Grove 菜单**：主菜单顺序挪到 Mini Games / Hardware Test 之前；文档主页「连接」feature 改为突出 Grove 外设
+- **NFC 读卡 UI**：状态图标、USR/BLOCK/NDEF 排版与 dump；History / Detail / Write / Emulate 截图补齐
+- **进度条**：`drawPercentBar` / `drawPercentBarV` 先画整条边框再填充，避免半填充时边框断裂
+- **文档**：GPS / NFC / Grove / 截图总览中英同步；设备实拍 `app_exi2c_*` 更新
+
+---
+
 ## 2026-08-21
 
 ### 新增

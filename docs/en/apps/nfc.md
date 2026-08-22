@@ -6,6 +6,49 @@ Open from: main menu `e` → [Grove](./ex-i2c) `4` / `n`
 
 > Requires **Unit NFC**, not Unit RFID (U031 / `0x28`). 13.56 MHz only; protected blocks need matching keys.
 
+## Screenshots
+
+**Reader / Dump**
+
+<div class="shot-row">
+
+![nfc-main](/shots/app_exi2c_nfc_main.png)
+![nfc-read](/shots/app_exi2c_nfc_read.png)
+![nfc-dump](/shots/app_exi2c_nfc_dump.png)
+
+</div>
+
+**History / Detail / Write / Emulate**
+
+<div class="shot-row">
+
+![nfc-history](/shots/app_exi2c_nfc_history.png)
+![nfc-detail](/shots/app_exi2c_nfc_detail.png)
+![nfc-write](/shots/app_exi2c_nfc_write.png)
+![nfc-emu](/shots/app_exi2c_nfc_emulate.png)
+
+</div>
+
+**Write / Emulate setup**
+
+<div class="shot-row">
+
+![nfc-write-setup](/shots/app_exi2c_nfc_write_setup.png)
+![nfc-write-type](/shots/app_exi2c_nfc_write_type.png)
+![nfc-emu-setup](/shots/app_exi2c_nfc_emu_setup.png)
+![nfc-emu-type](/shots/app_exi2c_nfc_emu_type.png)
+
+</div>
+
+**Write UID / NDEF**
+
+<div class="shot-row">
+
+![nfc-write-uid](/shots/app_exi2c_nfc_write_uid.png)
+![nfc-write-ndef](/shots/app_exi2c_nfc_write_ndef.png)
+
+</div>
+
 ## Module & wiring
 
 Plug into the **left Grove** (HY2.0-4P). Match silkscreen **SDA / SCL / VCC / GND**:

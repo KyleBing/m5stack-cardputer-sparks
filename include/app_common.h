@@ -121,11 +121,11 @@ int applyHelpPageDelta(int page, int page_count, int delta);
 // 提示小字：',' 左箭头，'.' 右箭头
 void drawHintText(int x, int y, const char* text, int text_size = 1);
 
-// 横向进度条：已填充全高实心无边框；未填充完整边框（含左右）
+// 横向进度条：整条画边框，再实心填充已占用段（盖住该段边框）
 void drawPercentBar(int x, int y, int w, int h, int percent, uint16_t fill_color,
                     uint16_t border_color = APP_COLOR_MUTED, uint16_t empty_bg = BLACK);
 
-// 纵向进度条：自下而上填充；未填充完整边框（含上下）
+// 纵向进度条：整条画边框，再自下而上实心填充（盖住该段边框）
 void drawPercentBarV(int x, int y, int w, int h, int percent, uint16_t fill_color,
                      uint16_t border_color = APP_COLOR_MUTED, uint16_t empty_bg = BLACK);
 

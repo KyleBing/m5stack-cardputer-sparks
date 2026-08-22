@@ -40,6 +40,7 @@
    - `/ac-auto`：空调自动化（`ac_auto`）
    - `/wifi`：多 WiFi 档案（最多 5 条）与 Active
    - `/shots`：截图预览、单张下载 / 删除、清空 TF / Flash
+   - `/gps`：GPS 行程列表、GPX 导入 / 导出 / 删除
    - `/about`：固件版本信息
    - RGB565 烘焙：`POST /bake-rgb565`（现场生成图标 bake 文件；说明见 [图片处理与烘焙](/dev/images)）
 4. 修改保存后写入 LittleFS；部分项（如反色、音量）会立即生效。

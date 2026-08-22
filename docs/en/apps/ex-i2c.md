@@ -2,19 +2,17 @@
 
 Main menu key: `e`
 
-External-module shelf: **I2C** (FM radio, NFC, bus scan) and **UART** (GPS) on the left Grove, plus **SPI** on the rear EXT14 header (CC1101). Up to 8 cards per page; number keys restart at `1` on the current page; letter shortcuts work **from any page**. `ESC` / `GO` returns a child to this shelf; press again on the shelf to return to the main menu.
+External-module shelf: **I2C** (FM radio, NFC, bus scan) and **UART** (GPS; also Cap LoRa-1262 GNSS on Adv) on the left Grove / Cap bus. Up to 8 cards per page; number keys restart at `1` on the current page; letter shortcuts work **from any page**. `ESC` / `GO` returns a child to this shelf; press again on the shelf to return to the main menu.
 
-This page covers **wiring, behavior, and source APIs** for chips the firmware already drives. Radio: [Radio](./radio). NFC: [NFC](./nfc). GPS: [GPS](./gps). Scan: [I2C Scan](./i2c).
+This page covers **wiring, behavior, and source APIs** for chips the firmware already drives. Radio: [Radio](./radio). NFC: [NFC](./nfc). GPS: [GPS](./gps). Scan: [I2C Scan](./i2c). **CC1101** driver code remains, but the shelf entry is **hidden for now** (unfinished).
 
 ## Screenshots
 
-**Shelf / radio / GPS Live**
+**Shelf**
 
 <div class="shot-row">
 
 ![exi2c-hub](/shots/app_exi2c_001.png)
-![radio-playing](/shots/app_radio_playing.png)
-![gps-live](/shots/app_exi2c_gps_live.png)
 
 </div>
 
@@ -24,16 +22,15 @@ This page covers **wiring, behavior, and source APIs** for chips the firmware al
 |-----|-------|-----|------|------|
 | `1` / `r` | [RADIO](./radio) | Grove I2C | TEA5767 / RDA5807M | FM, seek, station list; RDA also has volume / RDS |
 | `2` / `e` | [EXI2](./i2c) | Grove I2C | any ACK | List addresses with a likely chip name and role |
-| `3` / `c` | CC1101 | EXT14 SPI | CC1101 | 433 MHz TX/RX test, RSSI, tune |
-| `4` / `n` | [NFC](./nfc) | Grove I2C | ST25R3916 (Unit NFC) | Read / write 13.56 MHz, NDEF / stored-card emulate, history |
-| `5` / `g` | [GPS](./gps) | Grove UART | AT6668 GPS Unit | Live / speed / sky / record; G1/G2 as UART |
+| `3` / `n` | [NFC](./nfc) | Grove I2C | ST25R3916 (Unit NFC) | Read / write 13.56 MHz, NDEF / stored-card emulate, history |
+| `4` / `g` | [GPS](./gps) | Grove UART or Cap UART | AT6668 (Unit / Cap LoRa GNSS) | Live / speed / sky / record; auto-detect source |
 
 ## Shortcuts
 
 | Key | Action |
 |-----|--------|
 | `1`–`8` | Open the child on the current page |
-| `r` / `e` / `c` / `n` / `g` | Jump to RADIO / EXI2 / CC1101 / NFC / GPS |
+| `r` / `e` / `n` / `g` | Jump to RADIO / EXI2 / NFC / GPS |
 | `[` `]` / arrows | Flip the shelf (when there are more than 8 items) |
 | `ESC` / `GO` | Child → shelf → main menu |
 | `h` | Help inside a child (the shelf has none) |
@@ -112,7 +109,9 @@ Features: tune / hardware seek, mute, output high-Z, bass boost, soft mute, soft
 
 `FmTuner::begin()` **probes RDA first, then TEA**. If both sit on the bus, RDA wins.
 
-### CC1101 (433 MHz Sub-GHz)
+### CC1101 (433 MHz Sub-GHz, shelf entry hidden)
+
+Driver and EXT14 wiring remain, but the **Grove shelf card is hidden** (unfinished). Do not assume **G13 / G15** are free for CC1101 while Cap LoRa GNSS is in use.
 
 | Item | Value |
 |------|-------|
@@ -123,11 +122,11 @@ Features: tune / hardware seek, mute, output high-Z, bass boost, soft mute, soft
 | Modulation | `begin(freq, 4.8 kbps, 4.8 kHz deviation, 58 kHz RX BW, 10 dBm, 32-bit preamble)` |
 | Source | `include/app_cc1101.h`, `src/app_cc1101.cpp` |
 
-Features: init / re-init, send test packet `CP-<seq>`, listen ~3 s, arrow keys change frequency, RSSI refresh every 500 ms. No chip → `NOT FOUND`. Leaving the App calls `standby()`.
+Features (code present): init / re-init, send test packet `CP-<seq>`, listen ~3 s, arrow keys change frequency, RSSI refresh every 500 ms. No chip → `NOT FOUND`. Leaving the App calls `standby()`.
 
 ### I2C scan map (guesses only)
 
-Scan range **8–119** (`0x08`–`0x77`). Green dot = known map, gray = unknown (`--` / `unknown`). The ExI2 table is a **likely Grove / Unit match**, not a driver list. The only external chips with real drivers are the FM tuners and CC1101 above.
+Scan range **8–119** (`0x08`–`0x77`). Green dot = known map, gray = unknown (`--` / `unknown`). The ExI2 table is a **likely Grove / Unit match**, not a driver list. External chips with real drivers are mainly the FM tuners, NFC, GPS (and the hidden CC1101).
 
 | Address | Likely chip | Role |
 |---------|-------------|------|
@@ -364,10 +363,9 @@ See `api/M5Unified.md` (I2C_Class) in the repo for the lower-level list.
 
 ## Usage
 
-1. Main menu `e` opens Grove. Warm-green cards: `1` RADIO, `2` EXI2, `3` CC1101, `4` NFC, `5` GPS.
+1. Main menu `e` opens Grove. Warm-green cards: `1` RADIO, `2` EXI2, `3` NFC, `4` GPS (CC1101 entry hidden for now).
 2. **Radio**: plug a ready-made 4-pin board into the left Grove (G2=SDA, G1=SCL); headphones into the module jack. No chip → `NO MOD`. Keys: [Radio](./radio).
 3. **Scan**: open EXI2 after plugging a device, or Hardware Test `8`. `r` rescans. Probing FM addresses may briefly unmute; the App mutes and standbys afterwards.
-4. **CC1101**: 3.3 V + EXT14 SPI. `r` init, `t` ping, `l` listen, arrows change frequency.
-5. **NFC**: Unit NFC (ST25R3916) on the left Grove. See [NFC](./nfc).
-6. **GPS**: AT6668 Unit on the left Grove; the App switches G1/G2 to UART. See [GPS](./gps).
-7. Leaving a child or the whole shelf stops FM / CC1101 / NFC / GPS so ports are not left busy.
+4. **NFC**: Unit NFC (ST25R3916) on the left Grove. See [NFC](./nfc).
+5. **GPS**: Grove AT6668 Unit, or Adv + Cap LoRa-1262 GNSS; auto-detect on enter. See [GPS](./gps).
+6. Leaving a child or the whole shelf stops FM / NFC / GPS so ports are not left busy.
