@@ -66,82 +66,47 @@ jobs:
 
           ls -lh "$OUT"
 
+      - name: Build release notes
+        run: |
+          TAG="${{ steps.pkg.outputs.tag }}"
+          export TAG
+          if ! python3 scripts/extract-changelog-for-release.py "$TAG" > changelog-section.md; then
+            echo "（未在 CHANGELOG.md 中找到 ${TAG} 对应条目）" > changelog-section.md
+          fi
+          {
+            cat changelog-section.md
+            echo ""
+            echo "---"
+            echo ""
+            envsubst < .github/templates/release-flash.md
+          } > release-body.md
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.pkg.outputs.tag }}
           name: Sparks ${{ steps.pkg.outputs.tag }}
-          generate_release_notes: true
-          body: |
-            ## 刷机说明
-
-            ### 下载固件
-
-            | 文件 | 用途 |
-            |------|------|
-            | `sparks-${{ steps.pkg.outputs.tag }}-merged.bin` | 整片烧录（推荐首次刷机 / M5Burner），地址 `0x0` |
-            | `sparks-${{ steps.pkg.outputs.tag }}-firmware.bin` | 仅更新程序，地址 `0x10000` |
-            | `sparks-${{ steps.pkg.outputs.tag }}-littlefs.bin` | 仅更新资源（图标等），地址 `0x340000` |
-
-            ### 刷写工具
-
-            安装 **esptool**：
-
-            ```bash
-            pip install -U esptool
-            ```
-
-            也可使用 [M5Burner](https://docs.m5stack.com/en/download) 图形界面烧录 `*-merged.bin`（地址填 `0x0`）。
-
-            ### 连接设备
-
-            USB 连接 Cardputer-ADV，确认串口后替换下方命令中的 `PORT`：
-
-            - Windows：`COM3` 等（设备管理器查看）
-            - macOS：`/dev/cu.usbmodem*`
-            - Linux：`/dev/ttyACM0` 或 `/dev/ttyUSB0`
-
-            ### 刷写指令
-
-            **首次刷机 / 完全重置**（整片烧录，会格式化存储区）：
-
-            ```bash
-            esptool.py --chip esp32s3 --port PORT --baud 921600 write_flash \
-              --flash_mode qio --flash_freq 80m --flash_size 8MB \
-              0x0 sparks-${{ steps.pkg.outputs.tag }}-merged.bin
-            ```
-
-            **常规升级**（保留 WiFi、配置等用户数据，仅更新程序）：
-
-            ```bash
-            esptool.py --chip esp32s3 --port PORT --baud 921600 write_flash \
-              --flash_mode qio --flash_freq 80m --flash_size 8MB \
-              0x10000 sparks-${{ steps.pkg.outputs.tag }}-firmware.bin
-            ```
-
-            **仅更新资源**（LittleFS，一般无需单独操作）：
-
-            ```bash
-            esptool.py --chip esp32s3 --port PORT --baud 921600 write_flash \
-              --flash_mode qio --flash_freq 80m --flash_size 8MB \
-              0x340000 sparks-${{ steps.pkg.outputs.tag }}-littlefs.bin
-            ```
-
-            ### PlatformIO 本地编译
-
-            ```bash
-            pio run -e m5stack-cardputer -t upload      # 上传固件
-            pio run -e m5stack-cardputer -t uploadfs    # 上传 LittleFS
-            ```
-
-            ### 常见问题
-
-            - 如未识别设备，请确认已安装 USB 驱动（详见设备说明书）。
-            - 刷写失败或设备启动异常，可按住设备按键复位后重试。
-            - 建议升级前备份重要配置；完全重置请使用 `*-merged.bin`。
+          body_path: release-body.md
           files: |
             dist/sparks-${{ steps.pkg.outputs.tag }}-merged.bin
             dist/sparks-${{ steps.pkg.outputs.tag }}-firmware.bin
             dist/sparks-${{ steps.pkg.outputs.tag }}-littlefs.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-docs:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Trigger Deploy Docs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'docs.yml',
+              ref: 'main',
+            })

@@ -1,4 +1,5 @@
-# 推送 main（文档相关）/ v* tag / 手动：多版本 VitePress → GitHub Pages
+# 推送 main（文档相关）/ Release 完成后 / 手动：多版本 VitePress → GitHub Pages
+# 不在 v* tag 上触发，避免与 main 推送重复；发版后由 release.yml dispatch 本 workflow
 name: Deploy Docs
 
 on:
@@ -8,10 +9,7 @@ on:
       - 'docs/**'
       - 'package.json'
       - 'scripts/docs-build-multiversion.mjs'
-      - 'include/app_version.h'
       - '.github/workflows/docs.yml'
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -21,7 +19,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
