@@ -185,6 +185,16 @@ export default defineConfig({
             text: '硬件调试与演示',
             items: [
               {
+                text: 'Grove 外设',
+                link: '/apps/ex-i2c',
+                collapsed: false,
+                items: [
+                  { text: 'Radio 收音机', link: '/apps/radio' },
+                  { text: 'NFC', link: '/apps/nfc' },
+                  { text: 'GPS', link: '/apps/gps' },
+                ],
+              },
+              {
                 text: 'Mini Games 小游戏',
                 link: '/apps/mini-games',
                 collapsed: false,
@@ -218,16 +228,6 @@ export default defineConfig({
                   { text: 'BLE', link: '/apps/ble' },
                   { text: 'I2C 扫描', link: '/apps/i2c' },
                   { text: 'Mic 麦克风', link: '/apps/mic' },
-                ],
-              },
-              {
-                text: 'Grove 外设',
-                link: '/apps/ex-i2c',
-                collapsed: false,
-                items: [
-                  { text: 'Radio 收音机', link: '/apps/radio' },
-                  { text: 'NFC', link: '/apps/nfc' },
-                  { text: 'GPS', link: '/apps/gps' },
                 ],
               },
             ],
@@ -332,6 +332,16 @@ export default defineConfig({
             text: 'Hardware Demos',
             items: [
               {
+                text: 'Grove',
+                link: '/en/apps/ex-i2c',
+                collapsed: false,
+                items: [
+                  { text: 'Radio', link: '/en/apps/radio' },
+                  { text: 'NFC', link: '/en/apps/nfc' },
+                  { text: 'GPS', link: '/en/apps/gps' },
+                ],
+              },
+              {
                 text: 'Mini Games',
                 link: '/en/apps/mini-games',
                 collapsed: false,
@@ -365,16 +375,6 @@ export default defineConfig({
                   { text: 'BLE', link: '/en/apps/ble' },
                   { text: 'I2C Scan', link: '/en/apps/i2c' },
                   { text: 'Mic', link: '/en/apps/mic' },
-                ],
-              },
-              {
-                text: 'Grove',
-                link: '/en/apps/ex-i2c',
-                collapsed: false,
-                items: [
-                  { text: 'Radio', link: '/en/apps/radio' },
-                  { text: 'NFC', link: '/en/apps/nfc' },
-                  { text: 'GPS', link: '/en/apps/gps' },
                 ],
               },
             ],
